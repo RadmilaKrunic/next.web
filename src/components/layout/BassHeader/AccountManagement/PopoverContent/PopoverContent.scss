@@ -1,0 +1,162 @@
+.account-popover {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  align-self: stretch;
+}
+
+.account-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: 3rem;
+}
+
+.account-title {
+  font-size: 1.25rem;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.5rem;
+}
+
+.close-btn {
+  flex-shrink: 0;
+  aspect-ratio: 1/1;
+  background: none;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  color: var(--bosch-blue-50);
+  width: 3rem;
+  height: 3rem;
+  padding: 0.75rem;
+
+  i {
+    font-size: 1.5rem;
+  }
+  &:focus {
+    outline: none;
+    border: none;
+  }
+
+  &:active {
+    outline: none;
+    border: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--bosch-blue-50);
+    outline-offset: 2px;
+  }
+}
+
+.account-user {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  align-self: stretch;
+}
+
+.profile-img {
+  width: 3.25rem;
+  height: 3.25rem;
+  aspect-ratio: 1/1;
+  border-radius: 3.25rem;
+  border: 1px solid var(--bosch-white);
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bosch-gray-90);
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.user-email {
+  color: var(--bosch-gray-35);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+.account-links {
+  display: flex;
+  flex-direction: column;
+  font-size: 1rem;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.link-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.5rem;
+  color: var(--bosch-blue-50);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  border-top: solid 1px var(--bosch-gray-95);
+  padding-top: 1.25rem;
+  border-radius: 0;
+}
+
+.link-item:hover {
+  text-decoration: none;
+  border-top: solid 1px var(--bosch-gray-95);
+}
+
+.icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  aspect-ratio: 1/1;
+}
+
+.language-dropdown-container {
+  display: flex;
+  color: var(--bosch-blue-50);
+  align-items: center;
+}
+
+.language-dropdown {
+  width: fit-content;
+  border: none;
+  cursor: pointer;
+  min-width: 120px;
+
+  select {
+    background-color: transparent;
+    border-bottom: none !important;
+    color: var(--bosch-blue-50);
+    cursor: pointer;
+    padding-left: 0.625rem !important;
+
+    &:hover {
+      background-color: transparent;
+    }
+
+    &:focus-visible {
+      border: none;
+    }
+  }
+}

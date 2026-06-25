@@ -1,0 +1,174 @@
+[
+  {
+    "variant": "1",
+    "slots": [
+      {
+        "id": "tiles",
+        "type": "tiles",
+        "row": 1,
+        "col": 1,
+        "width": 2,
+        "height": 1
+      },
+      {
+        "id": "jobs",
+        "type": "jobs",
+        "row": 2,
+        "col": 1,
+        "width": 2,
+        "height": 1
+      },
+      {
+        "id": "recentActivity",
+        "type": "recent_activity",
+        "row": 1,
+        "col": 3,
+        "width": 1,
+        "height": 3
+      },
+      {
+        "id": "orderSnapshot",
+        "type": "order_snapshot",
+        "row": 3,
+        "col": 1,
+        "width": 1,
+        "height": 1
+      },
+      {
+        "id": "claimsWarranty",
+        "type": "claims_warranty",
+        "row": 3,
+        "col": 2,
+        "width": 1,
+        "height": 1
+      }
+    ]
+  },
+  {
+    "variant": "2",
+    "slots": [
+      {
+        "id": "tiles",
+        "type": "tiles",
+        "row": 1,
+        "col": 1,
+        "width": 3,
+        "height": 1
+      },
+      {
+        "id": "jobs",
+        "type": "jobs",
+        "row": 2,
+        "col": 1,
+        "width": 2,
+        "height": 1
+      },
+      {
+        "id": "recentActivity",
+        "type": "recent_activity",
+        "row": 2,
+        "col": 3,
+        "width": 1,
+        "height": 1
+      },
+      {
+        "id": "claims",
+        "type": "claims",
+        "row": 3,
+        "col": 1,
+        "width": 2,
+        "height": 1
+      },
+      {
+        "id": "technicianWorkload",
+        "type": "technician_workload",
+        "row": 3,
+        "col": 3,
+        "width": 1,
+        "height": 1
+      }
+    ]
+  },
+  {
+    "variant": "3",
+    "slots": [
+      {
+        "id": "tiles",
+        "type": "tiles",
+        "row": 1,
+        "col": 1,
+        "width": 3,
+        "height": 1
+      },
+      {
+        "id": "jobs",
+        "type": "jobs",
+        "row": 2,
+        "col": 1,
+        "width": 3,
+        "height": 1
+      },
+      {
+        "id": "claims",
+        "type": "claims",
+        "row": 3,
+        "col": 1,
+        "width": 2,
+        "height": 1
+      },
+      {
+        "id": "recentActivity",
+        "type": "recent_activity",
+        "row": 3,
+        "col": 3,
+        "width": 1,
+        "height": 1
+      }
+    ]
+  },
+  {
+    "variant": "4",
+    "slots": [
+      {
+        "id": "orderSnapshot",
+        "type": "order_snapshot",
+        "row": 1,
+        "col": 1,
+        "width": 1,
+        "height": 1
+      },
+      {
+        "id": "claimsWarranty",
+        "type": "claims_warranty",
+        "row": 1,
+        "col": 2,
+        "width": 1,
+        "height": 1
+      },
+      {
+        "id": "recentActivity",
+        "type": "recent_activity",
+        "row": 1,
+        "col": 3,
+        "width": 1,
+        "height": 3
+      },
+      {
+        "id": "jobs",
+        "type": "jobs",
+        "row": 2,
+        "col": 1,
+        "width": 2,
+        "height": 1
+      },
+      {
+        "id": "claims",
+        "type": "claims",
+        "row": 3,
+        "col": 1,
+        "width": 2,
+        "height": 1
+      }
+    ]
+  }
+]

@@ -1,0 +1,96 @@
+.jobs-card {
+  height: 100%;
+  background-color: var(--bosch-gray-95);
+  overflow: hidden;
+
+  &__header {
+    border-bottom: 0.0625rem solid var(--bosch-gray-85);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1rem 0.5rem 2rem;
+    font-style: normal;
+    font-weight: 700;
+    color: var(--schemes-primary-plain-pure-enabled-default-front, var(--bosch-black));
+    font-family: var(--typography-bold-xl-fontFamily, "Bosch Sans");
+    font-size: var(--typography-bold-xl-fontSize, 1.5rem);
+    line-height: var(--typography-bold-xl-lineHeight, 2.125rem);
+    letter-spacing: var(--raw-typography-bold-xl-letterSpacing, 0);
+  }
+
+  &__filters {
+    display: flex;
+    gap: 0.5rem;
+    padding-bottom: 0.75rem;
+    overflow-x: auto;
+    justify-content: space-between;
+
+    .left-filters {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+
+      .a-chip {
+        margin-right: 0;
+      }
+    }
+
+    .right-filters {
+      gap: 0.75rem;
+      display: flex;
+      align-items: center;
+
+      input[type="search"]::-webkit-search-cancel-button {
+        -webkit-appearance: none;
+        appearance: none;
+        display: none;
+      }
+    }
+  }
+
+  &__view-more {
+    background: transparent;
+    cursor: pointer;
+    padding: 0 2rem;
+    color: var(--bosch-blue-50);
+    font-size: 1rem;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 1.5rem;
+    font-family: var(--typography-regular-m-fontFamily, "Bosch Sans");
+  }
+
+  &__list {
+    overflow-y: auto;
+    padding: 1rem;
+  }
+
+  &__item {
+    width: 100%;
+    position: relative !important;
+    display: flex;
+    align-items: center;
+    color: var(--bosch-black);
+    gap: 1.25rem;
+    background-color: var(--bosch-white);
+    padding: 1rem;
+  }
+
+  &__item:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 1rem;
+    right: 1rem;
+    border-bottom: 1px solid var(--bosch-gray-85);
+  }
+
+  &__icon {
+    font-size: 2.5rem;
+  }
+
+  &__content {
+    flex: 1;
+    min-width: 0;
+  }
+}

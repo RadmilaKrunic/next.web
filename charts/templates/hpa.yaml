@@ -1,0 +1,52 @@
+{{- if .Values.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    app: {{ include "app.name" . }}
+    chart: {{ include "app.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "app.fullname" . }}
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  metrics:
+    {{- if .Values.hpa.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.hpa.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: {{ .Values.hpa.scaleDown.stabilizationWindowSeconds | default 300 }}
+      policies:
+        - type: Percent
+          value: {{ .Values.hpa.scaleDown.percent | default 50 }}
+          periodSeconds: {{ .Values.hpa.scaleDown.periodSeconds | default 60 }}
+    scaleUp:
+      stabilizationWindowSeconds: {{ .Values.hpa.scaleUp.stabilizationWindowSeconds | default 0 }}
+      policies:
+        - type: Percent
+          value: {{ .Values.hpa.scaleUp.percent | default 100 }}
+          periodSeconds: {{ .Values.hpa.scaleUp.periodSeconds | default 15 }}
+        - type: Pods
+          value: {{ .Values.hpa.scaleUp.pods | default 2 }}
+          periodSeconds: {{ .Values.hpa.scaleUp.periodSeconds | default 15 }}
+      selectPolicy: Max
+{{- end }}

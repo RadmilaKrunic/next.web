@@ -1,0 +1,23 @@
+# {{- if .Values.pdb }}{{ if .Values.pdb.enabled }}
+# # PDB - Pod disruption budget: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+# apiVersion: policy/v1
+# kind: PodDisruptionBudget
+# metadata:
+#   name: {{ include "app.fullname" . }}
+#   labels:
+#     app: {{ include "app.name" . }}
+#     chart: {{ include "app.chart" . }}
+#     release: {{ .Release.Name }}
+#     heritage: {{ .Release.Service }}
+# spec:
+#   # do not set PDB if there is only one replica
+#   {{- if eq (.Values.replicaCount | toDecimal) 1 }}
+#   minAvailable: 0
+#   {{- else }}
+#   minAvailable: {{ .Values.pdb.minAvailable }}
+#   {{- end }}
+#   selector:
+#     matchLabels:
+#       app: {{ include "app.name" . }}
+#       release: {{ .Release.Name }}
+# {{- end }}{{ end }}

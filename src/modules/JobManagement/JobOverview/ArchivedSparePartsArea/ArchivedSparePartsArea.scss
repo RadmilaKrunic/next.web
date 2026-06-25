@@ -1,0 +1,35 @@
+.archived-parts-title {
+  margin-top: 1.5rem;
+  background-color: var(--bosch-white);
+  padding: 1.25rem 1.5rem;
+}
+
+.archived-parts-header {
+  appearance: none;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+
+  .archived-parts-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .archived-parts-delete {
+    cursor: pointer;
+  }
+
+  .archived-parts-arrow {
+    cursor: pointer;
+  }
+}

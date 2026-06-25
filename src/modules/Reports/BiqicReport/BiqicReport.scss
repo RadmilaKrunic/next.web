@@ -1,0 +1,47 @@
+.biqic-report {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+
+  &__notification {
+    .a-notification--banner {
+      width: 100%;
+      position: relative;
+      margin-bottom: 1.5rem;
+    }
+  }
+
+  &__section {
+    background: var(--bosch-gray-95);
+    padding: 1.5rem;
+  }
+
+  &__section-title {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  &__fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+
+    button {
+      padding-left: 2.5rem;
+      padding-right: 2.5rem;
+      min-width: 30rem;
+    }
+  }
+
+  &__error {
+    color: var(--bosch-red-50);
+    margin: 0;
+  }
+}

@@ -1,0 +1,77 @@
+.job-table-wrapper {
+  overflow: auto;
+  flex: 1;
+  flex-basis: 300px;
+
+  .job-table {
+    margin-top: 0.75rem;
+    margin-bottom: 1.5rem;
+    width: 100%;
+    table-layout: fixed;
+
+    .clickable-row {
+      cursor: pointer;
+    }
+
+    tr {
+      position: relative;
+    }
+
+    td,
+    th {
+      max-width: 10rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+
+      &:last-child {
+        width: 60px;
+        min-width: 60px;
+      }
+    }
+
+    .checkbox-cell {
+      width: 48px;
+      min-width: 48px;
+      max-width: 48px;
+      text-align: center;
+      overflow: visible;
+    }
+
+    .user-icon {
+      margin-right: 0.5rem;
+    }
+
+    .options-table-icon {
+      color: var(--bosch-blue-50);
+      cursor: pointer;
+    }
+    .no-jobs-found-message {
+      margin: auto;
+      text-align: center;
+    }
+
+    .job-actions-popover--bottom {
+      bottom: -18px !important;
+      right: 0.5rem !important;
+    }
+    .job-actions-popover--top {
+      top: -19px !important;
+      right: 0.5rem !important;
+    }
+  }
+}
+.job-actions-popover-trigger {
+  color: var(--bosch-blue-50);
+  background-color: transparent;
+  vertical-align: middle;
+
+  &:hover {
+    background-color: transparent;
+    color: var(--bosch-blue-50);
+  }
+  &.a-button.-without-label .a-button__icon {
+    margin: auto;
+    padding: 0px;
+  }
+}

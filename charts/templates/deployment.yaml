@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    app: {{ include "app.name" . }}
+    chart: {{ include "app.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    ad.datadoghq.com/{{ include "app.name" . }}.tags: '{ "team":"{{ .Values.datadog.tags.team }}" }'
+
+# Deployment spec
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: {{ include "app.name" . }}
+      release: {{ .Release.Name }}
+
+  template:
+    metadata:
+      labels:
+        app: {{ include "app.name" . }}
+        release: {{ .Release.Name }}
+        project: {{ .Values.datadog.tags.project }}
+        team: {{ .Values.datadog.tags.team }}
+        tags.datadoghq.com/service: {{ .Values.datadog.tags.service }}
+      annotations:
+        ad.datadoghq.com/{{ include "app.name" . }}.logs: '[{"source": "{{ .Values.datadog.source }}", "service": "{{ include "app.name" . }}" }]'
+        ad.datadoghq.com/{{ include "app.name" . }}.tags: '{ "team":"{{ .Values.datadog.tags.team }}" }'
+    # Pod spec
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: deliveryplatform-mode
+                    operator: In
+                    values:
+                      - workloads
+                  - key: deliveryplatform-status
+                    operator: In
+                    values:
+                      - active
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                      - {{ include "app.name" . }}
+                topologyKey: "kubernetes.io/hostname"
+      terminationGracePeriodSeconds: 180
+      volumes: # https://bosch-pt.atlassian.net/wiki/spaces/PTASS/pages/13254164495/Handling+Temporary+Files+in+Read-Only+Kubernetes+Pods?atlOrigin=eyJpIjoiZGZhOGZkN2ZlOGI2NGQ4N2JlMWFlOTU1ZTc0OTUxOGUiLCJwIjoiYyJ9
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-log
+          emptyDir: {}
+      {{- $root := . }}
+      {{- with $root.Values.secretProviderClass }}
+      {{- if and .secrets .keyvaultName .tenantId }}
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              # SecretProviderClass name == app.name
+              secretProviderClass: {{ include "app.fullname" $root }}
+            # Only for Service Principal auth (NOT for Workload Identity)
+            nodePublishSecretRef:
+              name: sp-secret-store # k8s secret created manually
+      {{- end }}
+      {{- end }}
+      # Service container
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ tpl .Values.image.tag . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- $root := . }}
+          {{- with .Values.secretProviderClass }}
+          {{- if and .secrets .keyvaultName .tenantId }}
+            {{- $secretName := include "app.fullname" $root }}
+            {{- $secrets := .secrets -}}
+            {{- $keys := keys $secrets | sortAlpha -}}
+            {{- range $keys }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ . }}
+            {{- end }}
+          {{- end }}
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "app.fullname" . }}
+                optional: true
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: {{ default "TCP" .Values.service.protocol }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.actuator.liveness.path }}
+              port: {{ .Values.actuator.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.actuator.readiness.path }}
+              port: {{ .Values.actuator.port }}
+            initialDelaySeconds: 12
+            periodSeconds: 5
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-log
+              mountPath: /var/log/nginx
+          {{- with .Values.secretProviderClass }}
+          {{- if and .secrets .keyvaultName .tenantId }}
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          {{- end }}
+          {{- end }}
+          resources:
+{{ toYaml .Values.resources | nindent 12 }}
+
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN","SETGID","SETUID"]

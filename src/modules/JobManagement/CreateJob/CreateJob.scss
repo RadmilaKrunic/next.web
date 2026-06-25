@@ -1,0 +1,31 @@
+.create-job-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.cancel-button {
+  width: 50%;
+}
+
+.submit-actions {
+  display: flex;
+  gap: 1rem;
+  button {
+    flex: 1;
+  }
+}
+
+.customer-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  button {
+    flex: 1;
+  }
+}
+
+.asset-data-action {
+  width: 100%;
+  margin-bottom: 1.5rem;
+}

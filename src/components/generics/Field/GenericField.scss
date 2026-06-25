@@ -1,0 +1,25 @@
+.generic-field-text-input {
+  position: relative;
+}
+
+.generic-field-hidden {
+  visibility: hidden;
+  height: 0;
+  overflow: hidden;
+  position: absolute;
+}
+
+.grant-access-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.grant-access-checkbox {
+  background-color: white;
+  padding: 1rem;
+  display: block;
+  label {
+    font-weight: 700;
+  }
+}

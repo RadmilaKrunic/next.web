@@ -1,0 +1,52 @@
+.profile-info-container {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2rem;
+  font-size: 1rem;
+  padding: 0 2rem 0 0.75rem;
+  line-height: 1.5rem;
+  color: var(--bosch-black);
+  cursor: pointer;
+  height: 3rem;
+
+  .profile-flyout {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .m-popover__content {
+    max-width: 446px;
+    min-width: 446px;
+    overflow: hidden;
+    padding: 1.5rem;
+    cursor: default;
+    text-overflow: ellipsis;
+  }
+  .profile-popover {
+    transform: translate(-215px, 50px) !important;
+  }
+}
+
+.profile-popover {
+  transform: translate(-187px, 50px) !important;
+}
+
+.m-popover__content {
+  padding: 1.5rem;
+  cursor: default;
+}
+
+.m-popover .a-button--integrated {
+  position: relative;
+  margin-left: auto;
+  color: var(--bosch-blue-50);
+}
+
+.m-popover__head {
+  margin-bottom: 1.25rem;
+  padding-right: 0 !important;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  font-weight: 400;
+}

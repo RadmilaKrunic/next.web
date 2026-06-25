@@ -1,0 +1,32 @@
+.documents-modal {
+  &.m-dialog {
+    width: 860px;
+    height: 520px;
+    padding: 32px;
+  }
+  .m-dialog__header {
+    padding-right: 1rem;
+    padding-left: 0;
+  }
+  .m-dialog__title {
+    padding-top: 0;
+    line-height: 2.125rem;
+    font-size: 1.5rem;
+  }
+  .m-dialog__content {
+    padding: 2rem 0 0 0;
+  }
+}
+.modal-document-block {
+  border-bottom: 1px solid var(--bosch-gray-50);
+  padding-bottom: 1rem;
+  min-width: 320px;
+  padding-top: 12px;
+
+  &:first-child {
+    padding-top: 0;
+  }
+  &:last-child {
+    border-bottom: none;
+  }
+}

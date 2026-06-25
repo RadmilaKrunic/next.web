@@ -1,0 +1,76 @@
+nameOverride: "bass-web"
+fullnameOverride: "bass-web"
+
+ingress:
+  enabled: true
+  # Optional: set if your cluster requires it
+  className: dp-dev-public-shared-nginx-v2
+  hosts:
+    bass:
+      - bass-api.dev.dp.bosch-pt.com
+  path: /
+  port: 80 # should be same as service.port
+
+image:
+  registry: ptdpacr.azurecr.io
+  repository: ptdpacr.azurecr.io/com.bosch.pt/bass-web
+  tag: "1a"
+  pullPolicy: Always
+
+resources:
+  requests:
+    cpu: "10m"
+    memory: "50Mi"
+    ephemeral-storage: "50Mi"
+  limits:
+    cpu: "50m"
+    memory: "100Mi"
+    ephemeral-storage: "70Mi"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+actuator:
+  readiness:
+    path: /
+  liveness:
+    path: /
+  port: 3000
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+datadog:
+  # Whether the Datadog agent should be sending metrics and traces.
+  enabled: true
+  source: "typescript"
+  apm:
+    # Whether the Datadog agent should be sending traces and profiles
+    enabled: true
+  logs:
+    containerCollectAll: true
+    containerCollectUsingFiles: true
+  tags:
+    service: "bass-web"
+    team: "bass"
+    project: "bass"
+
+# Horizontal Pod Autoscaler configuration
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  scaleDown:
+    stabilizationWindowSeconds: 300
+    percent: 50
+    periodSeconds: 60
+  scaleUp:
+    stabilizationWindowSeconds: 0
+    percent: 100
+    pods: 2
+    periodSeconds: 15

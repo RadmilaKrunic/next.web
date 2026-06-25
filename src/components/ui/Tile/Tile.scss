@@ -1,0 +1,66 @@
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3125rem;
+  padding: 1.5rem 1rem;
+  background-color: var(--bosch-gray-95);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  width: 100%;
+
+  &:hover {
+    background-color: var(--bosch-gray-90);
+  }
+
+  &:focus-visible {
+    outline: 0.125rem solid var(--bosch-blue-50);
+    outline-offset: 0.125rem;
+  }
+
+  &--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 0.3125rem;
+  }
+
+  &__icon {
+    font-size: 2rem;
+    color: var(--bosch-black);
+  }
+
+  &__value {
+    font-family: "BoschSans-Bold", sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 2.125rem;
+    color: var(--bosch-black);
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  &__label {
+    font-family: "BoschSans", sans-serif;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5rem;
+    color: var(--bosch-black);
+  }
+
+  &__arrow {
+    font-size: 1.5rem;
+    color: var(--bosch-black);
+  }
+}

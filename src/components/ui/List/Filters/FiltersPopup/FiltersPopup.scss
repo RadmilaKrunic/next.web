@@ -1,0 +1,51 @@
+.filters-popup-wrapper {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+
+  .m-popover {
+    outline: none;
+  }
+
+  .m-popover__content {
+    width: 45rem;
+  }
+
+  .generic-area {
+    margin: 0;
+
+    .area-fields {
+      gap: 0.5rem;
+      margin-top: 0;
+    }
+  }
+
+  .a-dropdown {
+    select :first-child {
+      display: none;
+    }
+  }
+}
+
+.filters-popup-wrapper > div {
+  flex: 1;
+  min-width: calc(50% - 0.5rem);
+}
+
+.filters-buttons {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.filters-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+
+  .a-chip__close {
+    margin: auto 0.375rem auto 0;
+  }
+}

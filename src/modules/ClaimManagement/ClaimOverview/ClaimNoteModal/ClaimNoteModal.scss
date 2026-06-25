@@ -1,0 +1,73 @@
+.claim-note-modal {
+  display: flex;
+  height: auto;
+  padding-top: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1 0 0;
+  position: relative;
+
+  .m-dialog__title {
+    color: var(--schemes-primary-plain-pure-enabled-default-front, var(--bosch-black));
+    font-family: var(--font-family-Bosch-Sans, "Bosch Sans");
+    font-style: normal;
+    font-weight: 700;
+    line-height: normal;
+    font-size: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .a-divider {
+    display: none;
+  }
+
+  .modal-subtitle {
+    align-self: stretch;
+    color: var(--bosch-black);
+    font-size: 1rem;
+    font-family: "Bosch Sans", sans-serif;
+    font-weight: 400;
+    line-height: 1.5rem;
+    word-wrap: break-word;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    display: flex;
+  }
+
+  .answers-section {
+    align-self: stretch;
+    padding-top: 1.5rem;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 1rem;
+    display: flex;
+
+    .m-radiogroup {
+      align-self: stretch;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: flex-start;
+      gap: 1.5rem;
+      display: flex;
+
+      .m-radiobutton {
+        justify-content: flex-start;
+        align-items: flex-start;
+        gap: 0.5rem;
+        display: flex;
+      }
+    }
+  }
+
+  .modal-actions {
+    align-self: stretch;
+    flex: 1;
+    padding-top: 0.5rem;
+    justify-content: flex-end;
+    align-items: flex-end;
+    gap: 1rem;
+    display: flex;
+  }
+}

@@ -1,0 +1,11 @@
+replicaCount: 1
+
+ingress:
+  className: dp-qa-public-shared-nginx-v2
+  hosts:
+    bass:
+      - bass-api.qa.dp.bosch-pt.com
+
+# Minimal amount of available replicas, that won't be voluntarily disrupted
+# enabled based on env and currently available only for `review` and `prod`.
+# NOTE: When using helmUpgrade, these values are overridden in helm.gradle

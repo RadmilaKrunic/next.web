@@ -1,0 +1,11 @@
+{{- $cm := .Values.configMapData | default dict -}}
+{{- if gt (len $cm) 0 }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "app.fullname" . }}
+data:
+  {{- range $k := keys $cm | sortAlpha }}
+  {{ $k }}: {{ tpl (index $cm $k | toString) $ | quote }}
+  {{- end }}
+{{- end }}

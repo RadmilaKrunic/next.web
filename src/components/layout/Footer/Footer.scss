@@ -1,0 +1,28 @@
+footer {
+  display: flex;
+  justify-content: space-between;
+  height: 2rem;
+  padding: 0.4375rem 2rem;
+  font-size: 12px;
+  border-top: 1px solid var(--bosch-gray-50);
+
+  .footer-links {
+    display: flex;
+    gap: 2rem;
+
+    a {
+      color: var(--bosch-black);
+    }
+  }
+
+  button {
+    border: none;
+    background-color: inherit;
+    color: var(--bosch-black);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0;
+    font-size: 12px;
+  }
+}

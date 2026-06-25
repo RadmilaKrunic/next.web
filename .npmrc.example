@@ -1,0 +1,26 @@
+# Azure Artifacts for public npm packages (supply chain protection)
+# Copy this file to .npmrc and replace the placeholder values with your actual credentials
+
+# Default registry - Azure Artifacts (proxies npmjs.org for supply chain protection)
+registry=https://pkgs.dev.azure.com/pt-iot/_packaging/Artifacts/npm/registry/
+always-auth=true
+
+# Bosch Artifactory for @bosch scoped packages
+@bosch:registry=https://artifactory.boschdevcloud.com/artifactory/api/npm/lab000089-npm-release-local/
+
+# Azure Artifacts authentication
+//pkgs.dev.azure.com/pt-iot/_packaging/Artifacts/npm/registry/:username={username}
+//pkgs.dev.azure.com/pt-iot/_packaging/Artifacts/npm/registry/:_password={base64_pat}
+//pkgs.dev.azure.com/pt-iot/_packaging/Artifacts/npm/registry/:email={email}
+//pkgs.dev.azure.com/pt-iot/_packaging/Artifacts/npm/:username={username}
+//pkgs.dev.azure.com/pt-iot/_packaging/Artifacts/npm/:_password={base64_pat}
+//pkgs.dev.azure.com/pt-iot/_packaging/Artifacts/npm/:email={email}
+
+# Bosch Artifactory authentication
+//artifactory.boschdevcloud.com/artifactory/api/npm/lab000089-npm-release-local/:_authToken={bosch_token}
+//artifactory.boschdevcloud.com/artifactory/api/npm/lab000089-npm-release-local/:email={email}
+//artifactory.boschdevcloud.com/artifactory/api/npm/lab000089-npm-release-local/:always-auth=true
+
+# Global Settings
+legacy-peer-deps=true
+engine-strict=true

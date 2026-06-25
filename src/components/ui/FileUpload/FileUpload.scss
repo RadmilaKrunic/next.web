@@ -1,0 +1,163 @@
+.file-upload-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  .a-notification {
+    position: absolute;
+    max-height: 2.5rem;
+    align-items: center;
+  }
+}
+
+.file-upload-note {
+  color: var(--bosch-gray-40);
+  font-family: "Bosch Sans", sans-serif;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.125rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  align-self: stretch;
+  p {
+    margin: 0;
+  }
+}
+
+.info-icon-file-upload {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.file-upload-box {
+  border: 1px dashed var(--bosch-black);
+  min-height: 6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: border 0.2s ease;
+  background-color: var(--bosch-gray-85);
+  height: 15rem;
+  padding: 4.5rem 17.625rem;
+  position: relative;
+}
+
+.file-upload-label {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.upload-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--bosch-blue-50);
+}
+
+.icon-upload {
+  width: 3rem;
+  height: 3rem;
+  font-size: 3rem;
+}
+
+.upload-text {
+  color: var(--bosch-black);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.file-list-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-list-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--bosch-gray-90);
+  gap: 0.75rem;
+
+  .file-row {
+    width: 100%;
+  }
+}
+
+.file-name {
+  flex: 1;
+  font-weight: 700;
+  align-self: stretch;
+  overflow: hidden;
+  color: var(--bosch-black);
+  text-overflow: ellipsis;
+  font-family: var(--font-family-Bosch-Sans, "Bosch Sans", sans-serif);
+  font-size: var(--font-size-M, 1rem);
+  font-style: normal;
+  line-height: var(--font-line-height-M, 1.5rem);
+}
+
+.upload-button {
+  display: flex;
+  width: 7.25rem;
+  padding: 0.75rem 1rem 0.75rem 0.75rem;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--bosch-black);
+  text-align: center;
+  font-family: var(--font-family-Bosch-Sans, "Bosch Sans", sans-serif);
+  font-size: var(--font-size-M, 1rem);
+  font-style: normal;
+  font-weight: 400;
+  line-height: var(--font-line-height-M, 1.5rem);
+  cursor: pointer;
+}
+
+.delete-btn {
+  border: none;
+  background: transparent;
+  color: var(--bosch-black);
+  cursor: pointer;
+  padding: 0.75rem;
+}
+
+.action-buttons {
+  align-self: flex-end;
+  margin-top: 1rem;
+  background: none;
+
+  &:hover {
+    background: none;
+  }
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.file-size {
+  font-family: "Bosch Sans", sans-serif;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--bosch-gray-60);
+  margin-top: 0.25rem;
+}
+
+.file-icon {
+  display: flex;
+  width: 3rem;
+  padding: 0.75rem;
+  justify-content: center;
+  align-items: center;
+}

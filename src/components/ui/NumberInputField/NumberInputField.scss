@@ -1,0 +1,36 @@
+.number-input {
+  display: flex;
+  height: 3rem;
+  min-width: 11.5rem;
+  position: relative;
+  width: auto;
+
+  .text-field {
+    flex: 1;
+  }
+  .input-button {
+    align-items: center;
+    background-color: var(--neutral__enabled__fill__default);
+    border-bottom: 1px solid var(--neutral__enabled__front__default);
+    color: var(--neutral__enabled__front__default);
+    display: inline-flex;
+    height: 3rem;
+    justify-content: center;
+    width: 3rem;
+
+    &:disabled {
+      background-color: var(--bosch-gray-95);
+    }
+
+    &:hover {
+      background-color: var(--neutral__enabled__fill__hovered);
+      border-bottom: 1px solid var(--neutral__enabled__front__default);
+      color: var(--neutral__enabled__front__hovered);
+    }
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}

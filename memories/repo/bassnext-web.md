@@ -1,0 +1,1 @@
+- 2026-05-18: Coverage baseline on branch fix/PTBASS-1183-sonarqube-critical = 377 tests passing, 19 test files, overall coverage 19.87% stmts / 61.07% branches / 40.87% funcs; performance report updated in performance-reports/report-PTBASS-1183.md.

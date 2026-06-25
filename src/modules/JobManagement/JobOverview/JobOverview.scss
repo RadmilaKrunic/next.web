@@ -1,0 +1,18 @@
+.job-overview-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+
+  button {
+    flex: 1;
+  }
+}
+.on-hold-banner {
+  margin-bottom: 1.5rem;
+}
+.sticky-tab-navigation {
+  position: sticky;
+  top: calc(3rem + 3.375rem + 5px);
+  z-index: 100;
+  background-color: var(--bosch-white);
+}

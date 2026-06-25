@@ -1,0 +1,105 @@
+{
+  "name": "bass-next",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "build:dev": "vite build --mode dev",
+    "build:qa": "vite build --mode qa",
+    "build:prod": "vite build --mode prod",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "prepare": "husky",
+    "commit": "cz",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:watch": "vitest --watch",
+    "test:cov": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "license:report": "license-checker-rseidelsohn --json --out ./oss-bundle.json --production"
+  },
+  "dependencies": {
+    "@bosch/frontend.kit-npm": "^3.10.0",
+    "@bosch/react-frok": "^1.1.2",
+    "@tanstack/react-query": "^5.100.10",
+    "@tanstack/react-query-devtools": "^5.100.10",
+    "axios": "^1.16.0",
+    "date-fns": "^4.1.0",
+    "es-toolkit": "^1.40.0",
+    "formik": "^2.4.6",
+    "i18next": "^25.6.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-error-boundary": "^6.1.1",
+    "react-i18next": "^16.6.6",
+    "react-router-dom": "^7.14.2",
+    "react-tooltip": "^5.30.0",
+    "styled-components": "^6.1.19"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
+    "@commitlint/cz-commitlint": "^20.5.3",
+    "@eslint/js": "^9.39.4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react-swc": "^4.1.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
+    "commitizen": "^4.3.1",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jest-dom": "^5.5.0",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "eslint-plugin-testing-library": "^7.13.3",
+    "globals": "^16.4.0",
+    "husky": "^9.1.7",
+    "inquirer": "^12.10.0",
+    "jsdom": "^27.0.0",
+    "license-checker-rseidelsohn": "^4.4.2",
+    "lint-staged": "^16.2.0",
+    "msw": "^2.11.5",
+    "prettier": "3.6.2",
+    "sass-embedded": "^1.93.2",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.44.0",
+    "vite": "^7.3.3",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.2.4"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": [
+      "eslint --max-warnings=0",
+      "prettier --write"
+    ],
+    "*.config.{js,ts}": [
+      "eslint --max-warnings=0",
+      "prettier --write"
+    ],
+    "**/*.{js,jsx}": [
+      "eslint --max-warnings=0",
+      "prettier --write"
+    ],
+    "*.{json,md,css,scss}": [
+      "prettier --write"
+    ]
+  },
+  "config": {
+    "commitizen": {
+      "path": "@commitlint/cz-commitlint"
+    }
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10.9.0"
+  }
+}

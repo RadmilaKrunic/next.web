@@ -1,0 +1,13 @@
+
+trigger:
+  - master
+  - release/*
+resources:
+  repositories:
+  - repository: templates
+    type: git
+    name: BASSNext/bassnext.pipelines     # ProjectName/RepoName
+    ref: refs/heads/master
+
+extends:
+ template: services/bassnext.web.yaml@templates

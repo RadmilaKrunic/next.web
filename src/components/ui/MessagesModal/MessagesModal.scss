@@ -1,0 +1,71 @@
+.messages-modal {
+  &.m-dialog {
+    width: 53.75rem;
+    height: 32.5rem;
+    padding: 2rem 2rem 0 2rem;
+    position: relative;
+  }
+  .m-dialog__header {
+    border-bottom: solid 1px var(--bosch-gray-60);
+    padding-right: 0;
+    padding-left: 0;
+  }
+  .m-dialog__title {
+    padding-top: 0;
+    line-height: 4rem;
+    font-size: 24px;
+  }
+  .m-dialog__content {
+    padding: 1.5rem 0 0 0;
+    height: calc(100% - 4rem);
+    overflow-y: auto;
+  }
+  .modal-message-block {
+    border-bottom: 1px solid var(--bosch-gray-50);
+    padding-bottom: 1rem;
+    min-width: 20rem;
+    padding-top: 0.75rem;
+
+    &:first-child {
+      padding-top: 0;
+    }
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  .button-section {
+    position: absolute;
+    bottom: 2rem;
+    left: 2rem;
+    right: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .button-right {
+    display: flex;
+    gap: 1.5rem;
+
+    button[data-testid="add-note-button"] {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      & > * {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+      }
+    }
+  }
+
+  .show-all-button {
+    position: absolute;
+    top: 2rem;
+    right: 1rem;
+    background-color: transparent;
+  }
+}
