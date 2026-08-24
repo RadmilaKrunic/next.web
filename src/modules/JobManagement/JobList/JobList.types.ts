@@ -1,4 +1,6 @@
 import { Customer } from "api/services/customers/customers.types";
+import { Price } from "types/price.types";
+
 export interface Job {
   jobId: string;
   orderId: string;
@@ -198,18 +200,7 @@ export interface JobDiagnostic {
     approvedAt: string;
     approvalRemarks: string;
     isPriceSetManually: boolean;
-    price: {
-      discount: number;
-      suggestedNetPrice: number;
-      taxAmount: number;
-      unitPrice: number;
-      netAmount: number;
-      tax: number;
-      taxTypes?: [];
-      grossAmount: number;
-      totalAmount: number;
-      discountAmount: number;
-    };
+    price: Price;
   }[];
   archivedMaterials?: {
     order?: number;
@@ -224,17 +215,7 @@ export interface JobDiagnostic {
     approvedByName: string;
     approvedAt: string;
     approvalRemarks: string;
-    price: {
-      discount: number;
-      suggestedNetPrice: number;
-      taxAmount: number;
-      unitPrice: number;
-      netAmount: number;
-      tax: number;
-      taxTypes?: [];
-      grossAmount: number;
-      totalAmount: number;
-    };
+    price: Price;
   }[];
   priceSummary: {
     discount: number;

@@ -1,0 +1,777 @@
+{
+    "countryName": "Turkey",
+    "active": true,
+    "description": "Turkey country configuration",
+    "dateFormat": "DD.MM.YYYY",
+    "currency": "TRY",
+    "currencySymbol": "₺",
+    "currencyDecimalSeparator": ".",
+    "currencyThousandSeparator": ",",
+    "taxRates": null,
+    "localizationConfiguration": [
+        {
+            "locale": "tr-TR",
+            "language": "tr",
+            "primary": true
+        },
+        {
+            "locale": "en-TR",
+            "language": "en",
+            "primary": false
+        },
+        {
+            "locale": "sr-BA",
+            "language": "sr",
+            "primary": false
+        },
+        {
+            "locale": "ar-SA",
+            "language": "ar",
+            "primary": false
+        },
+        {
+            "locale": "zh-CN",
+            "language": "zh",
+            "primary": false
+        },
+        {
+            "locale": "zh-TW",
+            "language": "zh",
+            "primary": false
+        },
+        {
+            "locale": "en-IN",
+            "language": "en",
+            "primary": false
+        },
+        {
+            "locale": "en-ZA",
+            "language": "en",
+            "primary": false
+        },
+        {
+            "locale": "fr-TN",
+            "language": "fr",
+            "primary": false
+        },
+        {
+            "locale": "de-DE",
+            "language": "de",
+            "primary": false
+        },
+        {
+            "locale": "hi-IN",
+            "language": "hi",
+            "primary": false
+        },
+        {
+            "locale": "pt-BR",
+            "language": "pt",
+            "primary": false
+        },
+        {
+            "locale": "es-ES",
+            "language": "es",
+            "primary": false
+        }
+    ],
+    "links": {
+        "footer": [
+            {
+                "name": "copyrightPartOne",
+                "value": "© Robert Bosch Power Tools GmbH"
+            },
+            {
+                "name": "copyrightPartTwo",
+                "value": "all rights reserved"
+            },
+            {
+                "name": "imprintLink",
+                "value": "https://www.bosch-pt.com/ptlegalpages/tr/rbtr/tr/asc/imprint"
+            },
+            {
+                "name": "privacyLink",
+                "value": "https://www.bosch-pt.com/ptlegalpages/tr/rbtr/tr/asc/privacy"
+            },
+            {
+                "name": "termsLink",
+                "value": "https://www.bosch-pt.com/ptlegalpages/tr/rbtr/tr/asc/terms"
+            },
+            {
+                "name": "ossBundleLink",
+                "value": "https://qseascwssalogo.blob.core.windows.net/docs/OSSLicense.txt"
+            }
+        ],
+        "header": null
+    },
+    "diagnosticsConfiguration": {
+        "addSpecialMaterialsAllowed": false,
+        "discountBase": "GROSS_PRICE",
+        "rules": [
+            {
+                "actionType": "REPAIR",
+                "jobType": "WARRANTY",
+                "rule": {
+                    "automaticRows": [
+                        "LA"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "LA",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "FAULT_CODES",
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "SP",
+                            "minCount": 0,
+                            "maxCount": 2147483647,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "ASC"
+                        },
+                        {
+                            "position": "AC",
+                            "minCount": 0,
+                            "maxCount": 2147483647,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": true
+                }
+            },
+            {
+                "actionType": "REPAIR",
+                "jobType": "SERVICE_OFFERING",
+                "rule": {
+                    "automaticRows": [
+                        "LA"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "LA",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "FAULT_CODES",
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "SP",
+                            "minCount": 0,
+                            "maxCount": 2147483647,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "ASC"
+                        },
+                        {
+                            "position": "AC",
+                            "minCount": 0,
+                            "maxCount": 2147483647,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": true
+                }
+            },
+            {
+                "actionType": "REPAIR",
+                "jobType": "CHARGEABLE",
+                "rule": {
+                    "automaticRows": [
+                        "LA"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "LA",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "FAULT_CODES",
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "SP",
+                            "minCount": 0,
+                            "maxCount": 2147483647,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "ASC"
+                        },
+                        {
+                            "position": "AC",
+                            "minCount": 0,
+                            "maxCount": 2147483647,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "REPAIR",
+                "jobType": "COMMERCIAL_GOODWILL",
+                "rule": {
+                    "automaticRows": [
+                        "LA"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "LA",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "FAULT_CODES",
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "SP",
+                            "minCount": 0,
+                            "maxCount": 2147483647,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "ASC"
+                        },
+                        {
+                            "position": "AC",
+                            "minCount": 0,
+                            "maxCount": 2147483647,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": null
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "NEW_TOOL_EXCHANGE",
+                "jobType": "WARRANTY",
+                "rule": {
+                    "automaticRows": [
+                        "PN",
+                        "LA"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "LA",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 2
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": null
+                        },
+                        {
+                            "position": "PN",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "NEW_TOOL_EXCHANGE",
+                "jobType": "CHARGEABLE",
+                "rule": {
+                    "automaticRows": [
+                        "LA",
+                        "PN"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "LA",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 2
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": null
+                        },
+                        {
+                            "position": "PN",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "NEW_TOOL_EXCHANGE",
+                "jobType": "SERVICE_OFFERING",
+                "rule": {
+                    "automaticRows": [
+                        "PN",
+                        "LA"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "LA",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 2
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": null
+                        },
+                        {
+                            "position": "PN",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "NEW_TOOL_EXCHANGE",
+                "jobType": "COMMERCIAL_GOODWILL",
+                "rule": {
+                    "automaticRows": [
+                        "PN",
+                        "LA"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "LA",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 2
+                            },
+                            "unitPriceSource": "SAP"
+                        },
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": null
+                        },
+                        {
+                            "position": "PN",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "SPARE_PARTS_EXCHANGE",
+                "jobType": "WARRANTY",
+                "rule": {
+                    "automaticRows": [
+                        "SP"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": null
+                        },
+                        {
+                            "position": "SP",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "SPARE_PARTS_EXCHANGE",
+                "jobType": "SERVICE_OFFERING",
+                "rule": {
+                    "automaticRows": [
+                        "SP"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": null
+                        },
+                        {
+                            "position": "SP",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "SPARE_PARTS_EXCHANGE",
+                "jobType": "CHARGEABLE",
+                "rule": {
+                    "automaticRows": [
+                        "SP"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": null
+                        },
+                        {
+                            "position": "SP",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "SPARE_PARTS_EXCHANGE",
+                "jobType": "COMMERCIAL_GOODWILL",
+                "rule": {
+                    "automaticRows": [
+                        "SP"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "FR",
+                            "minCount": 0,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": null
+                        },
+                        {
+                            "position": "SP",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": null,
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "ACCESSORIES_EXCHANGE",
+                "jobType": "WARRANTY",
+                "rule": {
+                    "automaticRows": [
+                        "AC"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "AC",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "ACCESSORIES_EXCHANGE",
+                "jobType": "SERVICE_OFFERING",
+                "rule": {
+                    "automaticRows": [
+                        "AC"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "AC",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "ACCESSORIES_EXCHANGE",
+                "jobType": "CHARGEABLE",
+                "rule": {
+                    "automaticRows": [
+                        "AC"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "AC",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            },
+            {
+                "actionType": "ACCESSORIES_EXCHANGE",
+                "jobType": "COMMERCIAL_GOODWILL",
+                "rule": {
+                    "automaticRows": [
+                        "AC"
+                    ],
+                    "allowedPositions": [
+                        {
+                            "position": "AC",
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "quantity": {
+                                "quantitySource": "DEFAULT",
+                                "defaultQuantity": 1
+                            },
+                            "unitPriceSource": "SAP"
+                        }
+                    ],
+                    "enforceSparepartExists": false
+                }
+            }
+        ]
+    },
+    "jobConfiguration": {
+        "warrantyRules": {
+            "standardWarranty": {
+                "allowedRepairCount": 3,
+                "defaultWarrantyPeriod": 12,
+                "warrantyPeriodBySegmentId": {
+                    "72": 24,
+                    "74": 0,
+                    "75": 12,
+                    "76": 24,
+                    "78": 0,
+                    "82": 12,
+                    "71001": 12,
+                    "71002": 12
+                }
+            },
+            "proService": {
+                "allowedRepairCount": 10,
+                "defaultWarrantyPeriod": null,
+                "warrantyPeriodBySegmentId": null
+            },
+            "extendedWarranty": {
+                "allowedRepairCount": 3,
+                "defaultWarrantyPeriod": null,
+                "warrantyPeriodBySegmentId": null
+            }
+        },
+        "billingAddressMandatory": false
+    },
+    "reimbursementConfig": [
+        {
+            "category": "LABOR",
+            "reimbursementMethods": {
+                "REPAIR": "CREDIT_NOTE",
+                "EXCHANGE": "CREDIT_NOTE"
+            }
+        },
+        {
+            "category": "MATERIAL",
+            "reimbursementMethods": {
+                "REPAIR": "CREDIT_NOTE",
+                "EXCHANGE": "PAID_BY_BOSCH"
+            }
+        },
+        {
+            "category": "FREIGHT",
+            "reimbursementMethods": {
+                "REPAIR": "CREDIT_NOTE",
+                "EXCHANGE": "CREDIT_NOTE"
+            }
+        }
+    ],
+    "reimbursementPeriodType": "WEEKLY",
+    "latestConsentVersion": {
+        "tac": {
+            "version": "V6",
+            "updatedAt": "01-01-2026"
+        },
+        "privacy": {
+            "version": "V6",
+            "updatedAt": "01-02-2026"
+        }
+    },
+    "reimbursementCreateOn": 1,
+    "enableAutomaticSapCreditNote": true,
+    "reimbursementSenderAddress": null,
+    "availableZones": [],
+    "id": "TR"
+}

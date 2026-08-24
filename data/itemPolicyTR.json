@@ -1,0 +1,128 @@
+{
+  "version": "2026-08-24.2",
+  "countryCode": "TR",
+  "positions": [
+    {
+      "position": "LA",
+      "isProtected": true,
+      "permissions": {
+        "canView": "DL_V",
+        "canDelete": "DL_I",
+        "canEditUnits": "DLUE",
+        "canEditUnitPrice": "DLPE",
+        "canEditDiscount": "DLDE",
+        "canEditTotal": "DLTE"
+      }
+    },
+    {
+      "position": "FR",
+      "isProtected": true,
+      "permissions": {
+        "canView": "DF_V",
+        "canDelete": "DF_I",
+        "canEditUnits": "DFUE",
+        "canEditUnitPrice": "DFPE",
+        "canEditDiscount": "DFDE",
+        "canEditTotal": "DFTE"
+      }
+    },
+    {
+      "position": "PN",
+      "isProtected": false,
+      "permissions": {
+        "canView": "DT_V",
+        "canDelete": "DT_I",
+        "canEditUnits": "DTEU",
+        "canEditUnitPrice": "DTEP",
+        "canEditDiscount": "DTDE",
+        "canEditTotal": "DTTE"
+      }
+    },
+    {
+      "position": "SP",
+      "isProtected": false,
+      "permissions": {
+        "canView": "DS_V",
+        "canDelete": "DS_I",
+        "canEditUnits": "DSUE",
+        "canEditUnitPrice": "DSPE",
+        "canEditDiscount": "DSDE",
+        "canEditTotal": "DSTE"
+      }
+    },
+    {
+      "position": "AC",
+      "isProtected": false,
+      "permissions": {
+        "canView": "DS_V",
+        "canDelete": "DS_I",
+        "canEditUnits": "DSUE",
+        "canEditUnitPrice": "DSPE",
+        "canEditDiscount": "DSDE",
+        "canEditTotal": "DSTE"
+      }
+    },
+    {
+      "position": "PC",
+      "isProtected": true,
+      "permissions": {
+        "canView": "DS_V",
+        "canDelete": "DS_I",
+        "canEditUnits": "DSUE",
+        "canEditUnitPrice": "DSPE",
+        "canEditDiscount": "DSDE",
+        "canEditTotal": "DSTE"
+      }
+    }
+  ],
+  "editability": [
+    {
+      "contextType": "jobType",
+      "contextValue": "COMMERCIAL_GOODWILL",
+      "appliesToProtectedPositionsOnly": false,
+      "fields": { "discount": true, "totalAmount": true, "netAmount": false },
+      "controlledBySummary": false
+    },
+    {
+      "contextType": "jobType",
+      "contextValue": "CHARGEABLE",
+      "appliesToProtectedPositionsOnly": true,
+      "fields": { "discount": true, "totalAmount": true, "netAmount": false },
+      "controlledBySummary": false
+    },
+    {
+      "contextType": "jobType",
+      "contextValue": "CHARGEABLE",
+      "appliesToProtectedPositionsOnly": false,
+      "fields": { "discount": false, "totalAmount": false, "netAmount": false },
+      "controlledBySummary": true
+    }
+  ],
+  "warrantyGating": {
+    "gatedTypes": ["WARRANTY", "SERVICE_OFFERING"],
+    "disableTypeOptionsWhenInvalidSparePart": true
+  },
+  "surfaceOverrides": {
+    "claimDiagnosticsReadOnly": {
+      "editability": []
+    },
+    "claimSpareParts": {
+      "editability": [
+        {
+          "contextType": "claimStatus",
+          "contextValue": "REVISED",
+          "appliesToProtectedPositionsOnly": false,
+          "fields": { "discount": true, "totalAmount": true, "netAmount": false },
+          "controlledBySummary": false
+        },
+        {
+          "contextType": "claimStatus",
+          "contextValue": "PENDING",
+          "appliesToProtectedPositionsOnly": false,
+          "fields": { "discount": false, "totalAmount": false, "netAmount": false },
+          "controlledBySummary": false
+        }
+      ]
+    }
+  }
+}

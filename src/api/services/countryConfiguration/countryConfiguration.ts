@@ -22,8 +22,8 @@ interface Links {
 }
 
 export interface Quantity {
-  quantitySource: string;
-  defaultQuantity: number;
+  quantitySource: string | null;
+  defaultQuantity: number | null;
 }
 
 export interface AllowedPosition {
@@ -31,12 +31,13 @@ export interface AllowedPosition {
   minCount: number;
   maxCount: number;
   quantity: Quantity;
-  unitPriceSource: string;
+  unitPriceSource: string | null;
 }
 
 export interface DiagnosticsRule {
   automaticRows: string[];
   allowedPositions: AllowedPosition[];
+  enforceSparepartExists: boolean;
 }
 
 export interface DiagnosticsRuleEntry {
@@ -71,16 +72,34 @@ export interface CountryConfig {
   currencySymbol: string;
   currencyDecimalSeparator: string;
   currencyThousandSeparator: string;
-  taxRates: TaxRate[];
+  // Observed as null for every country configured today (TR/ZA) — tax percent currently
+  // comes from elsewhere (fault code / SAP price lookup), not this field.
+  taxRates: TaxRate[] | null;
   localizationConfiguration: LocalizationConfig[];
   links: Links;
   diagnosticsConfiguration: DiagnosticsConfiguration;
   reimbursementConfig: ReimbursementConfiguration[];
-  reimbursementCreateOn: string;
+  // Real payloads send a number (e.g. 1), not a string.
+  reimbursementCreateOn: number;
   reimbursementPeriodType: string;
 }
 
-export const getCountryConfig = async (countryCode: string) => {
+const localCountryConfigFiles = import.meta.glob("../../../../data/countryConfiguration*.json");
+
+export const getCountryConfig = async (countryCode: string): Promise<CountryConfig> => {
+  if (import.meta.env.DEV) {
+    const key = `../../../../data/countryConfiguration${countryCode.toUpperCase()}.json`;
+    const loader = localCountryConfigFiles[key];
+    if (loader) {
+      const data = (await loader()) as { default: CountryConfig };
+      return data.default;
+    }
+    console.warn(
+      `[CountryConfig] No local file found for country "${countryCode}". ` +
+        `Expected: data/countryConfiguration${countryCode.toUpperCase()}.json`,
+    );
+  }
+
   try {
     const response = await axiosClient.get(`/v1/countries/${countryCode}/country-configuration`);
     return response.data;

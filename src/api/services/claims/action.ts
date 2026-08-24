@@ -6,6 +6,7 @@ import {
   ClaimListResponse,
 } from "../../../modules/ClaimManagement/ClaimList/ClaimList.types";
 import { ClaimColumnConfiguration } from "modules/ClaimManagement/ClaimList/ClaimListTable/ClaimListColumns.config";
+import { PutClaimPricesRequest, PutClaimPricesResponse } from "./claims.types";
 
 export const fetchClaimById = async (claimId: string): Promise<ClaimItem> => {
   try {
@@ -67,10 +68,10 @@ export const postBulkApproveClaims = async (payload: BulkApproveClaimsPayload): 
 
 export const putClaimPrices = async (
   claimId: string,
-  payload: Record<string, unknown>,
-): Promise<Record<string, unknown>> => {
+  payload: PutClaimPricesRequest,
+): Promise<PutClaimPricesResponse> => {
   try {
-    const response = await axiosClient.put<Record<string, unknown>>(
+    const response = await axiosClient.put<PutClaimPricesResponse>(
       `/v1/claims/${claimId}/prices`,
       payload,
     );

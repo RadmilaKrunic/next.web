@@ -18,6 +18,7 @@ import {
   ClaimDecisionPayload,
   BulkApproveClaimsPayload,
 } from "./action";
+import { PutClaimPricesRequest, PutClaimPricesResponse } from "./claims.types";
 
 export const useClaimById = (
   claimId: string,
@@ -76,14 +77,14 @@ export const useBulkApproveClaims = (
 
 export const useUpdateClaimPrices = (
   options?: UseMutationOptions<
-    Record<string, unknown>,
+    PutClaimPricesResponse,
     Error,
-    { claimId: string; payload: Record<string, unknown> }
+    { claimId: string; payload: PutClaimPricesRequest }
   >,
 ) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ claimId, payload }: { claimId: string; payload: Record<string, unknown> }) =>
+    mutationFn: ({ claimId, payload }: { claimId: string; payload: PutClaimPricesRequest }) =>
       putClaimPrices(claimId, payload),
     ...options,
     onSuccess: (...args) => {

@@ -7,6 +7,10 @@ vi.mock("api/axios-client/axiosClient", () => ({
   },
 }));
 
+// Force non-DEV mode so the local file branch is skipped, mirroring
+// uiConfiguration/action.test.ts's pattern for testing the real-API branch.
+vi.stubEnv("DEV", false);
+
 import { getCountryConfig } from "./countryConfiguration";
 import axiosClient from "api/axios-client/axiosClient";
 

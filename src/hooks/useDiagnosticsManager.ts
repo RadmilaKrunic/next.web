@@ -678,13 +678,14 @@ export const useDiagnosticsManager = ({
   const resolveFaultCodesQuantity = useCallback(
     (
       position: string,
-      quantitySource: string,
+      quantitySource: string | null,
       faultCodeValue: string | undefined,
       faultCodeLabourQuantity: number | undefined,
-      defaultQuantity: number,
-    ): number => {
+      defaultQuantity: number | null,
+    ): number | undefined => {
+      const fallback = defaultQuantity ?? undefined;
       if (quantitySource === (QuantitySource.DEFAULT as string)) {
-        return defaultQuantity;
+        return fallback;
       }
       if (
         position === "LA" &&
@@ -692,13 +693,13 @@ export const useDiagnosticsManager = ({
         faultCodeLabourQuantity !== 0
       )
         return faultCodeLabourQuantity;
-      if (!faultCodeValue) return defaultQuantity;
+      if (!faultCodeValue) return fallback;
       const parts = faultCodeValue.split(":");
       if (parts.length > 1) {
         const parsed = Number(parts[1]);
-        return Number.isNaN(parsed) ? defaultQuantity : parsed;
+        return Number.isNaN(parsed) ? fallback : parsed;
       }
-      return defaultQuantity;
+      return fallback;
     },
     [],
   );
@@ -713,7 +714,8 @@ export const useDiagnosticsManager = ({
       if (!posConfig) return undefined;
       const source = posConfig.quantity.quantitySource;
       if (source === (QuantitySource.USER as string)) return undefined;
-      if (source === (QuantitySource.DEFAULT as string)) return posConfig.quantity.defaultQuantity;
+      if (source === (QuantitySource.DEFAULT as string))
+        return posConfig.quantity.defaultQuantity ?? undefined;
       if (source === (QuantitySource.FAULT_CODES as string)) {
         return resolveFaultCodesQuantity(
           position,
@@ -723,7 +725,7 @@ export const useDiagnosticsManager = ({
           posConfig.quantity.defaultQuantity,
         );
       }
-      return posConfig.quantity.defaultQuantity;
+      return posConfig.quantity.defaultQuantity ?? undefined;
     },
     [allowedPositions, resolveFaultCodesQuantity],
   );
