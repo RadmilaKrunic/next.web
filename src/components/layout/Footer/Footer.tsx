@@ -15,6 +15,10 @@ function Footer() {
   ]);
   const footerLinks = countryConfiguration?.links?.footer || [];
 
+  const handlePrivacySettingsClick = () => {
+    document.querySelector("dock-privacy-settings")?.setAttribute("visible", "true");
+  };
+
   let copyrightPartOne = "";
   let copyrightPartTwo = "";
   let imprintLink = "#";
@@ -62,6 +66,9 @@ function Footer() {
         <Link to={termsLink} rel="noopener noreferrer" target="_blank">
           {t("termsLink")}
         </Link>
+        <button type="button" onClick={handlePrivacySettingsClick}>
+          {t("privacySettings")}
+        </button>
         <Link to={ossBundleLink} rel="noopener noreferrer" target="_blank">
           {t("ossBundleLink")}
         </Link>

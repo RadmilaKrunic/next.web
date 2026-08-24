@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
 vi.mock("@tanstack/react-query", () => ({
@@ -26,7 +26,9 @@ import {
   computeIsChargeable,
   getChargeablePendingInfo,
   getBoschInternalPending,
+  hasWarrantyOrProServiceItems,
   buildRowValues,
+  buildMaterialsRowValues,
   useDiagnosticsManager,
   type MaterialItem,
 } from "./useDiagnosticsManager";
@@ -39,15 +41,14 @@ import type {
 } from "api/services/countryConfiguration/countryConfiguration";
 import type { HeaderUserData } from "api/services/header/action";
 
-const makeField = (name: string, subtype?: string, overrides: Partial<Field> = {}): Field =>
-  ({
-    name,
-    label: name,
-    type: "text",
-    subtype,
-    isDisabled: false,
-    ...overrides,
-  }) as Field;
+const makeField = (name: string, subtype?: string, overrides: Partial<Field> = {}): Field => ({
+  name,
+  label: name,
+  type: "text",
+  subtype,
+  isDisabled: false,
+  ...overrides,
+});
 
 const makeItem = (overrides: Partial<MaterialItem> = {}): MaterialItem => ({
   position: "SP",
@@ -65,34 +66,32 @@ const makeItem = (overrides: Partial<MaterialItem> = {}): MaterialItem => ({
   ...overrides,
 });
 
-const makeArea = (name: string, fields: Field[], index = 0): Area =>
-  ({
-    name,
-    label: name,
-    position: 0,
-    fields,
-    dependFieldCondition: "AND",
-    dependentFields: [],
-    actions: null,
-    isSubArea: false,
-    isMultiple: true,
-    index,
-  }) as Area;
+const makeArea = (name: string, fields: Field[], index = 0): Area => ({
+  name,
+  label: name,
+  position: 0,
+  fields,
+  dependFieldCondition: "AND",
+  dependentFields: [],
+  actions: null,
+  isSubArea: false,
+  isMultiple: true,
+  index,
+});
 
-const makeDiagnosticsTab = (areas: Area[]): Section =>
-  ({
-    name: "diagnosticData",
-    label: "diagnosticData",
-    position: 0,
-    isHidden: false,
-    dependFieldCondition: "AND",
-    dependentFields: [],
-    areas,
-    actions: null,
-    isSubSection: false,
-    isAccordion: false,
-    isTab: true,
-  }) as Section;
+const makeDiagnosticsTab = (areas: Area[]): Section => ({
+  name: "diagnosticData",
+  label: "diagnosticData",
+  position: 0,
+  isHidden: false,
+  dependFieldCondition: "AND",
+  dependentFields: [],
+  areas,
+  actions: null,
+  isSubSection: false,
+  isAccordion: false,
+  isTab: true,
+});
 
 const makeAllowedPosition = (
   position: string,
@@ -107,42 +106,44 @@ const makeAllowedPosition = (
   unitPriceSource: "USER",
 });
 
-const makeCountryConfig = (allowedPositions: AllowedPosition[]): CountryConfig =>
-  ({
-    id: "ZA",
-    countryName: "South Africa",
-    active: true,
-    description: "test",
-    dateFormat: "yyyy-MM-dd",
-    currency: "ZAR",
-    currencySymbol: "R",
-    currencyDecimalSeparator: ".",
-    currencyThousandSeparator: ",",
-    taxRates: [],
-    localizationConfiguration: [],
-    links: { footer: [], header: [] },
-    diagnosticsConfiguration: {
-      addSpecialMaterialsAllowed: true,
-      discountBase: "NET_PRICE",
-      rules: [
-        {
-          actionType: "REPAIR",
-          jobType: "CHARGEABLE",
-          rule: {
-            automaticRows: ["PN"],
-            allowedPositions,
-          },
+const makeCountryConfig = (allowedPositions: AllowedPosition[]): CountryConfig => ({
+  id: "ZA",
+  countryName: "South Africa",
+  active: true,
+  description: "test",
+  dateFormat: "yyyy-MM-dd",
+  currency: "ZAR",
+  currencySymbol: "R",
+  currencyDecimalSeparator: ".",
+  currencyThousandSeparator: ",",
+  taxRates: [],
+  localizationConfiguration: [],
+  links: { footer: [], header: [] },
+  reimbursementConfig: [],
+  reimbursementCreateOn: "",
+  reimbursementPeriodType: "",
+  diagnosticsConfiguration: {
+    addSpecialMaterialsAllowed: true,
+    discountBase: "NET_PRICE",
+    rules: [
+      {
+        actionType: "REPAIR",
+        jobType: "CHARGEABLE",
+        rule: {
+          automaticRows: ["PN"],
+          allowedPositions,
         },
-      ],
-    },
-  }) as CountryConfig;
+      },
+    ],
+  },
+});
 
 const makeUser = (permissions: string[] = []): HeaderUserData =>
   ({
     countryCode: "ZA",
     permissions,
     type: "SERVICE_CENTER",
-  }) as HeaderUserData;
+  }) as unknown as HeaderUserData;
 
 const diagnosticFields: Field[] = [
   makeField("diagnosticData_diagnosticsSpareParts#0_position", "diagnosticPosition", {
@@ -258,6 +259,10 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 // ── computeIsChargeable ──────────────────────────────────────────────────────
 
 describe("computeIsChargeable", () => {
@@ -283,6 +288,31 @@ describe("computeIsChargeable", () => {
     const fields = [makeField("type1", "diagnosticType")];
     const values = { type1: "" };
     expect(computeIsChargeable(fields, values)).toBe(false);
+  });
+});
+
+// ── hasWarrantyOrProServiceItems ───────────────────────────────────────────
+
+describe("hasWarrantyOrProServiceItems", () => {
+  it("returns true when a diagnostic type is WARRANTY", () => {
+    const fields = [makeField("type1", "diagnosticType")];
+    const values = { type1: "WARRANTY" };
+
+    expect(hasWarrantyOrProServiceItems(fields, values)).toBe(true);
+  });
+
+  it("returns true when a diagnostic type is SERVICE_OFFERING", () => {
+    const fields = [makeField("type1", "diagnosticType")];
+    const values = { type1: "SERVICE_OFFERING" };
+
+    expect(hasWarrantyOrProServiceItems(fields, values)).toBe(true);
+  });
+
+  it("returns false when diagnostic types do not match", () => {
+    const fields = [makeField("type1", "diagnosticType")];
+    const values = { type1: "CHARGEABLE" };
+
+    expect(hasWarrantyOrProServiceItems(fields, values)).toBe(false);
   });
 });
 
@@ -472,7 +502,7 @@ describe("buildRowValues", () => {
 
   it("defaults discount to 0 when item.discount is undefined", () => {
     const areaFields: Field[] = [makeField("disc", "diagnosticDiscount")];
-    const item = makeItem({ discount: undefined as unknown as number });
+    const item = makeItem({ discount: undefined });
     const result = buildRowValues(areaFields, item);
     expect(result["disc"]).toBe(0);
   });
@@ -482,6 +512,78 @@ describe("buildRowValues", () => {
     const item = makeItem({ totalAmount: 0 });
     const result = buildRowValues(areaFields, item);
     expect(result["total"]).toBe(0);
+  });
+});
+
+describe("buildMaterialsRowValues (LA quantity sync)", () => {
+  const rowFields: Field[] = [
+    makeField("row0_position", "diagnosticPosition"),
+    makeField("row0_quantity", "diagnosticQuantity"),
+  ];
+  const rowArea = makeArea("row0", rowFields);
+
+  it("overrides the LA row's quantity with the freshly computed value even when reusing existing row values", () => {
+    const item = makeItem({ position: "LA", quantity: 3 });
+    const formValues = {
+      row0_position: "LA",
+      row0_quantity: 99,
+    };
+
+    const result = buildMaterialsRowValues({
+      materials: [item],
+      areas: [rowArea],
+      fields: rowFields,
+      formValues,
+      currentCount: 1,
+      forceRebuild: false,
+    });
+
+    expect(result["row0_quantity"]).toBe(3);
+  });
+
+  it("keeps the existing quantity for non-LA rows when reusing existing row values", () => {
+    const item = makeItem({ position: "SP", quantity: 3 });
+    const formValues = {
+      row0_position: "SP",
+      row0_quantity: 99,
+    };
+
+    const result = buildMaterialsRowValues({
+      materials: [item],
+      areas: [rowArea],
+      fields: rowFields,
+      formValues,
+      currentCount: 1,
+      forceRebuild: false,
+    });
+
+    expect(result["row0_quantity"]).toBe(99);
+  });
+
+  it("backfills blank description from API when reusing existing row values", () => {
+    const rowFields: Field[] = [
+      makeField("row0_position", "diagnosticPosition"),
+      makeField("row0_sparePartNumber", "diagnosticPartNumber"),
+      makeField("row0_description", "diagnosticDescription"),
+    ];
+    const rowArea = makeArea("row0", rowFields);
+    const item = makeItem({ position: "PN", description: "Updated description" });
+    const formValues = {
+      row0_position: "PN",
+      row0_sparePartNumber: "06019H2103",
+      row0_description: "",
+    };
+
+    const result = buildMaterialsRowValues({
+      materials: [item],
+      areas: [rowArea],
+      fields: rowFields,
+      formValues,
+      currentCount: 1,
+      forceRebuild: false,
+    });
+
+    expect(result["row0_description"]).toBe("Updated description");
   });
 });
 
@@ -502,6 +604,43 @@ describe("useDiagnosticsManager hook behavior", () => {
     expect(result.current.getQuantityForPosition("PN", "FC:9", 5)).toBe(4);
     expect(result.current.getQuantityForPosition("LA", "FC:9", 0)).toBe(9);
     expect(result.current.getQuantityForPosition("LA", "FC:9", 7)).toBe(7);
+  });
+
+  it("falls back to defaultQuantity when faultCodeValue has no ':' separator", () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    expect(result.current.getQuantityForPosition("LA", "FC9", 0)).toBe(2);
+  });
+
+  it("falls back to defaultQuantity when faultCodeValue is empty", () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    expect(result.current.getQuantityForPosition("LA", "", 0)).toBe(2);
+  });
+
+  it("falls back to defaultQuantity for an unrecognized quantitySource", () => {
+    const { props } = createHookProps({
+      allowedPositions: [makeAllowedPosition("AC", "UNKNOWN_SOURCE", 6, 1)],
+    });
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    expect(result.current.getQuantityForPosition("AC")).toBe(6);
+  });
+
+  it("returns defaultQuantity when the parsed fault code number is NaN", () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    expect(result.current.getQuantityForPosition("LA", "FC:abc", 0)).toBe(2);
+  });
+
+  it("returns undefined when the position has no matching allowed position config", () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    expect(result.current.getQuantityForPosition("ZZ")).toBeUndefined();
   });
 
   it("loads API materials and marks flags", async () => {
@@ -545,6 +684,99 @@ describe("useDiagnosticsManager hook behavior", () => {
     expect(result.current.materials[0].isValidated).toBe(true);
   });
 
+  it("derives a non-zero taxAmount from unitPrice+tax when the API returns only those as populated (validateAndSave contract)", async () => {
+    const { props } = createHookProps({
+      diagnosticData: {
+        jobId: "JA0001110",
+        materials: [
+          {
+            id: "LA_1609888887_WARRANTY",
+            position: "LA",
+            partNumber: "1609888887",
+            description: "İşçilik",
+            jobType: "WARRANTY",
+            quantity: 6,
+            status: "PENDING",
+            price: {
+              unitPrice: 132.5,
+              netAmount: 0,
+              suggestedNetPrice: 0,
+              tax: 20.0,
+              taxAmount: 0,
+              grossAmount: 0,
+              discount: 0.0,
+              totalAmount: 0,
+              discountAmount: 0,
+            },
+          },
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(1);
+    });
+
+    const row = result.current.materials[0];
+    // Canonical inputs pass through untouched.
+    expect(row.unitPrice).toBe(132.5);
+    expect(row.tax).toBe(20);
+    expect(row.quantity).toBe(6);
+    // Derived fields must be freshly computed, not trusted as 0 from the response.
+    expect(row.suggestedNetPrice).toBe(795); // 6 * 132.5
+    expect(row.netAmount).toBe(795);
+    expect(row.taxAmount).toBe(159); // 795 * 20 / 100 — this was 0 before the fix
+    expect(row.grossAmount).toBe(954);
+    expect(row.totalAmount).toBe(954);
+  });
+
+  it("recomputes from unitPrice+tax even when the response's downstream amounts are already populated but stale", async () => {
+    const { props } = createHookProps({
+      diagnosticData: {
+        jobId: "JA0001110",
+        materials: [
+          {
+            id: "SP_1617000895_WARRANTY",
+            position: "SP",
+            partNumber: "1617000895",
+            description: "Uç Kovanı",
+            jobType: "WARRANTY",
+            quantity: 2,
+            status: "PENDING",
+            price: {
+              unitPrice: 50,
+              tax: 20,
+              suggestedNetPrice: 50,
+              netAmount: 50,
+              taxAmount: 10,
+              grossAmount: 60,
+              discount: 0,
+              discountAmount: 0,
+              totalAmount: 60,
+            },
+          },
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(1);
+    });
+
+    const row = result.current.materials[0];
+    expect(row.unitPrice).toBe(50);
+    // Freshly derived from quantity * unitPrice, not the stale stored value.
+    expect(row.suggestedNetPrice).toBe(100);
+    expect(row.netAmount).toBe(100);
+    expect(row.taxAmount).toBe(20); // 100 * 20 / 100
+    expect(row.grossAmount).toBe(120);
+    expect(row.totalAmount).toBe(120);
+  });
+
   it("adds imported materials and skips duplicates", async () => {
     const { props } = createHookProps();
     const { result } = renderHook(() => useDiagnosticsManager(props));
@@ -564,6 +796,25 @@ describe("useDiagnosticsManager hook behavior", () => {
     ).toBeLessThanOrEqual(1);
   });
 
+  it("computes imported material prices using the configured discountBase, not the default", async () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    act(() => {
+      result.current.onAddMaterials([
+        { partNumber: "IMPORTED-PN", position: "SP", quantity: 3, unitPrice: 50 },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials.some((m) => m.partNumber === "IMPORTED-PN")).toBe(true);
+    });
+
+    const row = result.current.materials.find((m) => m.partNumber === "IMPORTED-PN")!;
+    expect(row.suggestedNetPrice).toBe(150); // 3 * 50 — computePricesForItem actually ran
+    expect(row.netAmount).toBe(150);
+  });
+
   it("adds new empty row with blank type selection", async () => {
     const { props } = createHookProps();
     const { result } = renderHook(() => useDiagnosticsManager(props));
@@ -574,6 +825,34 @@ describe("useDiagnosticsManager hook behavior", () => {
 
     await waitFor(() => {
       expect(result.current.materials.some((m) => m.type === "")).toBe(true);
+    });
+  });
+
+  it("collapses multiple SP rows to one when switching to spare parts exchange", async () => {
+    const { props } = createHookProps();
+    const { result, rerender } = renderHook(
+      ({ currentActionType }) =>
+        useDiagnosticsManager({
+          ...props,
+          currentActionType,
+        }),
+      {
+        initialProps: { currentActionType: "REPAIR" },
+      },
+    );
+
+    act(() => {
+      result.current.setMaterials([
+        makeItem({ position: "SP", partNumber: "SP-1", origin: "specialMaterial" }),
+        makeItem({ position: "SP", partNumber: "SP-2", origin: "explosionDrawing" }),
+        makeItem({ position: "PN", partNumber: "PN-1" }),
+      ]);
+    });
+
+    rerender({ currentActionType: "SPARE_PARTS_EXCHANGE" });
+
+    await waitFor(() => {
+      expect(result.current.materials.filter((item) => item.position === "SP")).toHaveLength(1);
     });
   });
 
@@ -650,6 +929,27 @@ describe("useDiagnosticsManager hook behavior", () => {
       expect(result.current.materials[1].isValidated).toBe(false);
     });
     expect(mocks.setArePricesValidated).toHaveBeenCalledWith(false);
+  });
+
+  it("resets rejected row status to pending after item edit", async () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    act(() => {
+      result.current.setMaterials([
+        makeItem({ partNumber: "A", status: "REJECTED" }),
+        makeItem({ partNumber: "B", status: "APPROVED" }),
+      ]);
+    });
+
+    act(() => {
+      result.current.setRevisedRejectedRowPending("diagnosticData_diagnosticsSpareParts#0");
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials[0].status).toBe("PENDING");
+    });
+    expect(result.current.materials[1].status).toBe("APPROVED");
   });
 
   it("enableValidate reflects arePricesValidated and pending archived deletions", () => {

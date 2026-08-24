@@ -50,7 +50,7 @@ export interface DiagnosticsContextValue {
   summaryTypeOptions: { label: string; value: string }[];
   setSummaryTypeOptions: Dispatch<SetStateAction<{ label: string; value: string }[]>>;
   /** Reset a row status from REVISED to PENDING after user edits */
-  setRevisedRowPending: (areaName: string) => void;
+  setRevisedRejectedRowPending: (areaName: string) => void;
   /** Whether the archived spare parts section is expanded */
   isArchivedExpanded: boolean;
   setIsArchivedExpanded: Dispatch<SetStateAction<boolean>>;
@@ -64,6 +64,8 @@ export interface DiagnosticsContextValue {
   discountBase: discountBase;
   /** Positions auto-created by the matched diagnostic rule (e.g. ["LA","AC","FR"]) */
   automaticRows?: string[];
+  /** True while validateAndSave mutation is pending — all row inputs locked */
+  isValidating: boolean;
 }
 
 const DEFAULT_SUMMARY_TYPE_OPTIONS = [{ value: "totalSummary", label: "totalSummary" }];
@@ -95,7 +97,7 @@ const defaultDiagnosticsContextValue: DiagnosticsContextValue = {
   markRowDirty: noop,
   summaryTypeOptions: DEFAULT_SUMMARY_TYPE_OPTIONS,
   setSummaryTypeOptions: noop,
-  setRevisedRowPending: noop,
+  setRevisedRejectedRowPending: noop,
   isArchivedExpanded: false,
   setIsArchivedExpanded: noop,
   canArchiveOnDelete: false,
@@ -103,6 +105,7 @@ const defaultDiagnosticsContextValue: DiagnosticsContextValue = {
   jobStatus: "",
   discountBase: "GROSS_PRICE",
   automaticRows: [],
+  isValidating: false,
 };
 
 export const DiagnosticsContext = createContext<DiagnosticsContextValue>(

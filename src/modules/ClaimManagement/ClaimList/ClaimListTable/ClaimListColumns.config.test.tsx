@@ -12,6 +12,10 @@ const columns = getClaimColumns(t);
 
 const mockClaim = {
   claimId: "C001",
+  invoiceNumber: "INV-001",
+  jobId: "J-001",
+  internalReferenceNumber: "IRN-001",
+  mobileNumber: "+905551112233",
   createdOn: "2023-06-01T10:00:00Z",
   ascName: "Bosch ASC",
   toolModelName: "Drill X",
@@ -25,6 +29,22 @@ const mockClaim = {
 describe("getClaimColumns", () => {
   it("returns claimId", () => {
     expect(columns.claimId.getValue(mockClaim)).toBe("C001");
+  });
+
+  it("returns invoiceNumber", () => {
+    expect(columns.invoiceNumber.getValue(mockClaim)).toBe("INV-001");
+  });
+
+  it("returns jobId", () => {
+    expect(columns.jobId.getValue(mockClaim)).toBe("J-001");
+  });
+
+  it("returns internalReferenceNumber", () => {
+    expect(columns.internalReferenceNumber.getValue(mockClaim)).toBe("IRN-001");
+  });
+
+  it("returns mobileNumber", () => {
+    expect(columns.mobileNumber.getValue(mockClaim)).toBe("+905551112233");
   });
 
   it("returns formatted createdOn date", () => {
@@ -64,6 +84,27 @@ describe("getClaimColumns", () => {
   it("returns '-' when toolModelName is null", () => {
     expect(
       columns.toolModelName.getValue({ ...(mockClaim as object), toolModelName: null } as never),
+    ).toBe("-");
+  });
+
+  it("returns '-' when invoiceNumber is missing", () => {
+    expect(
+      columns.invoiceNumber.getValue({ ...(mockClaim as object), invoiceNumber: null } as never),
+    ).toBe("-");
+  });
+
+  it("returns '-' when internalReferenceNumber is missing", () => {
+    expect(
+      columns.internalReferenceNumber.getValue({
+        ...(mockClaim as object),
+        internalReferenceNumber: null,
+      } as never),
+    ).toBe("-");
+  });
+
+  it("returns '-' when mobileNumber is missing", () => {
+    expect(
+      columns.mobileNumber.getValue({ ...(mockClaim as object), mobileNumber: null } as never),
     ).toBe("-");
   });
 

@@ -129,7 +129,7 @@ describe("filterClaims", () => {
 
 describe("getClaimNavigationPath", () => {
   it("returns correct path including claimId", () => {
-    const claim = makeClaim({ claimId: "claim-99" });
-    expect(getClaimNavigationPath(claim)).toBe("/claim-overview/claim-99/#claims");
+    const claimId = "claim-99";
+    expect(getClaimNavigationPath(claimId)).toBe("/claim-overview/claim-99/#claims");
   });
 });

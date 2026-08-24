@@ -6,6 +6,7 @@ export interface Job {
   source: string;
   pickupType: string;
   paymentType?: string;
+  internalReferenceNumber?: string;
 
   customer: {
     firstName: string;
@@ -13,6 +14,8 @@ export interface Job {
     customerType?: string;
     companyName?: string;
     dealershipName?: string;
+    phoneNumber?: string;
+    mobileNumber?: string;
   };
 
   createdAt: string;
@@ -55,6 +58,7 @@ export interface Message {
   messageType: string;
   decision: string | null;
   message: string;
+  messageKey: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -103,6 +107,22 @@ export interface Attachment {
   name: string;
   type: string;
   attachmentId: string;
+  sourceReferenceId?: string;
+}
+
+export interface WarrantyEvaluation {
+  status: string;
+  ineligibleReason?: string | null;
+}
+
+export interface WarrantyInformation {
+  warrantyType?: "STANDARD_WARRANTY" | "EXTENDED_WARRANTY" | "BOSCH_PRO_SERVICE" | null;
+  extendedType?: string | null;
+  proServiceType?: string | null;
+  validityExpirationDate?: string | null;
+  usedWarrantyRepairCount?: number | null;
+  allowedWarrantyRepairCount?: number | null;
+  evaluation?: WarrantyEvaluation | null;
 }
 
 export interface JobOverviewItem {
@@ -142,6 +162,7 @@ export interface JobOverviewItem {
       isBareTool: boolean;
       accessories: Accessory[];
       customerWish: CustomerWish;
+      warrantyInformation?: WarrantyInformation | null;
       attachments: Attachment[];
     };
   };
@@ -150,11 +171,13 @@ export interface JobOverviewItem {
 
 export interface JobDiagnostic {
   jobId: string;
+  diagnosticId?: string;
   ascId?: string;
   actionType: string;
   jobType: string;
   exchangeReason?: string;
   status: string;
+  customerAnswer?: string;
   typeOfUsage: string;
   faultCode: string;
   faultCodeDescription: string;
@@ -169,6 +192,7 @@ export interface JobDiagnostic {
     type: string;
     quantity: number;
     status: string;
+    notBelongsToTool?: boolean;
     approvedBy: string;
     approvedByName: string;
     approvedAt: string;
@@ -195,6 +219,7 @@ export interface JobDiagnostic {
     type: string;
     quantity: number;
     status: string;
+    notBelongsToTool?: boolean;
     approvedBy: string;
     approvedByName: string;
     approvedAt: string;

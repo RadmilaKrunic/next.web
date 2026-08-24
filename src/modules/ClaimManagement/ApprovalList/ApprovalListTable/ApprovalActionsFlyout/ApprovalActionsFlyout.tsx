@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { MessagesContext } from "contexts/messagescontext";
 import { JobOverviewItem } from "modules/JobManagement/JobList/JobList.types";
+import { useAnalytics, toJobStatus, toPreApprovalAction } from "@/analytics";
 
 type DecisionType = "approved" | "rejected" | "revised" | null;
 
@@ -30,6 +31,7 @@ export default function ApprovalActionsFlyout({
   const [decisionModalOpen, setDecisionModalOpen] = useState(false);
   const [currentDecision, setCurrentDecision] = useState<DecisionType>(null);
   const { setMessages } = useContext(MessagesContext);
+  const analytics = useAnalytics();
 
   const { mutate: updateApprovalStatus } = useUpdateApprovalStatus({
     onSuccess: async () => {
@@ -49,6 +51,11 @@ export default function ApprovalActionsFlyout({
       ]);
       scrollToTop();
       const updatedJob = queryClient.getQueryData<JobOverviewItem>(["job", jobId]);
+      const preApprovalAction = toPreApprovalAction(currentDecision ?? "");
+      const reviewedJobStatus = toJobStatus(updatedJob?.job?.jobStatus);
+      if (preApprovalAction && reviewedJobStatus) {
+        analytics.trackPreApprovalReviewed({ jobStatus: reviewedJobStatus, preApprovalAction });
+      }
       if (!updatedJob?.job?.pendingApprovals?.includes("BOSCH_INTERNAL")) {
         await navigate("/approval-list");
       }
@@ -106,11 +113,11 @@ export default function ApprovalActionsFlyout({
     <>
       <ScrollablePopover
         data-testid={`approval-actions-popover-${jobId}`}
-        className={materialId ? "spare-part-actions-popover" : "job-actions-popover"}
+        className={materialId ? "spare-part-actions-popover" : "actions-popover"}
         trigger={
           <Button
             icon={"options"}
-            className="job-actions-popover-trigger"
+            className="actions-popover-trigger"
             tabIndex={0}
             aria-label="More approval options"
             data-testid={`approval-actions-popover-trigger-${jobId}`}

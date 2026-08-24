@@ -5,6 +5,11 @@ import { formatDateToDisplay } from "../../../../utils/dateFormatter";
 
 export type ClaimColumnKey =
   | "claimId"
+  | "invoiceNumber"
+  | "jobId"
+  | "internalReferenceNumber"
+  | "mobileNumber"
+  | "phoneNumber"
   | "createdOn"
   | "ascName"
   | "toolModelName"
@@ -20,6 +25,13 @@ export type ClaimColumnConfig = {
   getValue: (claim: Claim) => string | ReactNode;
 };
 
+export interface ClaimColumnConfiguration {
+  key: ClaimColumnKey;
+  isFixed: boolean;
+  isChecked: boolean;
+  order: number;
+}
+
 export const getClaimColumns = (
   t: (key: string) => string,
 ): Record<ClaimColumnKey, ClaimColumnConfig> => ({
@@ -27,6 +39,36 @@ export const getClaimColumns = (
     key: "claimId",
     label: t("claimId"),
     getValue: (claim) => claim.claimId,
+  },
+
+  invoiceNumber: {
+    key: "invoiceNumber",
+    label: t("invoiceNumber"),
+    getValue: (claim) => claim.invoiceNumber ?? "-",
+  },
+
+  jobId: {
+    key: "jobId",
+    label: t("jobId"),
+    getValue: (claim) => claim.jobId ?? "-",
+  },
+
+  internalReferenceNumber: {
+    key: "internalReferenceNumber",
+    label: t("internalReferenceNumber"),
+    getValue: (claim) => claim.internalReferenceNumber ?? "-",
+  },
+
+  mobileNumber: {
+    key: "mobileNumber",
+    label: t("mobileNumber"),
+    getValue: (claim) => claim.mobileNumber ?? "-",
+  },
+
+  phoneNumber: {
+    key: "phoneNumber",
+    label: t("phoneNumber"),
+    getValue: (claim) => claim.phoneNumber ?? "-",
   },
 
   createdOn: {

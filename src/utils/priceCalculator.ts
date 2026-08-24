@@ -282,6 +282,7 @@ export const calculatePrices = (
         } else {
           discountPercent = 0;
           discountAmount = 0;
+          totalAmount = Math.max(0, changedValue);
         }
         break;
 

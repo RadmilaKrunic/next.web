@@ -23,6 +23,7 @@ vi.mock("../../../api/services/jobs/action", () => ({
 }));
 
 import DocumentFile from "./DocumentFile";
+import { downloadFileFromServer } from "../../../api/services/file/action";
 
 function renderDocumentFile(props: Record<string, unknown> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -34,6 +35,7 @@ function renderDocumentFile(props: Record<string, unknown> = {}) {
         name: "test.pdf",
         type: "INVOICE",
         fileId: "file-123",
+        enableDownload: true,
         dataTestid: "test-doc",
         ...props,
       }),
@@ -82,5 +84,21 @@ describe("DocumentFile", () => {
   it("renders document icon", () => {
     renderDocumentFile();
     expect(screen.getByTestId("icon-document-plain")).toBeInTheDocument();
+  });
+
+  it("passes sourceReferenceId to download api", async () => {
+    renderDocumentFile({ sourceReferenceId: "source-456" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Download document: test.pdf" }));
+
+    expect(downloadFileFromServer).toHaveBeenCalledWith("file-123", "INVOICE", "source-456");
+  });
+
+  it("passes null sourceReferenceId to download api when missing", async () => {
+    renderDocumentFile();
+
+    await userEvent.click(screen.getByRole("button", { name: "Download document: test.pdf" }));
+
+    expect(downloadFileFromServer).toHaveBeenCalledWith("file-123", "INVOICE", null);
   });
 });

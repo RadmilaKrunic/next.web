@@ -12,6 +12,7 @@ import {
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
 import { useHasPermission } from "hooks/useHasPermission";
+import { getChargeablePendingInfo } from "hooks/useDiagnosticsManager";
 import { PERMISSIONS } from "utils/Permissions";
 import Field from "components/generics/Field/GenericField.types";
 import { useTranslation } from "react-i18next";
@@ -34,11 +35,18 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const { allFields, activeValueChangeFieldRef } = useContext(GenericFormContext);
   const { values, setFieldValue } = useFormikContext<Record<string, unknown>>();
-  const { isDistributingRef, hasPricesPopulated, setSummaryTypeOptions, discountBase } =
-    useDiagnosticsContext();
+  const {
+    isDistributingRef,
+    hasPricesPopulated,
+    setSummaryTypeOptions,
+    discountBase,
+    isValidating,
+    jobStatus,
+  } = useDiagnosticsContext();
   const hasPriceViewPermission = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES]);
   const canEditdiscount = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_DISCOUNT]);
   const canEditTotalAmount = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_AMOUNT]);
+  const isWaitingForApproval = jobStatus === "WAITING_FOR_APPROVAL";
   const types = new Set(["chargeable"]);
   // Determine which row area name to scope aggregation to.
   // claimDiagnosticsSummary  → aggregate only claims_claimSpareParts#N rows
@@ -59,24 +67,47 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     });
   }, [allFields, rowAreaNameContains]);
 
+  const { hasChargeablePending } = useMemo(
+    () => getChargeablePendingInfo(scopedFields, values),
+    [scopedFields, values],
+  );
+
   const applyFieldPermissions = (field: Field, activeSummaryType: string): Field => {
     const subtype = field.subtype || "";
     if (!subtype) return field;
     const isEditableSummaryType = types.has(activeSummaryType);
     const isNet = discountBase === "NET_PRICE";
-    if (
-      subtype === "diagnosticSummaryDiscountNetMaterial" ||
-      subtype === "diagnosticSummaryDiscountMaterial"
-    ) {
-      return { ...field, isDisabled: !canEditdiscount || !isEditableSummaryType };
+    if (subtype === "diagnosticSummaryDiscountNetMaterial") {
+      return { ...field, isDisabled: !canEditdiscount || !isEditableSummaryType || isValidating };
     }
 
     if (subtype === "diagnosticSummaryNetAmountMaterial") {
-      return { ...field, isDisabled: !isNet || !isEditableSummaryType };
+      return { ...field, isDisabled: !isNet || !isEditableSummaryType || isValidating };
+    }
+
+    if (subtype === "diagnosticSummaryDiscountMaterial") {
+      return {
+        ...field,
+        isDisabled:
+          !isWaitingForApproval ||
+          !hasChargeablePending ||
+          !canEditdiscount ||
+          !isEditableSummaryType ||
+          isValidating,
+      };
     }
 
     if (subtype === "diagnosticSummaryTotalAmountMaterial") {
-      return { ...field, isDisabled: isNet || !canEditTotalAmount || !isEditableSummaryType };
+      return {
+        ...field,
+        isDisabled:
+          !isWaitingForApproval ||
+          !hasChargeablePending ||
+          isNet ||
+          !canEditTotalAmount ||
+          !isEditableSummaryType ||
+          isValidating,
+      };
     }
     return field;
   };
@@ -333,6 +364,7 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     summaryDiscountHiddenField,
     summaryDiscountMaterialHiddenField,
     area.fields,
+    hasChargeablePending,
     currentSummaryType,
   ]);
 
@@ -385,6 +417,11 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
   if (hasPriceViewPermission && !hasPricesPopulated) return null;
 
   const isMaterialField = (field: Field) => field.subtype?.endsWith("Material") ?? false;
+  const summaryRadioField = (field: Field): Field => ({
+    ...field,
+    isDisabled: false,
+    disabledForStatuses: undefined,
+  });
 
   return (
     <>
@@ -392,7 +429,7 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
         {area.fields
           .filter((field) => field.type === "radiogroup")
           .map((field) => (
-            <GenericField field={field} key={field.name} />
+            <GenericField field={summaryRadioField(field)} key={field.name} />
           ))}
       </div>
       <div className="summary-row summary-fields-row">

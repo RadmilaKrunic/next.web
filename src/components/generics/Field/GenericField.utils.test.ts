@@ -335,6 +335,105 @@ describe("handleFaultCodeSelection", () => {
       expect.anything(),
     );
   });
+
+  it("does not update LA quantity when allowedPositions marks LA quantitySource as DEFAULT", () => {
+    const setFieldValue = vi.fn().mockResolvedValue(undefined);
+    const laPositionField = makeField("row0_position", "diagnosticPosition", {
+      fieldMapping: {
+        originalName: "position",
+        map: "position",
+        parentMap: [],
+        prefixes: [],
+        nameStartsWith: "row0_",
+      },
+    });
+    const qtyField = makeField("row0_quantity", "diagnosticQuantity", {
+      fieldMapping: {
+        originalName: "quantity",
+        map: "quantity",
+        parentMap: [],
+        prefixes: [],
+        nameStartsWith: "row0_",
+      },
+    });
+    const allFields = [laPositionField, qtyField];
+    const formValues = { row0_position: "LA" };
+    const rawItem = { faultCode: "E001", faultCodeDescription: "Desc", faultCodeLabourQuantity: 3 };
+    const allowedPositions = [
+      {
+        position: "LA",
+        minCount: 1,
+        maxCount: 1,
+        quantity: { quantitySource: "DEFAULT", defaultQuantity: 3 },
+        unitPriceSource: "SAP",
+      },
+    ];
+    handleFaultCodeSelection(rawItem, setFieldValue, allFields, formValues, allowedPositions);
+    expect(setFieldValue).not.toHaveBeenCalledWith("row0_quantity", expect.anything());
+  });
+
+  it("updates LA quantity when allowedPositions marks LA quantitySource as FAULT_CODES", () => {
+    const setFieldValue = vi.fn().mockResolvedValue(undefined);
+    const laPositionField = makeField("row0_position", "diagnosticPosition", {
+      fieldMapping: {
+        originalName: "position",
+        map: "position",
+        parentMap: [],
+        prefixes: [],
+        nameStartsWith: "row0_",
+      },
+    });
+    const qtyField = makeField("row0_quantity", "diagnosticQuantity", {
+      fieldMapping: {
+        originalName: "quantity",
+        map: "quantity",
+        parentMap: [],
+        prefixes: [],
+        nameStartsWith: "row0_",
+      },
+    });
+    const allFields = [laPositionField, qtyField];
+    const formValues = { row0_position: "LA" };
+    const rawItem = { faultCode: "E001", faultCodeDescription: "Desc", faultCodeLabourQuantity: 3 };
+    const allowedPositions = [
+      {
+        position: "LA",
+        minCount: 1,
+        maxCount: 1,
+        quantity: { quantitySource: "FAULT_CODES", defaultQuantity: 2 },
+        unitPriceSource: "SAP",
+      },
+    ];
+    handleFaultCodeSelection(rawItem, setFieldValue, allFields, formValues, allowedPositions);
+    expect(setFieldValue).toHaveBeenCalledWith("row0_quantity", 3);
+  });
+
+  it("updates LA quantity when allowedPositions has no LA entry (legacy fallback not blocked)", () => {
+    const setFieldValue = vi.fn().mockResolvedValue(undefined);
+    const laPositionField = makeField("row0_position", "diagnosticPosition", {
+      fieldMapping: {
+        originalName: "position",
+        map: "position",
+        parentMap: [],
+        prefixes: [],
+        nameStartsWith: "row0_",
+      },
+    });
+    const qtyField = makeField("row0_quantity", "diagnosticQuantity", {
+      fieldMapping: {
+        originalName: "quantity",
+        map: "quantity",
+        parentMap: [],
+        prefixes: [],
+        nameStartsWith: "row0_",
+      },
+    });
+    const allFields = [laPositionField, qtyField];
+    const formValues = { row0_position: "LA" };
+    const rawItem = { faultCode: "E001", faultCodeDescription: "Desc", faultCodeLabourQuantity: 3 };
+    handleFaultCodeSelection(rawItem, setFieldValue, allFields, formValues, []);
+    expect(setFieldValue).not.toHaveBeenCalledWith("row0_quantity", expect.anything());
+  });
 });
 
 // ── resolveIsRequired ────────────────────────────────────────────────────────

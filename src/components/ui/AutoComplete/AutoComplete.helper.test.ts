@@ -238,18 +238,18 @@ describe("getAutocompleteOptions", () => {
       languageCode: "en-US",
     });
 
-    expect(getSparePartsSearch).toHaveBeenCalledWith(
-      "12345",
-      "",
-      "ZA",
-      "en",
-      undefined,
-      10,
-      1,
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(getSparePartsSearch).toHaveBeenCalledWith({
+      bareToolNumber: "12345",
+      tradeName: "",
+      countryCode: "ZA",
+      languageCode: "en",
+      brand: undefined,
+      size: 10,
+      pageNumber: 1,
+      isExchange: undefined,
+      bareTool: undefined,
+      position: undefined,
+    });
     expect(result).toEqual(bareToolOptions);
   });
 
@@ -262,38 +262,36 @@ describe("getAutocompleteOptions", () => {
       countryCode: "ZA",
       languageCode: "en-US",
     });
-    expect(getSparePartsSearch).toHaveBeenNthCalledWith(
-      1,
-      "99999",
-      "",
-      "ZA",
-      "en-US",
-      undefined,
-      10,
-      1,
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(getSparePartsSearch).toHaveBeenNthCalledWith(1, {
+      bareToolNumber: "99999",
+      tradeName: "",
+      countryCode: "ZA",
+      languageCode: "en-US",
+      brand: undefined,
+      size: 10,
+      pageNumber: 1,
+      isExchange: undefined,
+      bareTool: undefined,
+      position: undefined,
+    });
     expect(byPart).toEqual(sparePartOptions);
 
     const byModel = await getAutocompleteOptions("toolModelName", "A B C D E", "ASC", {
       countryCode: "ZA",
       languageCode: "en-US",
     });
-    expect(getSparePartsSearch).toHaveBeenNthCalledWith(
-      2,
-      "",
-      "ABCDE",
-      "ZA",
-      "en-US",
-      undefined,
-      10,
-      1,
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(getSparePartsSearch).toHaveBeenNthCalledWith(2, {
+      bareToolNumber: "",
+      tradeName: "ABCDE",
+      countryCode: "ZA",
+      languageCode: "en-US",
+      brand: undefined,
+      size: 10,
+      pageNumber: 1,
+      isExchange: undefined,
+      bareTool: undefined,
+      position: undefined,
+    });
     expect(byModel).toEqual(sparePartOptions);
   });
 
@@ -435,6 +433,48 @@ describe("handleAutoCompleteSelect and handleResetAutoCompleteFields", () => {
     expect(setFieldValue).toHaveBeenCalledWith("row0_sparePartNumber", "SP-1");
     expect(setFieldValue).toHaveBeenCalledWith("row0_sparePartDescription", "Bearing");
     expect(setFieldValue).toHaveBeenCalledWith("row0_sparePartsUnitPrice", "10");
+  });
+
+  it("fills diagnostic description on spare part select even without autofill metadata", async () => {
+    const setFieldValue = vi.fn().mockResolvedValue(undefined);
+    const mainField = makeField("diagnosticData_diagnosticsSpareParts#0_sparePartNumber", {
+      fieldMapping: {
+        originalName: "sparePartNumber",
+        map: "partNumber",
+        parentMap: [],
+        prefixes: [],
+        nameStartsWith: "diagnosticData_diagnosticsSpareParts#0_",
+      },
+    });
+
+    const allFields = [
+      mainField,
+      makeField("diagnosticData_diagnosticsSpareParts#0_description", {
+        fieldMapping: {
+          originalName: "description",
+          map: "description",
+          parentMap: [],
+          prefixes: [],
+          nameStartsWith: "diagnosticData_diagnosticsSpareParts#0_",
+        },
+      }),
+    ];
+
+    await handleAutoCompleteSelect(
+      { partNumber: "SP-1", description: "Bearing" } as unknown as AutoCompleteOption,
+      mainField,
+      setFieldValue,
+      allFields,
+    );
+
+    expect(setFieldValue).toHaveBeenCalledWith(
+      "diagnosticData_diagnosticsSpareParts#0_sparePartNumber",
+      "SP-1",
+    );
+    expect(setFieldValue).toHaveBeenCalledWith(
+      "diagnosticData_diagnosticsSpareParts#0_description",
+      "Bearing",
+    );
   });
 
   it("resets primary field and autofill fields", async () => {

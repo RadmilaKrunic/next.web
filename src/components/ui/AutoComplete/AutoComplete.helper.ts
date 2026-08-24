@@ -123,27 +123,33 @@ export const getAutocompleteOptions = async (
     pageNumber = 1,
   } = searchOptions;
 
-  if (name?.toLowerCase().includes("baretoolnumber") && newValue.length >= 5) {
+  if (name?.toLowerCase().includes("baretoolnumber")) {
+    const strippedValue = newValue.replaceAll(/[^a-zA-Z0-9]/g, "");
+    if (strippedValue.length < 5) return [];
+
     const language = languageCode?.includes("-") ? languageCode.split("-")[0] : languageCode;
-    const spareParts = await getSparePartsSearch(
-      newValue,
-      "",
+    const spareParts = await getSparePartsSearch({
+      bareToolNumber: strippedValue,
+      tradeName: "",
       countryCode,
-      language,
+      languageCode: language,
       brand,
       size,
       pageNumber,
       isExchange,
       bareTool,
       position,
-    );
+    });
     return spareParts || [];
   }
 
-  if (name?.toLowerCase().includes("sparepartnumber") && newValue.length >= 5) {
-    const spareParts = await getSparePartsSearch(
-      newValue,
-      "",
+  if (name?.toLowerCase().includes("sparepartnumber")) {
+    const strippedValue = newValue.replaceAll(/[^a-zA-Z0-9]/g, "");
+    if (strippedValue.length < 5) return [];
+
+    const spareParts = await getSparePartsSearch({
+      bareToolNumber: strippedValue,
+      tradeName: "",
       countryCode,
       languageCode,
       brand,
@@ -152,15 +158,15 @@ export const getAutocompleteOptions = async (
       isExchange,
       bareTool,
       position,
-    );
+    });
     return spareParts || [];
   }
 
   if (name?.toLowerCase().includes("toolmodelname") && newValue.length >= 5) {
     const trimmedValue = newValue.replaceAll(/\s/g, "");
-    const spareParts = await getSparePartsSearch(
-      "",
-      trimmedValue,
+    const spareParts = await getSparePartsSearch({
+      bareToolNumber: "",
+      tradeName: trimmedValue,
       countryCode,
       languageCode,
       brand,
@@ -169,7 +175,7 @@ export const getAutocompleteOptions = async (
       isExchange,
       bareTool,
       position,
-    );
+    });
     return spareParts || [];
   }
 
@@ -187,15 +193,15 @@ export const getSparePartCompatibilityMessage = (
   name: string,
   values: Record<string, unknown>,
   allFields: Field[],
-  sparePartBelongsToTool?: Record<string, boolean>,
+  sparePartNotBelongsToTool?: Record<string, boolean>,
 ): string => {
-  if (!name.toLowerCase().includes("sparepartnumber") || !sparePartBelongsToTool) {
+  if (!name.toLowerCase().includes("sparepartnumber") || !sparePartNotBelongsToTool) {
     return "";
   }
 
-  const hasBelongsToToolValue = Object.hasOwn(sparePartBelongsToTool, name);
-  const belongsToTool = sparePartBelongsToTool[name] === true;
-  if (!hasBelongsToToolValue || belongsToTool) {
+  const hasNotBelongsToToolValue = Object.hasOwn(sparePartNotBelongsToTool, name);
+  const notBelongsToTool = sparePartNotBelongsToTool[name] === true;
+  if (!hasNotBelongsToToolValue || !notBelongsToTool) {
     return "";
   }
 
@@ -208,11 +214,16 @@ export const getSparePartCompatibilityMessage = (
     ? ((values[rowTypeField.name] as string) ?? "").toUpperCase()
     : "";
 
-  if (rowTypeValue === "WARRANTY") {
+  const actionType = (values["actionType"] as string) || "";
+  const isExchange = ["NEW_TOOL_EXCHANGE", "SPARE_PARTS_EXCHANGE", "ACCESSORIES_EXCHANGE"].includes(
+    actionType,
+  );
+
+  if (rowTypeValue === "WARRANTY" && !isExchange) {
     return "incompatibleWarrantyType";
   }
 
-  if (rowTypeValue === "SERVICE_OFFERING") {
+  if (rowTypeValue === "SERVICE_OFFERING" && !isExchange) {
     return "incompatibleServiceOfferingType";
   }
 
@@ -254,7 +265,10 @@ export const setAutocompleteFieldValue = async (
   }
 
   if (name?.toLowerCase().includes("toolmodelname")) {
-    await setFieldValue(name, (option as BareToolOption)?.tradeName || "");
+    const description = (option as BareToolOption)?.description || "";
+    const tradeName = (option as BareToolOption)?.tradeName || "";
+
+    await setFieldValue(name, tradeName || description || "");
     return;
   }
 
@@ -321,6 +335,21 @@ export const handleAutoCompleteSelect = async (
   allFields?: Field[],
 ) => {
   await setAutocompleteFieldValue(field.name, option, setFieldValue);
+
+  if (field.name.toLowerCase().includes("sparepartnumber") && allFields) {
+    const descriptionField = allFields.find(
+      (f) =>
+        f.fieldMapping?.originalName === "description" &&
+        field.fieldMapping?.nameStartsWith === f.fieldMapping?.nameStartsWith,
+    );
+    if (descriptionField) {
+      await setFieldValue(
+        descriptionField.name,
+        (option as { description?: string }).description || "",
+      );
+    }
+  }
+
   if (Array.isArray(field.autoFillFields) && field.autoFillFields.length > 0) {
     const autoFillFields = allFields?.filter(
       (f) =>

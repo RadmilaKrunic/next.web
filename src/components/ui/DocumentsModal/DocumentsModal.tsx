@@ -11,6 +11,7 @@ export interface Attachment {
   name: string;
   type: string;
   attachmentId: string;
+  sourceReferenceId?: string;
 }
 export default function DocumentsModal({
   attachments,
@@ -79,6 +80,7 @@ export default function DocumentsModal({
             name={attachment.name}
             type={attachment.type}
             fileId={attachment.attachmentId}
+            sourceReferenceId={attachment.sourceReferenceId}
             jobId={jobId}
             onDeleteSuccess={handleDeleteSuccess}
             dataTestid={attachment.attachmentId}

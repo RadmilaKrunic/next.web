@@ -355,3 +355,12 @@ export const updateJobAttachments = async (
     throw error;
   }
 };
+
+export const postPurchaseDate = async (jobId: string, purchaseDate: string): Promise<void> => {
+  try {
+    await axiosClient.patch(`/v1/jobs/${jobId}/purchase-date`, { purchaseDate });
+  } catch (error) {
+    console.error(`Error posting purchase date for job ${jobId}:`, error);
+    throw error;
+  }
+};

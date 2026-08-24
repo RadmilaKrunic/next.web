@@ -62,7 +62,7 @@ export const useDiagnosticData = ({ jobId, jobData, tabs }: UseDiagnosticDataPro
   });
 
   return {
-    diagnosticData: diagnosticData || EMPTY_DIAGNOSTIC_DATA,
+    diagnosticData: (diagnosticData as JobDiagnostic | undefined) || EMPTY_DIAGNOSTIC_DATA,
     diagnosticLoading,
     diagnosticError,
     shouldFetchDiagnostic,

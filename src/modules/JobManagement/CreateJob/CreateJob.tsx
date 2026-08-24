@@ -7,18 +7,22 @@ import GenericAction from "../../../components/generics/Action/GenericAction";
 import "./CreateJob.scss";
 import { useTranslation } from "react-i18next";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { getAssetCollapsedTitle, getCustomerCollapsedTitle } from "./CreateJob.utils";
+import { useAnalytics, JobStatus } from "@/analytics";
+import {
+  getAssetCollapsedTitle,
+  getCustomerCollapsedTitle,
+  getDeliveryAddressConfirmationInfo,
+  DeliveryAddressConfirmationInfo,
+} from "./CreateJob.utils";
 import { CreateJobContext } from "./CreateJob.context";
-import Field from "../../../components/generics/Field/GenericField.types";
+import Field, { WarrantyInfoPayload } from "../../../components/generics/Field/GenericField.types";
 import { useAccessoriesManager } from "../../../hooks/useAccessoriesManager";
 import { useFormInitialization } from "../../../hooks/useFormInitialization";
 import { scrollToFirstError } from "../../../utils/scrollToError";
-
 import { createOrder, getOrderReceipt } from "../../../api/services/orders/orders";
 import { Order } from "../../../api/services/orders/orders.types";
 import { useNavigate, useParams } from "react-router";
-import { useOrderById } from "../../../api/services/orders/hooks";
-
+import { useOrderById, usePostWarrantyCheck } from "../../../api/services/orders/hooks";
 import {
   getAllFieldsFromSection,
   setDuplicatedSection,
@@ -26,27 +30,59 @@ import {
   mapFieldToFieldMapping,
   convertAPIDataToFormValues,
 } from "../../../components/generics/utils";
-
 import GenericForm from "../../../components/generics/Form/GenericForm.types";
-import { GenericFormContext } from "../../../components/generics/Form/GenericForm.context";
+import {
+  ActionCallbackHelpers,
+  GenericFormContext,
+} from "../../../components/generics/Form/GenericForm.context";
 import { useQueryClient } from "@tanstack/react-query";
 import { HeaderUserData } from "../../../api/services/header/action";
 import { ActivityIndicator } from "@bosch/react-frok";
 import { MessagesContext } from "../../../contexts/messagescontext";
+import {
+  WARRANTY_AREA_NAME_REGEX,
+  buildWarrantyCheckPayload,
+  getAllowedWarrantyTypes,
+  getSectionScopedFieldName,
+  updateWarrantySections,
+} from "./CreateJob.warranty.utils";
+import { buildWarrantyInfoContent, formatWarrantyDate } from "../warranty.utils";
+import DeliveryAddressConfirmModal from "../../../components/ui/DeliveryAddressConfirmModal/DeliveryAddressConfirmModal";
+
+interface WarrantyInfoContentData extends WarrantyInfoPayload {
+  reasonKey: WarrantyInfoPayload["reasonKey"];
+  fallbackMessage: string;
+  validityExpirationDate: string;
+  usedWarrantyRepairCount: number;
+  allowedWarrantyRepairCount: number;
+  recommendation?: string;
+}
 
 function CreateJob() {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const queryClient = useQueryClient();
   const user = queryClient.getQueryData<HeaderUserData>(["user"]);
   const navigate = useNavigate();
+  const analytics = useAnalytics();
+  // Proxy start point for the job-creation duration KPI (screen open → success).
+  // The exact start point is to be confirmed with the BASS/measurement team.
+  const jobCreateStartRef = useRef<number>(Date.now());
   const { orderId } = useParams<{ orderId: string }>();
   const [isDeletingFile, setIsDeletingFile] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const { setMessages } = useContext(MessagesContext);
 
   const autocompleteValidationRef = useRef<Record<string, boolean>>({});
+  const latestSetFieldValueRef = useRef<((field: string, value: unknown) => void) | null>(null);
+  const lastWarrantyPayloadKeyRef = useRef<Record<number, string>>({});
+
+  const [isDeliveryAddressModalOpen, setIsDeliveryAddressModalOpen] = useState(false);
+  const [deliveryAddressConfirmInfo, setDeliveryAddressConfirmInfo] =
+    useState<DeliveryAddressConfirmationInfo | null>(null);
+  const pendingActionAfterDeliveryConfirmRef = useRef<(() => void | Promise<void>) | null>(null);
 
   const isEditMode = !!orderId;
+  const warrantyCheckMutation = usePostWarrantyCheck();
 
   const { data: orderData, isLoading: isLoadingOrder, error: orderError } = useOrderById(orderId);
 
@@ -291,7 +327,6 @@ function CreateJob() {
 
       setCurrentAction(actionName);
 
-      // Update lastActionRef
       lastActionRef.current = actionName;
 
       startValidation(actionName);
@@ -312,13 +347,21 @@ function CreateJob() {
         );
         await formikProps.setTouched(touchedFields);
 
-        // Scroll to first error field
         scrollToFirstError(visibleErrors);
         return;
       }
 
-      // Validation passed - stop validation and proceed
       stopValidation();
+
+      if (actionName === "next" || actionName === "submit") {
+        const confirmationInfo = getDeliveryAddressConfirmationInfo(formikProps.values);
+        if (confirmationInfo) {
+          pendingActionAfterDeliveryConfirmRef.current = onSuccess ?? null;
+          setDeliveryAddressConfirmInfo(confirmationInfo);
+          setIsDeliveryAddressModalOpen(true);
+          return;
+        }
+      }
 
       if (onSuccess) {
         await onSuccess();
@@ -339,6 +382,18 @@ function CreateJob() {
         const response = await createOrder(isDraft, payload as unknown as Order);
 
         if (response) {
+          if (isDraft) {
+            analytics.trackJobSavedAsDraft({ jobStatus: JobStatus.DRAFT });
+          } else {
+            analytics.trackJobCreated({
+              jobStatus: JobStatus.READY_FOR_DIAGNOSTIC,
+              jobCreationDurationSeconds: Math.max(
+                0,
+                Math.round((Date.now() - jobCreateStartRef.current) / 1000),
+              ),
+            });
+          }
+          sessionStorage.removeItem("jobFilters-job-advancedFilters");
           if (!isDraft) {
             const receiptBlob = await getOrderReceipt(response.order.orderId);
             if (receiptBlob) {
@@ -357,7 +412,7 @@ function CreateJob() {
         setIsSubmittingOrder(false);
       }
     },
-    [prepareForAPI, navigate, queryClient],
+    [prepareForAPI, navigate, queryClient, analytics],
   );
 
   const addNewMultipleSection = useCallback(
@@ -473,6 +528,7 @@ function CreateJob() {
       if (assetIndex) {
         const updatedAccessories = assetsAccessories.filter((acc) => acc.assetIndex !== assetIndex);
         setAssetsAccessories(updatedAccessories);
+        delete lastWarrantyPayloadKeyRef.current[Number(assetIndex)];
       }
     },
     [
@@ -509,20 +565,17 @@ function CreateJob() {
   );
 
   const onNextSection = useCallback(
-    (
-      formValues?: Record<string, unknown>,
-      helpers?: {
-        setErrors: (errors: Record<string, string>) => void;
-        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, string>>;
-      },
-    ) => {
+    (formValues?: Record<string, unknown>, helpers?: ActionCallbackHelpers) => {
       if (formValues && helpers) {
         void handleAction(
           "next",
           {
             values: formValues,
-            setErrors: helpers.setErrors,
-            setTouched: helpers.setTouched,
+            setErrors: (errors: Record<string, string>) => helpers.setErrors(errors),
+            setTouched: async (touched: Record<string, boolean>) => {
+              const result = await helpers.setTouched(touched);
+              return result as void | Record<string, string>;
+            },
           },
           () => {
             setOpenAssetIndices(new Set([1]));
@@ -535,14 +588,12 @@ function CreateJob() {
   );
 
   const onCancelForm = useCallback(
-    (
-      _formValues?: Record<string, unknown>,
-      helpers?: { setFieldValue: (field: string, value: unknown) => void },
-    ) => {
+    (_formValues?: Record<string, unknown>, helpers?: ActionCallbackHelpers) => {
       reset();
       setOpenAssetIndices(new Set());
       setIsCustomerOpen(true);
       setAssetsAccessories([]);
+      lastWarrantyPayloadKeyRef.current = {};
       if (helpers) {
         for (const key of Object.keys(initialFormValues)) {
           helpers.setFieldValue(key, initialFormValues[key]);
@@ -550,6 +601,79 @@ function CreateJob() {
       }
     },
     [reset, initialFormValues, setAssetsAccessories],
+  );
+
+  const runWarrantyCheck = useCallback(
+    async (sectionIndex: number, values: Record<string, unknown>) => {
+      const payload = buildWarrantyCheckPayload(values, sectionIndex, user?.countryCode);
+
+      if (!payload) return;
+
+      const payloadKey = JSON.stringify(payload);
+      if (lastWarrantyPayloadKeyRef.current[sectionIndex] === payloadKey) return;
+
+      lastWarrantyPayloadKeyRef.current[sectionIndex] = payloadKey;
+
+      try {
+        const response = await warrantyCheckMutation.mutateAsync(payload);
+        if (!response) return;
+
+        if (lastWarrantyPayloadKeyRef.current[sectionIndex] !== payloadKey) return;
+
+        const warrantyInfoContent = buildWarrantyInfoContent(
+          response,
+          t,
+          formatWarrantyDate,
+        ) as WarrantyInfoContentData | null;
+        setSections((prevSections) =>
+          updateWarrantySections(prevSections, sectionIndex, response, warrantyInfoContent),
+        );
+
+        const setFieldValue = latestSetFieldValueRef.current;
+        if (setFieldValue) {
+          const customerWishField = getSectionScopedFieldName(
+            sectionIndex,
+            "customerWish",
+            "customerWish",
+          );
+          const warrantyTypeField = getSectionScopedFieldName(
+            sectionIndex,
+            "warrantyDetails",
+            "warrantyType",
+          );
+
+          if (response.evaluationStatus === "INELIGIBLE") {
+            setFieldValue(customerWishField, "CHARGEABLE");
+            setFieldValue(warrantyTypeField, "");
+          }
+
+          if (response.evaluationStatus === "ELIGIBLE") {
+            const currentWarrantyType = values[warrantyTypeField] as string;
+            const allowedTypes = getAllowedWarrantyTypes(response);
+            if (currentWarrantyType && !allowedTypes.has(currentWarrantyType)) {
+              setFieldValue(warrantyTypeField, "");
+            }
+          }
+        }
+      } catch (error: unknown) {
+        console.error("Failed to check warranty:", error);
+      }
+    },
+    [setSections, t, user?.countryCode, warrantyCheckMutation],
+  );
+
+  const handleCreateJobAreaValueChange = useCallback(
+    (areaName: string, formValues?: Record<string, unknown>) => {
+      const matched = WARRANTY_AREA_NAME_REGEX.exec(areaName);
+      if (!matched) return;
+      if (!formValues) return;
+
+      const sectionIndex = Number(matched[1]);
+      if (Number.isNaN(sectionIndex)) return;
+
+      void runWarrantyCheck(sectionIndex, formValues);
+    },
+    [runWarrantyCheck],
   );
 
   const onAddMoreTools = useCallback(
@@ -567,11 +691,7 @@ function CreateJob() {
     (
       actionName: string | undefined,
       formValues: Record<string, unknown>,
-      helpers: {
-        setErrors: (errors: Record<string, string>) => void;
-        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, string>>;
-        setFieldValue: (field: string, value: unknown) => void;
-      },
+      helpers: ActionCallbackHelpers,
     ) => {
       if (!actionName) return;
 
@@ -582,7 +702,14 @@ function CreateJob() {
         onSubmit: () => {
           void handleAction(
             "submit",
-            { values: formValues, setErrors: helpers.setErrors, setTouched: helpers.setTouched },
+            {
+              values: formValues,
+              setErrors: (errors: Record<string, string>) => helpers.setErrors(errors),
+              setTouched: async (touched: Record<string, boolean>) => {
+                const result = await helpers.setTouched(touched);
+                return result as void | Record<string, string>;
+              },
+            },
             () => {
               onSubmitOrder(formValues);
             },
@@ -599,6 +726,22 @@ function CreateJob() {
     },
     [onAddMoreTools, onCancelForm, onSaveDraft, onSubmitOrder, onNextSection, handleAction],
   );
+
+  const handleDeliveryAddressConfirm = useCallback(() => {
+    setIsDeliveryAddressModalOpen(false);
+    setDeliveryAddressConfirmInfo(null);
+    const pendingAction = pendingActionAfterDeliveryConfirmRef.current;
+    pendingActionAfterDeliveryConfirmRef.current = null;
+    if (pendingAction) {
+      pendingAction();
+    }
+  }, []);
+
+  const handleDeliveryAddressCancel = useCallback(() => {
+    setIsDeliveryAddressModalOpen(false);
+    setDeliveryAddressConfirmInfo(null);
+    pendingActionAfterDeliveryConfirmRef.current = null;
+  }, []);
 
   const genericFormContextValue = useMemo(
     () => ({
@@ -623,6 +766,7 @@ function CreateJob() {
       },
       onDeleteStart: () => setIsDeletingFile(true),
       onDeleteEnd: () => setIsDeletingFile(false),
+      onAreaValueChange: handleCreateJobAreaValueChange,
       autocompleteValidation: autocompleteValidationRef,
     }),
     [
@@ -634,6 +778,7 @@ function CreateJob() {
       onNextSection,
       onCancelForm,
       onAddMoreTools,
+      handleCreateJobAreaValueChange,
     ],
   );
 
@@ -679,6 +824,10 @@ function CreateJob() {
           validate={validate}
         >
           {({ values, setErrors, setTouched, setFieldValue }) => {
+            latestSetFieldValueRef.current = (field: string, value: unknown) => {
+              void setFieldValue(field, value);
+            };
+
             return (
               <Form>
                 <GenericSection
@@ -728,7 +877,9 @@ function CreateJob() {
                         return undefined as void | Record<string, string>;
                       };
                       handleGenericAction(actionName, values, {
-                        setErrors,
+                        setErrors: (errors: Record<string, unknown>) => {
+                          setErrors(errors as Record<string, string>);
+                        },
                         setTouched: wrappedSetTouched,
                         setFieldValue: (field: string, value: unknown) => {
                           void setFieldValue(field, value);
@@ -744,6 +895,13 @@ function CreateJob() {
             );
           }}
         </Formik>
+        <DeliveryAddressConfirmModal
+          isOpen={isDeliveryAddressModalOpen}
+          missingFieldLabels={deliveryAddressConfirmInfo?.missingFieldLabels ?? []}
+          isAddressCompletelyEmpty={deliveryAddressConfirmInfo?.isAddressCompletelyEmpty ?? false}
+          onConfirm={handleDeliveryAddressConfirm}
+          onCancel={handleDeliveryAddressCancel}
+        />
       </CreateJobContext.Provider>
     </GenericFormContext.Provider>
   );

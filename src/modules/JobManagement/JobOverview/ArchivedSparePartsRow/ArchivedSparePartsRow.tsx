@@ -1,13 +1,14 @@
 import { Icon, Divider } from "@bosch/react-frok";
 import { useTranslation } from "react-i18next";
 import GenericField from "components/generics/Field/GenericField";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { useFormikContext } from "formik";
 import { useHasPermission } from "hooks/useHasPermission";
 import "../SparePartsRow/SparePartsRow.scss";
 import Field from "components/generics/Field/GenericField.types";
 import { PERMISSIONS } from "utils/Permissions";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
+import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 
 const STATUSES_DISABLING_ROW = new Set([
   "RETURN_UNASSEMBLY",
@@ -32,9 +33,10 @@ function ArchivedSparePartsRow({
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const hasPriceViewPermission = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES]);
   const { jobStatus } = useDiagnosticsContext();
+  const { isRepairAnswerLocked } = useContext(GenericFormContext);
   const [isRowCollapsed, setIsRowCollapsed] = useState(false);
   const { values } = useFormikContext<Record<string, unknown>>();
-  const showRevertButton = !STATUSES_DISABLING_ROW.has(jobStatus ?? "");
+  const showRevertButton = !STATUSES_DISABLING_ROW.has(jobStatus ?? "") && !isRepairAnswerLocked;
 
   const collapsableFieldNames = new Set(
     fields

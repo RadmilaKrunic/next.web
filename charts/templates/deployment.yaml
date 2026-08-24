@@ -140,8 +140,14 @@ spec:
 {{ toYaml .Values.resources | nindent 12 }}
 
           securityContext:
+            # Run as the nginx user (UID/GID 101) so no capabilities are needed:
+            # nginx listens on unprivileged port 3000 and its writable paths
+            # (/var/cache/nginx, /var/run, /var/log/nginx) are emptyDir mounts.
+            # Required by Azure Policy CIS 5.2.8 "only use allowed capabilities".
+            runAsNonRoot: true
+            runAsUser: 101
+            runAsGroup: 101
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-              add: ["CHOWN","SETGID","SETUID"]

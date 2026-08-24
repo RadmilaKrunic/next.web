@@ -1,5 +1,11 @@
 import axiosClient from "../../axios-client/axiosClient";
-import { Order, BareToolOption } from "./orders.types";
+import {
+  Order,
+  BareToolOption,
+  WarrantyCheckRequest,
+  WarrantyCheckResponse,
+  SparePartsSearchRequest,
+} from "./orders.types";
 import axios, { AxiosResponse } from "axios";
 
 const ordersAxiosClient = axios.create({
@@ -64,24 +70,26 @@ export const getOrderReceipt = async (orderId: string): Promise<Blob | null> => 
 };
 
 export const getSparePartsSearch = async (
-  bareToolNumber: string,
-  tradeName: string,
-  countryCode?: string,
-  languageCode?: string,
-  brand?: string,
-  size: number = 20,
-  pageNumber: number = 1,
-  isExchange?: boolean,
-  bareTool?: string,
-  position?: string,
+  request: SparePartsSearchRequest,
 ): Promise<BareToolOption[] | null> => {
   try {
-    const params: Record<string, string | number | boolean> = {
-      sku: bareToolNumber,
+    const {
+      bareToolNumber,
       tradeName,
+      countryCode,
+      languageCode,
+      brand,
       size,
       pageNumber,
-    };
+      isExchange,
+      bareTool,
+      position,
+    } = request;
+    const params: Record<string, string | number | boolean> = {};
+    if (bareToolNumber) params.sku = bareToolNumber;
+    if (tradeName) params.tradeName = tradeName;
+    params.size = size || 20;
+    if (pageNumber) params.pageNumber = pageNumber;
     if (countryCode) params.countryCode = countryCode.toLocaleLowerCase();
     if (languageCode) params.languageCode = languageCode;
     if (brand) params.brand = brand;
@@ -96,6 +104,21 @@ export const getSparePartsSearch = async (
     return response.data;
   } catch (error) {
     console.error("Error fetching spare parts:", error);
+    return null;
+  }
+};
+
+export const postWarrantyCheck = async (
+  payload: WarrantyCheckRequest,
+): Promise<WarrantyCheckResponse | null> => {
+  try {
+    const response: AxiosResponse<WarrantyCheckResponse> = await ordersAxiosClient.post(
+      `${import.meta.env.VITE_API_BASE_URL}/v1/jobs/warranty-check`,
+      payload,
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error checking warranty:", error);
     return null;
   }
 };

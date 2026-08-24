@@ -7,6 +7,7 @@ import TechnicianSelect from "./TechnicianSelect/TechnicianSelect";
 import { useTranslation } from "react-i18next";
 import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
+import ImagePlaceholder from "assets/ImagePlaceholder.png";
 
 const TECHNICIAN_SELECT_DISABLED_STATUSES = new Set(["REPAIR_DONE", "SCRAP_TOOL", "DELIVERED"]);
 
@@ -91,7 +92,23 @@ function OverviewHeader({
       <div className="header-summary">
         {items.map((item) => (
           <div key={`${item.icon}-${item.title}`} className="header-item">
-            <Icon iconName={item.icon} className="item-icon" />
+            {item.isImage ? (
+              <img
+                src={item.imgUrl || ImagePlaceholder}
+                alt={item.title}
+                className="item-icon"
+                referrerPolicy="no-referrer"
+                crossOrigin="use-credentials"
+                width={"68px"}
+                height={"68px"}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = ImagePlaceholder;
+                }}
+              />
+            ) : (
+              <Icon iconName={item.icon} className="item-icon" />
+            )}
             <div className="item-content">
               <div className="item-title">{item.title}</div>
               {item.subtitle && <div className="item-subtitle">{item.subtitle}</div>}

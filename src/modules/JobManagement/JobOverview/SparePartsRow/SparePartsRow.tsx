@@ -14,6 +14,9 @@ import Field from "components/generics/Field/GenericField.types";
 import type { GenericOptionProps } from "components/generics/Field/GenericField.types";
 import { resolveDiscountFieldNames, useSparePartsRowCommon } from "./SparePartsRow.shared";
 import { SparePartsMainFields, SparePartsCollapsedSection } from "./SparePartsRow.components";
+import { getPriceFieldEditability } from "./materialPriceEditability";
+import { resolveDiscountOnJobTypeChange } from "./jobTypeDiscountRepopulation";
+import { resolvePartNumberChangeAction } from "./partNumberUtils";
 import { PERMISSIONS } from "utils/Permissions";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
@@ -34,6 +37,7 @@ const STATUSES_DISABLING_ROW = new Set([
   "RETURN_UNASSEMBLY",
   "RETURN_ASSEMBLY",
   "CUSTOMER_APPROVAL_PENDING",
+  "MULTIPLE_APPROVAL_PENDING",
 ]);
 
 const EXCHANGE_ACTION_TYPES = new Set([
@@ -41,11 +45,11 @@ const EXCHANGE_ACTION_TYPES = new Set([
   "SPARE_PARTS_EXCHANGE",
   "ACCESSORIES_EXCHANGE",
 ]);
+
 const EDITABLE_WITH_CONDITION_TYPES = new Set(["CHARGEABLE"]);
 const EDITABLE_TYPES = new Set(["COMMERCIAL_GOODWILL"]);
-const SUMMARY_DISCOUNT_TARGET_TYPES = new Set(["CHARGEABLE"]);
-const RESET_TO_ZERO_SOURCE_TYPES = new Set(["WARRANTY", "COMMERCIAL_GOODWILL", "SERVICE_OFFERING"]);
 const TYPE_OPTIONS_DISABLED_FOR_INVALID_SPARE_PART = new Set(["WARRANTY", "SERVICE_OFFERING"]);
+const RESETTABLE_ROW_STATUSES = new Set(["REVISED", "REJECTED"]);
 const POSITION_PERMISSIONS = {
   LA: {
     canView: PERMISSIONS.DIAGNOSTICS.CAN_VIEW_LABOUR_ITEMS,
@@ -134,18 +138,24 @@ function SparePartsRow({
   const hasApproveCommercialGoodwillPermission = useHasPermission([
     PERMISSIONS.APPROVAL.CAN_APPROVE_COMMERCIAL_GOODWILL_ITEMS,
   ]);
-  const { allFields: allFormFields, sparePartBelongsToTool } = useContext(GenericFormContext);
+  const {
+    allFields: allFormFields,
+    sparePartNotBelongsToTool,
+    warrantyPanelInfo,
+    isRepairAnswerLocked,
+  } = useContext(GenericFormContext);
   const {
     arePricesValidated,
     markRowDirty,
     allowedPositions,
     isResyncingRef,
-    setRevisedRowPending,
+    setRevisedRejectedRowPending,
     canArchiveOnDelete,
     resyncMaterialsFromAPI,
     jobStatus,
     discountBase,
     automaticRows,
+    isValidating,
   } = useDiagnosticsContext();
   const [isRowCollapsed, setIsRowCollapsed] = useState(arePricesValidated);
 
@@ -163,21 +173,17 @@ function SparePartsRow({
   const typeField = fields.find((field) => field.subtype === "diagnosticType");
 
   const { values, setFieldValue } = useFormikContext<Record<string, unknown>>();
-  const positionValue = positionField ? ((values[positionField.name] as string) ?? "") : "";
-  const rowTypeValue = typeField ? ((values[typeField.name] as string) ?? "") : "";
+  const positionValue = (values[positionField?.name || ""] as string) ?? "";
+  const rowTypeValue = (values[typeField?.name || ""] as string) ?? "";
+
   const materialIdField = fields.find(
     (field) =>
       field.subtype === "diagnosticMaterialId" || field.fieldMapping?.originalName === "materialId",
   );
-  const materialId = materialIdField
-    ? (values[materialIdField.name] as string | undefined)
-    : undefined;
+  const materialId = values[materialIdField?.name || ""] as string | undefined;
 
   const isAutomaticRow = PROTECTED_POSITIONS.has(positionValue);
   const isPnRow = positionValue === "PN";
-  const normalizedRowTypeValue = rowTypeValue.toUpperCase();
-  const isEditableWithConditionType = EDITABLE_WITH_CONDITION_TYPES.has(normalizedRowTypeValue);
-  const isEditableType = EDITABLE_TYPES.has(normalizedRowTypeValue);
   const hasHardcodedAutofill = !!getPositionAutofill(t)[positionValue];
   const isJobOnHold = values["isOnHold"] === true;
   const positionPerms =
@@ -188,9 +194,8 @@ function SparePartsRow({
   const isApproved = values[statusField?.name ?? ""] === "APPROVED";
   const isPending = values[statusField?.name ?? ""] === "PENDING";
   const isStatusDisabled = STATUSES_DISABLING_ROW.has(jobStatus ?? "");
-  const isRowFullyDisabled = isDisabled || isApproved || isStatusDisabled;
+  const isRowFullyDisabled = isDisabled || isApproved || isStatusDisabled || isValidating;
 
-  const isNetPrice = discountBase === "NET_PRICE";
   const collapsableFieldNames = fields
     .filter((field) => field.type === "price")
     .map((field) => field.fieldMapping?.originalName);
@@ -208,47 +213,49 @@ function SparePartsRow({
   const isSparePartTypeRestricted =
     positionValue.toUpperCase() === "SP" &&
     (partNumberValue.trim().length === 0 ||
-      sparePartBelongsToTool?.current[partNumberFieldName] !== true);
+      sparePartNotBelongsToTool?.current[partNumberFieldName] === true);
+  const priceFieldEditability = getPriceFieldEditability(
+    positionValue,
+    rowTypeValue,
+    discountBase ?? "GROSS_PRICE",
+  );
+
   const mappedPositionOptions: Record<string, boolean> = {
     diagnosticPosition: Boolean((values[partNumberFieldName] as string) !== ""),
     diagnosticQuantity: !canEditQuantity,
     diagnosticUnitPrice: true,
-    diagnosticDiscount: !isEditableWithConditionType && !isEditableType,
-    diagnosticTotalAmount: !isAutomaticRow,
-    diagnosticNetAmount: !isAutomaticRow,
     diagnosticPartNumber: (isAutomaticRow || isPnRow) && hasHardcodedAutofill,
     diagnosticDescription: (isAutomaticRow || isPnRow) && hasHardcodedAutofill,
   };
+
+  const PRICE_FIELD_SUBTYPE_TO_EDITABILITY_KEY = {
+    diagnosticDiscount: "discount",
+    diagnosticTotalAmount: "totalAmount",
+    diagnosticNetAmount: "netAmount",
+  } as const;
+
   const applyFieldPermissions = (field: Field): Field => {
     if (isRowFullyDisabled) {
       return { ...field, isDisabled: true };
     }
 
-    if (isEditableWithConditionType && field.subtype) {
-      if (
-        field.subtype === "diagnosticDiscount" ||
-        (field.subtype === "diagnosticNetAmount" && isNetPrice) ||
-        (field.subtype === "diagnosticTotalAmount" && !isNetPrice)
-      ) {
-        return { ...field, isDisabled: !isAutomaticRow };
-      }
+    if (!field.subtype) {
+      return field;
     }
-    if (isEditableType && field.subtype && !isRowFullyDisabled) {
-      if (
-        field.subtype === "diagnosticDiscount" ||
-        (field.subtype === "diagnosticNetAmount" && isNetPrice) ||
-        (field.subtype === "diagnosticTotalAmount" && !isNetPrice)
-      ) {
-        return { ...field, isDisabled: false };
-      }
-    }
-    const isDisabledBySubtype = field.subtype
-      ? (mappedPositionOptions[field.subtype] ?? false)
-      : false;
 
+    const editabilityKey =
+      PRICE_FIELD_SUBTYPE_TO_EDITABILITY_KEY[
+        field.subtype as keyof typeof PRICE_FIELD_SUBTYPE_TO_EDITABILITY_KEY
+      ];
+    if (editabilityKey) {
+      return { ...field, isDisabled: !priceFieldEditability[editabilityKey] };
+    }
+
+    const isDisabledBySubtype = mappedPositionOptions[field.subtype] ?? false;
     if (isDisabledBySubtype) {
       return { ...field, isDisabled: true };
     }
+
     return field;
   };
 
@@ -313,11 +320,149 @@ function SparePartsRow({
     if (descriptionFieldName) void setFieldValue(descriptionFieldName, autofill.description);
   }, [positionValue, setFieldValue, t, getFieldBySubtype, partNumberFieldName]);
 
+  // Clear price fields when part number changes in a validated row
+  const prevPartNumberRef = useRef<string | null>(null);
+  const prevMaterialIdRef = useRef<string | undefined>(undefined);
+
+  // Nulls the row's entire price object plus materialId — extracted out of the effect
+  // below so its own logic doesn't add to that effect's cognitive complexity. A genuine
+  // part number change means the old price data and materialId belong to a different
+  // part; nulling (not zeroing) matches the backend contract where price: null signals
+  // "not yet priced, please calculate" — see buildDiagnosticPayload's
+  // `price?.unitPrice === null` check in JobOverview.tsx.
+  const resetPartNumberDependentFields = useCallback(() => {
+    const fieldNames = [
+      getFieldBySubtype("diagnosticUnitPrice"),
+      getFieldBySubtype("diagnosticTax"),
+      getFieldBySubtype("diagnosticNetAmount"),
+      getFieldBySubtype("diagnosticGrossAmount"),
+      getFieldBySubtype("diagnosticTotalAmount"),
+      getFieldBySubtype("diagnosticTaxAmount"),
+      getFieldBySubtype("diagnosticSuggestedNetPrice"),
+      activeDiscountFieldName,
+      discountSiblingFieldName,
+      discountHiddenFieldName,
+      discountAmountHiddenFieldName,
+      materialIdField?.name,
+    ].filter((name): name is string => !!name);
+
+    isResyncingRef.current = true;
+    void Promise.all(fieldNames.map((name) => setFieldValue(name, null))).finally(() => {
+      isResyncingRef.current = false;
+    });
+  }, [
+    getFieldBySubtype,
+    setFieldValue,
+    isResyncingRef,
+    activeDiscountFieldName,
+    discountSiblingFieldName,
+    discountHiddenFieldName,
+    discountAmountHiddenFieldName,
+    materialIdField,
+  ]);
+
+  // Holds the latest resetPartNumberDependentFields without putting it in the effect's
+  // own dependency array below. resetPartNumberDependentFields' reference depends on
+  // getFieldBySubtype, which depends on the `fields` prop — if the parent doesn't
+  // memoize that array, this callback gets a new reference on every render, which would
+  // make the effect below re-run (and re-invoke resolvePartNumberChangeAction) on every
+  // render of this row, not just when partNumberValue/materialId actually change.
+  const resetPartNumberDependentFieldsRef = useRef(resetPartNumberDependentFields);
+  resetPartNumberDependentFieldsRef.current = resetPartNumberDependentFields;
+
+  useEffect(() => {
+    const action = resolvePartNumberChangeAction(
+      prevPartNumberRef.current,
+      partNumberValue,
+      isResyncingRef.current,
+    );
+
+    if (action === "none") {
+      prevMaterialIdRef.current = materialId;
+      return;
+    }
+
+    prevPartNumberRef.current = partNumberValue;
+    prevMaterialIdRef.current = materialId;
+
+    if (action === "reset") {
+      resetPartNumberDependentFieldsRef.current();
+    }
+  }, [partNumberValue, materialId, isResyncingRef]);
+
+  const preserveFields = useMemo(
+    () => [
+      getFieldBySubtype("diagnosticDiscountHidden"),
+      getFieldBySubtype("diagnosticDiscountNetHidden"),
+      getFieldBySubtype("diagnosticDiscount"),
+      getFieldBySubtype("diagnosticTotalAmountHidden"),
+      getFieldBySubtype("diagnosticTotalAmount"),
+      getFieldBySubtype("diagnosticNetAmount"),
+    ],
+    [getFieldBySubtype],
+  );
+  const prevPriceRef = useRef<Record<string, any> | null>(null);
   const prevTypeRef = useRef<string | null>(null);
   useEffect(() => {
+    if (
+      EDITABLE_WITH_CONDITION_TYPES.has(prevTypeRef.current ?? "") ||
+      EDITABLE_TYPES.has(prevTypeRef.current ?? "")
+    ) {
+      if (prevPriceRef.current !== null) return;
+      prevPriceRef.current = preserveFields.map((field) => ({
+        name: field,
+        value: values[field] ?? null,
+      }));
+      return;
+    }
+    if (prevPriceRef.current === null) return;
+
+    prevPriceRef.current.forEach((field: any) => {
+      void setFieldValue(field.name, field.value);
+    });
+    prevPriceRef.current = null;
+  }, [preserveFields, values, setFieldValue]);
+
+  useEffect(() => {
+    // Collects discount % from other material-position (PN/SP/AC) rows currently set to
+    // CHARGEABLE — the source rule 1 of resolveDiscountOnJobTypeChange reads from when a
+    // material row enters CHARGEABLE. Protected positions (LA/FR/PC) are intentionally
+    // excluded as a source, per the confirmed rule.
+    const buildSiblingChargeableDiscounts = (): number[] => {
+      const discountHiddenFields = allFormFields.filter(
+        (field) =>
+          field.subtype === "diagnosticDiscountHidden" &&
+          field.fieldMapping?.nameStartsWith &&
+          field.fieldMapping?.nameStartsWith !== areaNamePrefix,
+      );
+
+      const result: number[] = [];
+      for (const field of discountHiddenFields) {
+        const siblingPrefix = field.fieldMapping?.nameStartsWith;
+        const siblingTypeField = allFormFields.find(
+          (f) => f.fieldMapping?.nameStartsWith === siblingPrefix && f.subtype === "diagnosticType",
+        );
+        const siblingPositionField = allFormFields.find(
+          (f) =>
+            f.fieldMapping?.nameStartsWith === siblingPrefix && f.subtype === "diagnosticPosition",
+        );
+        const siblingType = siblingTypeField
+          ? ((values[siblingTypeField.name] as string) ?? "")
+          : "";
+        const siblingPosition = siblingPositionField
+          ? ((values[siblingPositionField.name] as string) ?? "")
+          : "";
+        if (
+          siblingType.toUpperCase() === "CHARGEABLE" &&
+          !PROTECTED_POSITIONS.has(siblingPosition)
+        ) {
+          result.push(Number(values[field.name] ?? 0));
+        }
+      }
+      return result;
+    };
+
     const currentType = rowTypeValue;
-    const normalizedCurrentType = currentType.toUpperCase();
-    const normalizedPositionValue = positionValue.toUpperCase();
 
     if (prevTypeRef.current === null) {
       prevTypeRef.current = currentType;
@@ -325,55 +470,46 @@ function SparePartsRow({
     }
 
     const previousType = prevTypeRef.current;
-    const normalizedPreviousType = previousType.toUpperCase();
     prevTypeRef.current = currentType;
 
-    if (previousType === currentType) return;
+    if (!previousType || previousType === currentType) return;
     if (isResyncingRef.current) return;
 
-    const isEnteringTargetType = SUMMARY_DISCOUNT_TARGET_TYPES.has(normalizedCurrentType);
-    const isEnteringResetSource = RESET_TO_ZERO_SOURCE_TYPES.has(normalizedCurrentType);
-    const isLeavingTargetToReset = normalizedPreviousType === "CHARGEABLE" && isEnteringResetSource;
-    const isTargetPosition = !PROTECTED_POSITIONS.has(normalizedPositionValue);
-
-    if (!isTargetPosition) return;
-    if (!isEnteringTargetType && !isLeavingTargetToReset) return;
-
-    const summaryHiddenDiscountField = allFormFields.find(
-      (field) => field.subtype === "diagnosticSummaryDiscountMaterialHidden",
-    );
-    const summaryModeDiscountField = allFormFields.find(
-      (field) =>
-        field.subtype ===
-          (discountBase === "NET_PRICE"
-            ? "diagnosticSummaryDiscountNetMaterial"
-            : "diagnosticSummaryDiscountMaterial") &&
-        field.dependentFields?.some((df) => df.fieldValue === (discountBase ?? "GROSS_PRICE")),
+    const discountPercent = resolveDiscountOnJobTypeChange(
+      previousType,
+      currentType,
+      positionValue,
+      buildSiblingChargeableDiscounts(),
     );
 
-    const summaryDiscount = Number(
-      values[summaryHiddenDiscountField?.name ?? ""] ??
-        values[summaryModeDiscountField?.name ?? ""] ??
-        0,
-    );
+    // null = no rule applies for this transition (e.g. WARRANTY -> SERVICE_OFFERING) —
+    // leave the discount field untouched, matching prior behavior for these cases.
+    if (discountPercent === null) return;
 
-    const shouldResetToZero = isLeavingTargetToReset;
-    const nextDiscount = shouldResetToZero ? 0 : summaryDiscount;
+    const grossAmountFieldName = getFieldBySubtype("diagnosticGrossAmount");
+    const grossAmount = grossAmountFieldName ? Number(values[grossAmountFieldName]) || 0 : 0;
+    const discountAmount = (grossAmount * discountPercent) / 100;
 
-    void setFieldValue(activeDiscountFieldName, nextDiscount);
-    if (discountSiblingFieldName) void setFieldValue(discountSiblingFieldName, nextDiscount);
-    if (discountHiddenFieldName) void setFieldValue(discountHiddenFieldName, nextDiscount);
+    prevPriceRef.current = null;
+
+    void setFieldValue(activeDiscountFieldName, discountPercent);
+    if (discountSiblingFieldName) void setFieldValue(discountSiblingFieldName, discountPercent);
+    if (discountHiddenFieldName) void setFieldValue(discountHiddenFieldName, discountPercent);
+    if (discountAmountHiddenFieldName)
+      void setFieldValue(discountAmountHiddenFieldName, discountAmount);
   }, [
     rowTypeValue,
     isResyncingRef,
     allFormFields,
     values,
-    discountBase,
     activeDiscountFieldName,
     discountSiblingFieldName,
     discountHiddenFieldName,
+    discountAmountHiddenFieldName,
     setFieldValue,
     positionValue,
+    areaNamePrefix,
+    getFieldBySubtype,
   ]);
 
   const nonPriceInputKey = useSparePartsRowCommon({
@@ -388,6 +524,7 @@ function SparePartsRow({
     values,
     markRowDirty,
     areaIndex,
+    isValidating,
   });
 
   // Mirror arePricesValidated into a ref so the dirty-tracking effect below is not
@@ -406,23 +543,30 @@ function SparePartsRow({
     // Skip during API-driven reinitialization (e.g. after validateAndSave resync) to
     // prevent incorrectly marking rows dirty when Formik reinitializes with fresh API data.
     if (isResyncingRef.current) return;
+    // Bug 1 fix: also skip if validation is currently in flight
+    if (isValidating) return;
     if (!arePricesValidatedRef.current) return;
     markRowDirty(areaIndex);
   }, [
     areaName,
-    setRevisedRowPending,
+    setRevisedRejectedRowPending,
     nonPriceInputKey,
     markRowDirty,
     areaIndex,
     statusField,
     isResyncingRef,
+    isValidating,
   ]);
+
+  const isWarrantyIneligible = Boolean(
+    warrantyPanelInfo?.isIneligible || !warrantyPanelInfo?.hasPurchaseDate,
+  );
 
   const fieldsWithTypeOptionsDisabled = useMemo(
     () =>
       fields.map((field) => {
         if (field.subtype !== "diagnosticType" || !field.options?.length) return field;
-        if (!isSparePartTypeRestricted) return field;
+        if (!isSparePartTypeRestricted && !isWarrantyIneligible) return field;
 
         return {
           ...field,
@@ -433,7 +577,7 @@ function SparePartsRow({
           }),
         };
       }),
-    [fields, isSparePartTypeRestricted],
+    [fields, isSparePartTypeRestricted, isWarrantyIneligible],
   );
 
   const mainFields = fieldsWithTypeOptionsDisabled.filter(
@@ -482,40 +626,52 @@ function SparePartsRow({
   const isExchangeAutoRow =
     EXCHANGE_ACTION_TYPES.has(actionType) && (automaticRows ?? []).includes(positionValue);
 
+  const canShowDeleteIcon = () => {
+    return (
+      !isRepairAnswerLocked &&
+      !isJobOnHold &&
+      !isApproved &&
+      canDeleteRow &&
+      (!isDisabled || canArchiveOnDelete) &&
+      !isDeletionBlocked &&
+      positionValue !== "LA"
+    );
+  };
+
   const renderRowActions = () => {
     if (isExchangeAutoRow) return null;
+
     if (hasApproveCommercialGoodwillPermission) {
-      if (!isPending) return null;
-      return (
+      return isPending ? (
         <ApprovalActionsFlyout
           jobId={jobId}
           materialId={materialId}
           showJobDetailsAction={false}
           onBeforeInvalidate={resyncMaterialsFromAPI}
         />
-      );
+      ) : null;
     }
-    return (
-      !isJobOnHold &&
-      canDeleteRow &&
-      (!isDisabled || canArchiveOnDelete) &&
-      !isDeletionBlocked &&
-      positionValue !== "LA" && (
+
+    if (canShowDeleteIcon()) {
+      return (
         <Icon
           className="spare-part-action"
           iconName="delete"
           title={t("delete")}
           onClick={() => onDeleteRow?.()}
         />
-      )
-    );
+      );
+    }
+
+    return null;
   };
   return (
     <div
       className="spare-parts-row-wrapper"
       onChange={() => {
-        if (statusField && values[statusField.name] === "REVISED") {
-          setRevisedRowPending(areaName);
+        const rowStatus = statusField ? values[statusField.name] : undefined;
+        if (typeof rowStatus === "string" && RESETTABLE_ROW_STATUSES.has(rowStatus)) {
+          setRevisedRejectedRowPending(areaName);
         }
       }}
     >

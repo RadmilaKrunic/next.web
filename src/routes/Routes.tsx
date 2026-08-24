@@ -6,6 +6,8 @@ import Reports from "../modules/Reports/Reports";
 import BiqicReport from "../modules/Reports/BiqicReport/BiqicReport";
 import SystemConfiguration from "../modules/SystemConfiguration/SystemConfiguration";
 import Reimbursement from "../modules/Reimbursement/Reimbursement";
+import ReimbursementDetail from "../modules/Reimbursement/ReimbursementDetail/ReimbursementDetail";
+import ReimbursementClaimsList from "../modules/Reimbursement/ReimbursementClaimsList/ReimbursementClaimsList";
 import Clients from "../modules/Clients/Clients";
 import ClaimManagement from "../modules/ClaimManagement/ClaimManagement";
 import ApprovalList from "../modules/ClaimManagement/ApprovalList/ApprovalList";
@@ -16,9 +18,13 @@ import { ErrorBoundary } from "react-error-boundary";
 import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
 import ClaimOverview from "modules/ClaimManagement/ClaimOverview/ClaimOverview";
-import EmployeeList from "../modules/AccountManagement/EmployeeList/EmployeeList";
-import AddEmployee from "../modules/AccountManagement/AddEmployee/AddEmployee";
-import EmployeeOverview from "../modules/AccountManagement/EmployeeOverview/EmployeeOverview";
+import EmployeeList from "../modules/AccountManagement/Employees/EmployeeList/EmployeeList";
+import AddEmployee from "../modules/AccountManagement/Employees/AddEmployee/AddEmployee";
+import EmployeeOverview from "../modules/AccountManagement/Employees/EmployeeOverview/EmployeeOverview";
+import AddASC from "../modules/AccountManagement/ASC/AddAsc/AddASC";
+import AscList from "../modules/AccountManagement/ASC/ASCList/AscList";
+import AscOverview from "../modules/AccountManagement/ASC/AscOverview/AscOverview";
+import CreateReimbursement from "../modules/Reimbursement/CreateReimbursement/CreateReimbursement";
 
 const ErrorFallback = () => <div>Something went wrong.</div>;
 
@@ -144,33 +150,135 @@ function AppRoutes() {
       <Route
         path="/employee-list"
         element={
-          <ErrorBoundaryWrapper>
-            <EmployeeList />
-          </ErrorBoundaryWrapper>
+          <ProtectedRoute
+            requiredPermissions={[PERMISSIONS.ACCOUNT_MANAGEMENT.CAN_VIEW_EMPLOYEE_LIST]}
+          >
+            <ErrorBoundaryWrapper>
+              <EmployeeList />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/add-employee"
         element={
-          <ErrorBoundaryWrapper>
-            <AddEmployee />
-          </ErrorBoundaryWrapper>
+          <ProtectedRoute
+            requiredPermissions={[PERMISSIONS.ACCOUNT_MANAGEMENT.CAN_VIEW_EMPLOYEE_LIST]}
+          >
+            <ErrorBoundaryWrapper>
+              <AddEmployee />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/employee-overview/:employeeId"
         element={
-          <ErrorBoundaryWrapper>
-            <EmployeeOverview />
-          </ErrorBoundaryWrapper>
+          <ProtectedRoute
+            requiredPermissions={[PERMISSIONS.ACCOUNT_MANAGEMENT.CAN_VIEW_EMPLOYEE_LIST]}
+          >
+            <ErrorBoundaryWrapper>
+              <EmployeeOverview />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/asc-profiles"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.ACCOUNT_MANAGEMENT.CAN_VIEW_PROFILES]}>
+            <ErrorBoundaryWrapper>
+              <AscList />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/add-asc"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.ACCESS.CAN_ACCESS_ASC_GLOBALLY]}>
+            <ErrorBoundaryWrapper>
+              <AddASC />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/edit-asc/:ascId"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.ACCOUNT_MANAGEMENT.CAN_VIEW_PROFILES]}>
+            <ErrorBoundaryWrapper>
+              <AddASC />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/asc-overview/:ascId"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.ACCOUNT_MANAGEMENT.CAN_VIEW_PROFILES]}>
+            <ErrorBoundaryWrapper>
+              <AscOverview />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/asc-profile"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.ACCOUNT_MANAGEMENT.CAN_VIEW_PROFILE]}>
+            <ErrorBoundaryWrapper>
+              <AscOverview />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
         }
       />
       <Route
         path="/reimbursement"
         element={
-          <ProtectedRoute requiredPermissions={[PERMISSIONS.REIMBURSEMENT.CAN_VIEW]}>
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.REIMBURSEMENT.CAN_VIEW_ASC_LIST_TABLE]}>
             <ErrorBoundaryWrapper>
               <Reimbursement />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reimbursement-detail/:ascId"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.REIMBURSEMENT.CAN_VIEW_ASC_LIST_TABLE]}>
+            <ErrorBoundaryWrapper>
+              <ReimbursementDetail />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reimbursements"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.REIMBURSEMENT.CAN_VIEW]}>
+            <ErrorBoundaryWrapper>
+              <ReimbursementDetail />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/create-reimbursement"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.REIMBURSEMENT.CAN_VIEW_ASC_LIST_TABLE]}>
+            <ErrorBoundaryWrapper>
+              <CreateReimbursement />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reimbursement-claims/:reimbursementId"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.REIMBURSEMENT.CAN_VIEW]}>
+            <ErrorBoundaryWrapper>
+              <ReimbursementClaimsList />
             </ErrorBoundaryWrapper>
           </ProtectedRoute>
         }

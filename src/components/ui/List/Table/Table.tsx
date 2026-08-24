@@ -21,6 +21,7 @@ function Table<T>({
   selectedRows = [],
   onSelectionChange,
   isRowSelectable,
+  emptyListMessage = "noDataFound",
 }: Readonly<TableProps<T>>) {
   const visibleColumnDefs = columns.filter((col) => visibleColumns.includes(col.key));
   const { t } = useTranslation("translation", { keyPrefix: "app" });
@@ -128,7 +129,7 @@ function Table<T>({
           <TableBody>
             <TableRow>
               <TableCell colSpan={visibleColumns.length + (selectable ? 2 : 1)}>
-                <p className="no-jobs-found-message">{t("noJobsFoundMessage")}</p>
+                <p className="no-jobs-found-message">{t(emptyListMessage)}</p>
               </TableCell>
             </TableRow>
           </TableBody>

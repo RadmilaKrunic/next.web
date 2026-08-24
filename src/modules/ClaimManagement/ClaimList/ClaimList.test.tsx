@@ -15,7 +15,7 @@ vi.mock("hooks/useListFilterHandlers", () => ({
   }),
 }));
 vi.mock("hooks/useHasPermission", () => ({
-  useHasPermission: () => true,
+  useHasPermission: vi.fn(),
 }));
 vi.mock("api/services/claims/hooks", () => ({
   useClaims: () => ({ data: [], isLoading: false }),
@@ -27,9 +27,12 @@ vi.mock("contexts/messagescontext", () => ({
 }));
 vi.mock("@bosch/react-frok", () => ({
   ActivityIndicator: () => React.createElement("div", { "data-testid": "loading" }),
+  Button: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) =>
+    React.createElement("button", props, children),
 }));
 vi.mock("components/ui/List/Filters/Filters", () => ({
-  default: () => React.createElement("div", { "data-testid": "filters" }),
+  default: ({ optionsContent }: { optionsContent?: React.ReactNode }) =>
+    React.createElement("div", { "data-testid": "filters" }, optionsContent),
 }));
 vi.mock("components/ui/List/Table/Table", () => ({
   default: () => React.createElement("div", { "data-testid": "table" }),
@@ -46,8 +49,18 @@ vi.mock("components/ui/MessagesModal/MessagesModal", () => ({
 vi.mock("./ClaimListTable/ClaimActionsFlyout/ClaimActionsFlyout", () => ({
   default: () => React.createElement("div"),
 }));
+vi.mock(
+  "components/ui/List/Filters/FiltersOptionsPopup/CustomizeColumnsPopup/CustomizeColumnsPopup",
+  () => ({ default: () => React.createElement("div") }),
+);
+vi.mock("./ClaimListExportDialog/ClaimListExportDialog", () => ({
+  default: () => React.createElement("div", { "data-testid": "export-dialog" }),
+}));
 
 import ClaimList from "./ClaimList";
+import { useHasPermission } from "hooks/useHasPermission";
+
+const mockedUseHasPermission = vi.mocked(useHasPermission);
 
 function renderClaimList() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -61,18 +74,28 @@ function renderClaimList() {
 }
 
 describe("ClaimList", () => {
-  it("renders filters", () => {
+  it("renders export button when user can download claim list", () => {
+    mockedUseHasPermission.mockReturnValue(true);
+
     renderClaimList();
-    expect(screen.getByTestId("filters")).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "exportClaimList" })).toBeInTheDocument();
   });
 
-  it("renders table", () => {
+  it("hides export button when user cannot download claim list", () => {
+    mockedUseHasPermission.mockReturnValue(false);
+
     renderClaimList();
-    expect(screen.getByTestId("table")).toBeInTheDocument();
+
+    expect(screen.queryByRole("button", { name: "exportClaimList" })).not.toBeInTheDocument();
   });
 
-  it("renders pagination", () => {
+  it.each([
+    ["filters", "filters"],
+    ["table", "table"],
+    ["pagination", "pagination"],
+  ])("renders %s", (_, testId) => {
     renderClaimList();
-    expect(screen.getByTestId("pagination")).toBeInTheDocument();
+    expect(screen.getByTestId(testId)).toBeInTheDocument();
   });
 });

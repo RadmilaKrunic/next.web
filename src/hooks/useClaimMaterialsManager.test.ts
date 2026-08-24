@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Field from "components/generics/Field/GenericField.types";
@@ -34,7 +34,7 @@ const claimsTab: Section = {
   label: "Claims",
   areas: [
     {
-      name: "claimSpareParts",
+      name: "claims_claimSpareParts#0",
       label: "sp",
       isMultiple: true,
       index: 0,
@@ -60,6 +60,33 @@ const allFields: Field[] = [
     subtype: "diagnosticPartNumber",
   },
 ];
+
+const loadedClaimMaterials = [
+  {
+    position: "SP",
+    partNumber: "P-1",
+    jobType: "WARRANTY",
+    status: "APPROVED",
+    approvedBy: "",
+    approvedByName: "",
+    approvedAt: "",
+    description: "Part 1",
+    quantity: 1,
+    isValidated: true,
+    isPriceManuallySet: true,
+    reimbursementPaymentMethod: "BANK_TRANSFER",
+    price: {
+      unitPrice: 10,
+      suggestedNetPrice: 10,
+      netAmount: 10,
+      tax: 0,
+      taxAmount: 0,
+      grossAmount: 10,
+      discount: 0,
+      totalAmount: 10,
+    },
+  },
+] as const;
 
 function makeWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -368,5 +395,40 @@ describe("useClaimMaterialsManager", () => {
     expect(result.current.materials[0].isValidated).toBe(true);
     expect(result.current.materials[1].isValidated).toBe(false);
     expect(setArePricesValidated).toHaveBeenCalledWith(false);
+  });
+
+  it("preserves reimbursement payment method when archiving a loaded material", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(["user"], { countryCode: "ZA", permissions: [] });
+
+    const { result } = renderHook(
+      () =>
+        useClaimMaterialsManager({
+          claimId: "C1",
+          claimMaterials: loadedClaimMaterials as never,
+          currentActionType: "REPAIR",
+          currentJobType: "WARRANTY",
+          tabs: [claimsTab],
+          setTabs: vi.fn(),
+          allFields,
+          setAllFields: vi.fn(),
+          setInitialFormValues: vi.fn(),
+          skipFormResetRef: { current: false },
+          formValuesRef: { current: {} },
+          arePricesValidated: false,
+          setArePricesValidated: vi.fn(),
+          readOnly: false,
+          isResyncingRef: { current: false },
+        }),
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(1));
+
+    act(() => {
+      result.current.onDeleteRow("claims_claimSpareParts#0");
+    });
+
+    expect(result.current.archivedMaterials[0].reimbursementPaymentMethod).toBe("BANK_TRANSFER");
   });
 });

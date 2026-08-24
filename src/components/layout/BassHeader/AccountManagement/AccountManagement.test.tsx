@@ -126,6 +126,45 @@ describe("AccountManagement", () => {
       rules: [],
       discountBase: "GROSS_PRICE" as const,
     },
+    reimbursementConfig: [
+      {
+        category: "LABOR",
+        reimbursementMethods: {
+          REPAIR: "MONEY_TRANSFER",
+          EXCHANGE: "MONEY_TRANSFER",
+        },
+      },
+      {
+        category: "FREIGHT",
+        reimbursementMethods: {
+          REPAIR: "MONEY_TRANSFER",
+          EXCHANGE: "MONEY_TRANSFER",
+        },
+      },
+      {
+        category: "PACKAGING",
+        reimbursementMethods: {
+          REPAIR: "MONEY_TRANSFER",
+          EXCHANGE: "MONEY_TRANSFER",
+        },
+      },
+      {
+        category: "MATERIAL",
+        reimbursementMethods: {
+          REPAIR: "MATERIAL",
+          EXCHANGE: "MATERIAL",
+        },
+      },
+      {
+        category: "SPECIAL_MATERIAL",
+        reimbursementMethods: {
+          REPAIR: "MATERIAL",
+          EXCHANGE: "MATERIAL",
+        },
+      },
+    ],
+    reimbursementCreateOn: "1",
+    reimbursementPeriodType: "WEEKLY",
   };
 
   beforeEach(() => {
@@ -158,6 +197,7 @@ describe("AccountManagement", () => {
       lastName: "Doe",
       email: "john.doe@example.com",
       countryCode: "TR",
+      locale: "en-TR",
       language: "en",
       roles: [],
       permissions: [],
@@ -182,6 +222,7 @@ describe("AccountManagement", () => {
       lastName: "Doe",
       email: "john.doe@example.com",
       countryCode: "TR",
+      locale: "en-TR",
       language: "en",
       roles: [],
       permissions: [],
@@ -200,6 +241,7 @@ describe("AccountManagement", () => {
       lastName: "Smith",
       email: "jane.smith@example.com",
       countryCode: "TR",
+      locale: "en-TR",
       language: "en",
       roles: [],
       permissions: [],

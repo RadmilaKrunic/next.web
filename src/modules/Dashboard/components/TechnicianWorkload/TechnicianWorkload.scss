@@ -1,0 +1,99 @@
+.technician-workload {
+  background-color: var(--bosch-gray-95);
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  &__header {
+    border-bottom: 0.0625rem solid var(--bosch-gray-85);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1rem 0.5rem 2rem;
+    font-family: var(--typography-bold-xl-fontFamily, "Bosch Sans");
+    font-size: var(--typography-bold-xl-fontSize, 1.5rem);
+    font-style: normal;
+    font-weight: 700;
+    line-height: var(--typography-bold-xl-lineHeight, 2.125rem);
+    letter-spacing: var(--raw-typography-bold-xl-letterSpacing, 0);
+    color: var(--schemes-primary-plain-pure-enabled-default-front, var(--bosch-black));
+  }
+
+  &__view-more {
+    background: transparent;
+    cursor: pointer;
+    padding: 0 2rem;
+    color: var(--bosch-blue-50);
+    font-family: var(--typography-regular-m-fontFamily, "Bosch Sans");
+    font-size: 1rem;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 1.5rem;
+  }
+
+  &__list {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  &__item {
+    padding: 1rem 1rem;
+    border-bottom: 0.25rem solid var(--bosch-white);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  &__name {
+    margin-bottom: 0.25rem;
+    color: var(--bosch-black);
+    font-family: var(--typography-bold-s-fontFamily, "Bosch Sans");
+    font-size: var(--typography-bold-s-fontSize, 0.875rem);
+    font-style: normal;
+    font-weight: 700;
+    line-height: var(--typography-bold-s-lineHeight, 1.25rem);
+  }
+
+  &__label {
+    margin-bottom: 0.5rem;
+    color: var(--bosch-gray-50);
+    font-family: var(--typography-regular-s-fontFamily, "Bosch Sans");
+    font-size: var(--typography-regular-s-fontSize, 0.8125rem);
+    font-style: normal;
+    font-weight: 400;
+    line-height: var(--typography-regular-s-lineHeight, 1.25rem);
+  }
+
+  &__progress-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__progress {
+    flex: 1;
+    height: 0.375rem;
+    background: var(--bosch-blue-95);
+    border-radius: 999rem;
+    overflow: hidden;
+  }
+
+  &__progress-fill {
+    height: 100%;
+    background: var(--bosch-blue-50);
+    border-radius: inherit;
+  }
+
+  &__count {
+    min-width: 2.5rem;
+    color: var(--bosch-black);
+    text-align: right;
+    font-family: var(--typography-bold-xs-fontFamily, "Bosch Sans");
+    font-size: var(--typography-bold-xs-fontSize, 0.75rem);
+    font-style: normal;
+    font-weight: 700;
+    line-height: var(--typography-bold-xs-lineHeight, 1rem);
+  }
+}

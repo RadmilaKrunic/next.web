@@ -67,6 +67,7 @@ export default function AutoComplete({
   const [input, setInput] = useState(value);
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -82,7 +83,10 @@ export default function AutoComplete({
   const isSparePartLookupField = name?.toLowerCase().includes("sparepartnumber");
 
   useEffect(() => {
-    if (value !== input && !isUserEditingRef.current) {
+    if (
+      ((lastValidValueRef.current && lastValidValueRef.current !== input) || value !== input) &&
+      !isUserEditingRef.current
+    ) {
       isExternalUpdateRef.current = true;
       setInput(value);
       if (value && isToolLookupField) {
@@ -117,7 +121,7 @@ export default function AutoComplete({
     queryFn: () =>
       getAutocompleteOptions(name, query, user?.ascId || "", {
         countryCode: user?.countryCode,
-        languageCode: localStorage.getItem("selectedLanguage") || "en",
+        languageCode: user?.language || "en",
         brand,
         position,
         isExchange,
@@ -240,19 +244,38 @@ export default function AutoComplete({
   };
 
   const handleBlur = () => {
+    setIsInputFocused(false);
     isUserEditingRef.current = false;
+
+    // Auto-select on blur: if the user leaves the field without explicitly picking an
+    // option, and exactly one search result is available (fresh or from the query
+    // cache), select it automatically rather than leaving the field unresolved. This is
+    // a single-shot trigger fired once on blur — not per-keystroke — so there's no
+    // re-triggering risk mid-edit.
+    if (isToolLookupField && !isSelectionRef.current && typedOptions.length === 1) {
+      handleOptionSelect(typedOptions[0]);
+      return;
+    }
+
     const isBareToolNumber = name?.toLowerCase().includes("baretoolnumber");
     const isToolModelName = name?.toLowerCase().includes("toolmodelname");
+    const isSparePartNumber = name?.toLowerCase().includes("sparepartnumber");
 
     if (
-      (isBareToolNumber || isToolModelName) &&
+      (isBareToolNumber || isToolModelName || isSparePartNumber) &&
       input.trim().length >= minLength &&
       !isSelectionRef.current
     ) {
       const currentValue = input.trim();
-      const errorMessage = isBareToolNumber
-        ? t("bareToolNumberNotFound", { id: currentValue })
-        : t("toolModelNameNotFound", { name: currentValue });
+
+      let errorMessage: string;
+      if (isBareToolNumber) {
+        errorMessage = t("bareToolNumberNotFound", { id: currentValue });
+      } else if (isToolModelName) {
+        errorMessage = t("toolModelNameNotFound", { name: currentValue });
+      } else {
+        errorMessage = t("sparePartNumberNotFound", { id: currentValue });
+      }
       onSetFieldError?.(name, errorMessage);
       onSetFieldTouched?.(name, true);
     }
@@ -269,6 +292,9 @@ export default function AutoComplete({
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
+        onFocus={() => {
+          setIsInputFocused(true);
+        }}
         onClick={handleClick}
         ref={inputRef}
         disabled={disabled}
@@ -295,16 +321,12 @@ export default function AutoComplete({
         </div>
       )}
 
-      {open && enabled && !isFetching && typedOptions.length === 0 && isSparePartLookupField && (
-        <div className="auto-complete-dropdown auto-complete-empty-state">
-          {t("NoSparePartsMatchTheSearchCriteria")}
-        </div>
-      )}
-
       {isSparePartLookupField &&
         incompatibleSelectionMessage &&
+        !isInputFocused &&
         !isFetching &&
-        !(open && enabled && typedOptions.length === 0) && (
+        !open &&
+        !(enabled && typedOptions.length === 0) && (
           <div className="auto-complete-dropdown auto-complete-empty-state">
             {t(incompatibleSelectionMessage)}
           </div>

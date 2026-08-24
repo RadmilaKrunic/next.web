@@ -91,7 +91,9 @@ export const getAllFieldsFromSection = (section: Section): Field[] => {
   if (!section?.areas) {
     return [];
   }
-  return section.areas.flatMap((area) => mapAreaDependentFields(area));
+  return section.areas
+    .flatMap((area) => mapAreaDependentFields(area))
+    .filter((field) => field.type !== "infoIcon");
 };
 
 export const getAllFieldsFromForm = (form: GenericForm): Field[] => {
@@ -295,7 +297,8 @@ export const setDuplicatedArea = (area: Area, index: number, sectionName: string
   const allAreas = [area];
   const oldAreaName = area.name;
   const oldAreaNameWOSection = area.name.replace(`${sectionName}_`, "");
-  const newAreaNameWOSection = oldAreaNameWOSection.replace("#0", `#${index}`);
+
+  const newAreaNameWOSection = oldAreaNameWOSection.replace(/#\d+/, `#${index}`);
   const newAreaName = `${sectionName}_${newAreaNameWOSection}`;
 
   area.fields.flatMap((field) => {

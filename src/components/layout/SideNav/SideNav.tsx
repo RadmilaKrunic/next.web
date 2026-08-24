@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchSideNavItems } from "../../../api/services/sideNav/action";
 import { NavBar } from "./NavItem/NavItem.types";
 import ActivityIndicatorWithDelay from "../../ui/ActivityIndicatorWithDelay/ActivityIndicatorWithDelay";
+import { useAnalytics } from "@/analytics";
 
 const ROUTE_TO_NAV_LINK: Record<string, string> = {
   "job-overview": "job-management",
@@ -29,6 +30,7 @@ function SideNav() {
   const [selectedNavItem, setSelectedNavItem] = useState<string>("");
   const location = useLocation();
   const prevPathnameRef = useRef(location.pathname);
+  const prevPathSegmentRef = useRef<string>("");
   const fromStateRef = useRef<string | undefined>(
     (location.state as { from?: string } | null)?.from,
   );
@@ -41,11 +43,11 @@ function SideNav() {
       prevPathnameRef.current = location.pathname;
     }
 
-    if (pathSegment === selectedNavItem) return;
+    // Skip if path segment hasn't changed (e.g., hash-only changes)
+    if (pathSegment === prevPathSegmentRef.current) return;
+    prevPathSegmentRef.current = pathSegment;
 
     if (navBar) {
-      setSelectedNavItem(navBar.sideNavItems[0].label);
-
       const resolvedSegment =
         pathSegment === "job-overview" && fromStateRef.current === "approval-list"
           ? "claim-management"
@@ -64,11 +66,11 @@ function SideNav() {
         }
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location, navBar]);
 
   const [isOpen, setIsOpen] = useState<boolean>(true);
   const { t } = useTranslation("translation", { keyPrefix: "app" });
+  const analytics = useAnalytics();
 
   if (isLoading || !isSuccess) {
     return (
@@ -117,6 +119,7 @@ function SideNav() {
         aria-label="Help Center"
         target="_blank"
         rel="noopener noreferrer"
+        onClick={() => analytics.trackHelpCenterClicked()}
       >
         <Icon iconName="question-frame" aria-hidden="true" />
         {t("helpCenter")}

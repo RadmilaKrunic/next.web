@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { postClaimDecision, ClaimDecision } from "api/services/claims/action";
+import { useAnalytics, toClaimAction, toClaimStatus } from "@/analytics";
 import "./ClaimNoteModal.scss";
 
 interface AddClaimNoteModalProps {
@@ -26,6 +27,7 @@ function ClaimNoteModal({
   const modalRef = useRef<HTMLDialogElement>(null);
   const [note, setNote] = useState("");
   const queryClient = useQueryClient();
+  const analytics = useAnalytics();
 
   const ACTION_TO_DECISION: Record<string, ClaimDecision> = {
     Approve: "APPROVED",
@@ -44,6 +46,13 @@ function ClaimNoteModal({
       void queryClient.invalidateQueries({ queryKey: ["claim", claimId] });
       void queryClient.invalidateQueries({ queryKey: ["claims"] });
       void queryClient.invalidateQueries({ queryKey: ["messages", jobId] });
+      // Analytics: claim review decision successfully recorded.
+      const decision = ACTION_TO_DECISION[action] ?? "APPROVED";
+      const claimAction = toClaimAction(decision);
+      const claimStatus = toClaimStatus(decision);
+      if (claimAction && claimStatus) {
+        analytics.trackClaimReviewed({ claimStatus, claimAction });
+      }
       onSuccess?.();
       close();
     },

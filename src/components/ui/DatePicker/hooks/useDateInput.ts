@@ -37,6 +37,9 @@ export function useDateInput({
     return input.length === expectedLength;
   };
 
+  const normalizeParsedInputDate = (date: Date): Date =>
+    new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0));
+
   const tryParseSingleDate = (input: string, dateFormat: string) => {
     if (!isDateFormatComplete(input, dateFormat)) {
       return;
@@ -45,12 +48,14 @@ export function useDateInput({
     const parsedDate = parse(input, dateFormat, new Date());
 
     if (isValid(parsedDate) && isDateValid(parsedDate)) {
+      const normalizedDate = normalizeParsedInputDate(parsedDate);
+
       if (setTempDate) {
-        setTempDate(parsedDate.toISOString());
+        setTempDate(normalizedDate.toISOString());
       }
 
       const formattedDate = formatDateForBackend(
-        parsedDate,
+        normalizedDate,
         calendar?.startOfTheDay,
         calendar?.endOfTheDay,
       );
@@ -67,7 +72,9 @@ export function useDateInput({
   };
 
   const processValidStartDate = (startDate: Date, endStr: string, dateFormat: string) => {
-    setTempRangeStart?.(startDate.toISOString());
+    const normalizedStartDate = normalizeParsedInputDate(startDate);
+
+    setTempRangeStart?.(normalizedStartDate.toISOString());
     setCurrentMonth(startDate);
 
     if (!isDateFormatComplete(endStr, dateFormat)) {
@@ -79,9 +86,14 @@ export function useDateInput({
     const isEndDateValid = isValid(endDate) && isDateValid(endDate) && startDate <= endDate;
 
     if (isEndDateValid) {
-      setTempRangeEnd?.(endDate.toISOString());
-      const formattedStart = formatDateForBackend(startDate, calendar?.startOfTheDay, false);
-      const formattedEnd = formatDateForBackend(endDate, false, calendar?.endOfTheDay);
+      const normalizedEndDate = normalizeParsedInputDate(endDate);
+      setTempRangeEnd?.(normalizedEndDate.toISOString());
+      const formattedStart = formatDateForBackend(
+        normalizedStartDate,
+        calendar?.startOfTheDay,
+        false,
+      );
+      const formattedEnd = formatDateForBackend(normalizedEndDate, false, calendar?.endOfTheDay);
       flushSync(() => {
         void setFieldValue(name, `${formattedStart},${formattedEnd}`);
       });
@@ -151,8 +163,6 @@ export function useDateInput({
     const currentValue = event.target.value;
     setIsEditing(true);
     setInputValue(currentValue);
-
-    tryUpdateCalendarFromInput(currentValue);
   };
 
   const handleSingleDateBlur = (input: string, dateFormat: string) => {
@@ -169,9 +179,11 @@ export function useDateInput({
     const parsedDate = parse(input, dateFormat, new Date());
 
     if (isValid(parsedDate) && isDateValid(parsedDate)) {
+      const normalizedDate = normalizeParsedInputDate(parsedDate);
+
       void setFieldValue(
         name,
-        formatDateForBackend(parsedDate, calendar?.startOfTheDay, calendar?.endOfTheDay),
+        formatDateForBackend(normalizedDate, calendar?.startOfTheDay, calendar?.endOfTheDay),
       );
       setCurrentMonth(parsedDate);
       setInputValue("");
@@ -209,8 +221,14 @@ export function useDateInput({
       isDateValid(endDate) &&
       startDate <= endDate
     ) {
-      const formattedStart = formatDateForBackend(startDate, calendar?.startOfTheDay, false);
-      const formattedEnd = formatDateForBackend(endDate, false, calendar?.endOfTheDay);
+      const normalizedStartDate = normalizeParsedInputDate(startDate);
+      const normalizedEndDate = normalizeParsedInputDate(endDate);
+      const formattedStart = formatDateForBackend(
+        normalizedStartDate,
+        calendar?.startOfTheDay,
+        false,
+      );
+      const formattedEnd = formatDateForBackend(normalizedEndDate, false, calendar?.endOfTheDay);
       void setFieldValue(name, `${formattedStart},${formattedEnd}`);
       setCurrentMonth(startDate);
       setInputValue("");

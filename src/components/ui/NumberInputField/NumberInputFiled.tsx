@@ -1,6 +1,9 @@
 import { Button, Icon, TextField } from "@bosch/react-frok";
 import "./NumberInputField.scss";
 import { useEffect, useRef, useState } from "react";
+import { CountryConfig } from "../../../api/services/countryConfiguration/countryConfiguration";
+import { HeaderUserData } from "../../../api/services/header/action";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function NumberInputFiled({
   name,
@@ -10,6 +13,7 @@ export default function NumberInputFiled({
   onChange,
   disabled = false,
   minValue,
+  prefix,
 }: Readonly<{
   name: string;
   label: string;
@@ -18,6 +22,7 @@ export default function NumberInputFiled({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   disabled?: boolean;
   minValue?: number;
+  prefix?: string;
 }>) {
   const stepValue = step || 1;
   const min = minValue ?? 0;
@@ -26,6 +31,13 @@ export default function NumberInputFiled({
     value === "" || value === null || value === undefined ? "" : value.toString();
   const [inputValue, setInputValue] = useState(externalValue);
   const isFocusedRef = useRef(false);
+
+  const queryClient = useQueryClient();
+  const user = queryClient.getQueryData<HeaderUserData>(["user"]);
+  const currencySymbol = queryClient.getQueryData<CountryConfig>([
+    "countryConfiguration",
+    user?.countryCode,
+  ])?.currencySymbol;
 
   // Sync external value changes into local state when not actively editing
   useEffect(() => {
@@ -92,6 +104,11 @@ export default function NumberInputFiled({
 
   return (
     <div className="number-input">
+      {prefix && (
+        <span className="number-input-prefix">
+          {prefix === "currencySymbol" ? currencySymbol : prefix}
+        </span>
+      )}
       <TextField
         id={name}
         label={label}

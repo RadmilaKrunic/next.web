@@ -7,11 +7,11 @@ export interface DashboardLayoutSlot {
   col: number;
   width: number;
   height: number;
+  permissions?: string[];
 }
 
 export interface DashboardSlot extends DashboardLayoutSlot {
   content: ReactNode;
-  permissions?: string[];
 }
 
 export interface DashboardLayout {

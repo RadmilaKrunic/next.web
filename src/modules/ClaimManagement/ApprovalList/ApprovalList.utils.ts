@@ -1,7 +1,16 @@
+import { matchesFilter } from "@/components/ui/List/List.utils";
 import { GoodwillApproval } from "./ApprovalList.types";
 import { QuickFilter, Filter } from "components/ui/List/List.types";
 import { isDateInRange } from "modules/JobManagement/JobList/JobList.utils";
 export { getJobNavigationPath as getApprovalNavigationPath } from "modules/JobManagement/JobList/JobList.utils";
+
+export const BULK_APPROVABLE_JOB_STATUSES = [
+  "BOSCH_APPROVAL_PENDING",
+  "MULTIPLE_APPROVAL_PENDING",
+] as const;
+
+export const isBulkApprovableJobStatus = (jobStatus: string): boolean =>
+  BULK_APPROVABLE_JOB_STATUSES.includes(jobStatus as (typeof BULK_APPROVABLE_JOB_STATUSES)[number]);
 
 export const getInitialFieldValues = (fieldNames: string[]) => {
   const initialValues = fieldNames.reduce(
@@ -49,7 +58,7 @@ export function filterApprovals(
             return createdTime >= twentyFourHoursAgo && createdTime <= now;
           }
           case "pendingApprovals":
-            return approval.jobStatus === "BOSCH_APPROVAL_PENDING";
+            return isBulkApprovableJobStatus(approval.jobStatus);
           default:
             return false;
         }
@@ -71,25 +80,22 @@ export function filterApprovals(
 
         switch (filter.name) {
           case "jobStatus":
-            return approval.jobStatus === value;
+          case "jobStatusPreApprove":
+            return matchesFilter(value, approval.jobStatus);
           case "customerType":
-            return approval.customer.customerType === value;
+            return matchesFilter(value, approval.customer.customerType);
           case "customerWish":
-            return approval.customerWish === value;
+            return matchesFilter(value, approval.customerWish);
           case "pickupType":
-            return approval.pickupType === value;
+            return matchesFilter(value, approval.pickupType);
           case "paymentType":
-            return approval.paymentType === value;
-          case "category":
-            return approval.asset?.category === value;
+            return matchesFilter(value, approval.paymentType);
+          case "categoryId":
+            return matchesFilter(value, approval.asset?.categoryId);
           case "ascName":
-            return Array.isArray(value)
-              ? value.includes(approval.ascId ?? "")
-              : approval.ascId === value;
+            return matchesFilter(value, approval.ascId);
           case "actionType":
-            return Array.isArray(value)
-              ? value.includes(approval.diagnosticInfo?.actionType ?? "")
-              : approval.diagnosticInfo?.actionType === value;
+            return matchesFilter(value, approval.diagnosticInfo?.actionType);
           case "jobType":
             if (Array.isArray(value)) {
               return value.some((v) => approval.diagnosticInfo?.materialsJobType?.includes(v));

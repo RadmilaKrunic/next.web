@@ -48,11 +48,11 @@ export default function ClaimActionsFlyout({
     <>
       <ScrollablePopover
         data-testid={`claim-actions-popover-${claim.claimId}`}
-        className="job-actions-popover"
+        className="actions-popover"
         trigger={
           <Button
             icon="options"
-            className="job-actions-popover-trigger"
+            className="actions-popover-trigger"
             tabIndex={0}
             aria-label="More claim options"
             data-testid={`claim-actions-popover-trigger-${claim.claimId}`}

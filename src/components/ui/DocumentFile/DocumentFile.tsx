@@ -12,6 +12,7 @@ type DocumentFileProps = Readonly<{
   type?: string;
   size?: number;
   fileId?: string;
+  sourceReferenceId?: string;
   jobId?: string;
   onDeleteSuccess?: (responseData: Attachment[]) => void;
   removeFile?: () => void;
@@ -28,6 +29,7 @@ export default function DocumentFile({
   type,
   size,
   fileId,
+  sourceReferenceId,
   jobId,
   onDeleteSuccess,
   removeFile,
@@ -62,8 +64,15 @@ export default function DocumentFile({
   });
 
   const downloadFileMutation = useMutation({
-    mutationFn: ({ fileId, type }: { fileId: string; type: string }) =>
-      downloadFileFromServer(fileId, type),
+    mutationFn: ({
+      fileId,
+      type,
+      sourceReferenceId,
+    }: {
+      fileId: string;
+      type: string;
+      sourceReferenceId?: string;
+    }) => downloadFileFromServer(fileId, type, sourceReferenceId ?? null),
     onSuccess: (blob) => {
       if (!blob) return;
       const extension = name.split(".").pop();
@@ -99,7 +108,7 @@ export default function DocumentFile({
 
   const handleDownload = () => {
     if (!fileId || !type || !enableDownload) return;
-    downloadFileMutation.mutate({ fileId, type });
+    downloadFileMutation.mutate({ fileId, type, sourceReferenceId });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

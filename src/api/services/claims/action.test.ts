@@ -6,6 +6,7 @@ import {
   postBulkApproveClaims,
   putClaimPrices,
   patchClaimStatusPending,
+  saveClaimListColumns,
 } from "./action";
 
 vi.mock("api/axios-client/axiosClient", () => ({
@@ -83,15 +84,27 @@ describe("postClaimDecision", () => {
 describe("postBulkApproveClaims", () => {
   it("posts claim IDs for bulk approve", async () => {
     mockPost.mockResolvedValueOnce(undefined);
-    await postBulkApproveClaims(["C001", "C002"]);
+    await postBulkApproveClaims({
+      claimIds: ["C001", "C002"],
+      decision: "APPROVED",
+      message: "Approved after bulk review",
+    });
     expect(mockPost).toHaveBeenCalledWith("/v1/claims/bulk-approve", {
       claimIds: ["C001", "C002"],
+      decision: "APPROVED",
+      message: "Approved after bulk review",
     });
   });
 
   it("throws on error", async () => {
     mockPost.mockRejectedValueOnce(new Error("bulk failed"));
-    await expect(postBulkApproveClaims(["C001"])).rejects.toThrow("bulk failed");
+    await expect(
+      postBulkApproveClaims({
+        claimIds: ["C001"],
+        decision: "APPROVED",
+        message: "Approved after bulk review",
+      }),
+    ).rejects.toThrow("bulk failed");
   });
 });
 
@@ -127,5 +140,25 @@ describe("patchClaimStatusPending", () => {
   it("throws on error", async () => {
     mockPatch.mockRejectedValueOnce(new Error("patch failed"));
     await expect(patchClaimStatusPending("C001")).rejects.toThrow("patch failed");
+  });
+});
+
+describe("saveClaimListColumns", () => {
+  it("posts selected column keys to claim preferences endpoint", async () => {
+    mockPost.mockResolvedValueOnce(undefined);
+    await saveClaimListColumns([
+      { key: "claimId", isChecked: true, isFixed: true, order: 0 },
+      { key: "invoiceNumber", isChecked: false, isFixed: false, order: 1 },
+      { key: "jobId", isChecked: true, isFixed: true, order: 2 },
+    ]);
+
+    expect(mockPost).toHaveBeenCalledWith("/v1/profile/preferences/claim", ["claimId", "jobId"]);
+  });
+
+  it("throws on error", async () => {
+    mockPost.mockRejectedValueOnce(new Error("save failed"));
+    await expect(
+      saveClaimListColumns([{ key: "claimId", isChecked: true, isFixed: true, order: 0 }]),
+    ).rejects.toThrow("save failed");
   });
 });

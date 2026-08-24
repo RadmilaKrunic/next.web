@@ -7,6 +7,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useFormikContext } from "formik";
 import { GenericFormContext } from "../Form/GenericForm.context";
 import { useHasPermission } from "hooks/useHasPermission";
+import InfoIconWithTooltip from "components/ui/TooltipContent/InfoIconWithTooltip";
 
 import Section from "./GenericSection.types";
 
@@ -43,7 +44,7 @@ function GenericSection({
     setErrors,
     setTouched,
   } = useFormikContext<Record<string, unknown>>();
-  const { actionCallbacks } = useContext(GenericFormContext);
+  const { actionCallbacks, warrantyPanelInfo } = useContext(GenericFormContext);
   const hasPermission = useHasPermission(section.permissions);
 
   // Generate collapsed title dynamically from current formValues
@@ -57,7 +58,16 @@ function GenericSection({
       if (!actionName) return;
       const callback = actionCallbacks[actionName];
       if (callback) {
-        const result = callback(formValues, { setFieldValue, setErrors, setTouched });
+        const wrappedSetTouched = async (touched: Record<string, boolean>) => {
+          await setTouched(touched);
+          return undefined as void | Record<string, string>;
+        };
+
+        const result = callback(formValues, {
+          setFieldValue,
+          setErrors,
+          setTouched: wrappedSetTouched,
+        });
         if (result instanceof Promise) {
           result.catch((error: unknown) => {
             console.error(`Action ${actionName} failed:`, error);
@@ -72,6 +82,9 @@ function GenericSection({
     setIsOpen(!isCollapsed);
   }, [isCollapsed]);
   const { isAccordion, isDisabled, label, areas, index, isHidden, hiddenForStatuses } = section;
+  const isDiagnosticSection = section.name === "diagnosticData";
+  const isWarrantyUnavailable = Boolean(warrantyPanelInfo?.isIneligible);
+  const rejectionCauseText = warrantyPanelInfo?.unavailableMessage || t("warrantyBlockedGeneric");
   if (isHidden || (hiddenForStatuses && currentStatus && hiddenForStatuses.includes(currentStatus)))
     return null;
   if (!hasPermission) return null;
@@ -96,6 +109,10 @@ function GenericSection({
       )}
     </>
   );
+  const hasActions =
+    (!isOpen && dynamicCollapsedTitle) ||
+    (onDelete && index !== undefined && index > 0) ||
+    (onEdit && isOpen && isDisabled);
 
   return (
     <section className="generic-section">
@@ -107,17 +124,35 @@ function GenericSection({
         ) : (
           titleContent
         )}
-        <span className="actions">
-          {!isOpen && dynamicCollapsedTitle && (
-            <Icon iconName="edit" onClick={() => setIsOpen(!isOpen)} />
+        {isDiagnosticSection &&
+          (isWarrantyUnavailable || warrantyPanelInfo?.hasPurchaseDate === false) && (
+            <span className="section-warranty-unavailable">
+              <span>{t("warrantyUnavailableForTool")}</span>
+              <InfoIconWithTooltip
+                name="diagnosticWarrantyInfo"
+                infoText={rejectionCauseText}
+                infoPayload={warrantyPanelInfo?.infoPayload}
+                hasPurchaseDate={warrantyPanelInfo?.hasPurchaseDate}
+              />
+            </span>
           )}
+        {hasActions && (
+          <span className="actions">
+            {!isOpen && dynamicCollapsedTitle && (
+              <Icon iconName="edit" onClick={() => setIsOpen(!isOpen)} />
+            )}
 
-          {onDelete && index !== undefined && index > 0 && (
-            <Icon iconName="delete" onClick={onDelete} title={`Delete ${t(label)} ${index + 1}`} />
-          )}
+            {onDelete && index !== undefined && index > 0 && (
+              <Icon
+                iconName="delete"
+                onClick={onDelete}
+                title={`Delete ${t(label)} ${index + 1}`}
+              />
+            )}
 
-          {onEdit && isOpen && isDisabled && <Icon iconName="edit" onClick={onEdit} />}
-        </span>
+            {onEdit && isOpen && isDisabled && <Icon iconName="edit" onClick={onEdit} />}
+          </span>
+        )}
       </h5>
       {isOpen &&
         areas

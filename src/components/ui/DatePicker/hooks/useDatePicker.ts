@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect } from "react";
+import { useRef, useMemo, useEffect, useCallback } from "react";
 import { useFormikContext } from "formik";
 import { useTranslation } from "react-i18next";
 import { getLocale, parseDate } from "./DatePicker.utils";
@@ -24,15 +24,32 @@ export function useDatePicker({ name, calendar }: UseDatePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const parseCalendarDate = useCallback(
+    (value: string | null | undefined): Date | null => {
+      if (!value) return null;
+      if (calendar?.allowDateRange || value.includes(",")) return null;
+
+      const datePartRegex = /^(\d{4})-(\d{2})-(\d{2})/;
+      const datePartMatch = datePartRegex.exec(value);
+      if (datePartMatch) {
+        const [, year, month, day] = datePartMatch;
+        return new Date(Number(year), Number(month) - 1, Number(day));
+      }
+
+      const fallbackDate = new Date(value);
+      return Number.isFinite(fallbackDate.getTime()) ? fallbackDate : null;
+    },
+    [calendar?.allowDateRange],
+  );
+
   const localeObject = getLocale(i18n.language);
   const dateFormat = calendar?.dateFormat || "dd.MM.yyyy";
   const minDate = parseDate(calendar?.minDate);
   const maxDate = calendar?.maxDate === "" ? new Date() : parseDate(calendar?.maxDate);
 
   const selectedDate = useMemo(() => {
-    const date = values[name] ? new Date(values[name]) : null;
-    return date && Number.isFinite(date.getTime()) ? date : null;
-  }, [values, name]);
+    return parseCalendarDate(values[name]);
+  }, [values, name, parseCalendarDate]);
 
   const isDateValid = (date: Date): boolean => {
     const toLocalDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();

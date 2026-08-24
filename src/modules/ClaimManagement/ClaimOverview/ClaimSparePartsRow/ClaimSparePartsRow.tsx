@@ -4,6 +4,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useFormikContext } from "formik";
 import { useHasPermission } from "hooks/useHasPermission";
 import Field from "components/generics/Field/GenericField.types";
+import { getPositionAutofill } from "hooks/useDiagnosticsManager";
 import {
   resolveDiscountFieldNames,
   useSparePartsRowCommon,
@@ -17,6 +18,8 @@ import { useClaimContext } from "../ClaimContext";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import "modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.scss";
 
+const TYPE_OPTIONS_DISABLED_FOR_INVALID_SPARE_PART = new Set(["WARRANTY", "SERVICE_OFFERING"]);
+
 function ClaimSparePartsRow({
   fields,
   onDeleteRow,
@@ -28,7 +31,7 @@ function ClaimSparePartsRow({
 }>) {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const hasPriceViewPermission = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES]);
-  const { allFields: allFormFields } = useContext(GenericFormContext);
+  const { allFields: allFormFields, sparePartNotBelongsToTool } = useContext(GenericFormContext);
   const {
     arePricesValidated,
     markRowDirty,
@@ -39,11 +42,12 @@ function ClaimSparePartsRow({
     canDeleteRows,
     automaticRows,
     materials,
+    isClaimPending,
   } = useClaimContext();
 
   const [isRowCollapsed, setIsRowCollapsed] = useState(arePricesValidated);
 
-  const { values } = useFormikContext<Record<string, unknown>>();
+  const { values, setFieldValue } = useFormikContext<Record<string, unknown>>();
 
   const collapsableFieldNames = new Set(
     fields
@@ -62,8 +66,34 @@ function ClaimSparePartsRow({
   const isAutomaticRow = (automaticRows ?? []).includes(positionValue);
   const isNewRow = materials[areaIndex]?.isNew === true;
 
+  const partNumberField = fields.find((f) => f.subtype === "diagnosticPartNumber");
+  const partNumberValue = partNumberField ? ((values[partNumberField.name] as string) ?? "") : "";
+  const isSparePartTypeRestricted =
+    positionValue.toUpperCase() === "SP" &&
+    (partNumberValue.trim().length === 0 ||
+      sparePartNotBelongsToTool?.current[partNumberField?.name ?? ""] === true);
+
+  const descriptionField = fields.find((f) => f.subtype === "diagnosticDescription");
+  const prevPositionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevPositionRef.current === null) {
+      prevPositionRef.current = positionValue;
+      return;
+    }
+    if (prevPositionRef.current === positionValue) return;
+    prevPositionRef.current = positionValue;
+    const autofill = getPositionAutofill(t)[positionValue];
+    if (!autofill) return;
+    if (partNumberField) void setFieldValue(partNumberField.name, autofill.partNumber);
+    if (descriptionField) void setFieldValue(descriptionField.name, autofill.description);
+  }, [positionValue, setFieldValue, t, partNumberField, descriptionField]);
+
   const applyFieldPermissions = (field: Field): Field => {
-    if (isDisabled) return { ...field, isDisabled: true };
+    if (isDisabled || isClaimPending) return { ...field, isDisabled: true };
+
+    // The spare-part "type" dropdown stays editable for every row while the
+    // claim is in edit mode, regardless of whether the row is newly added.
+    if (field.subtype === "diagnosticType") return { ...field, isDisabled: false };
 
     if (isNewRow) {
       if (field.type === "price") return { ...field, isDisabled: true };
@@ -163,6 +193,24 @@ function ClaimSparePartsRow({
     });
   }, [fields, allFormFields, values, allowedPositions, positionDropdownOptions]);
 
+  const fieldsWithTypeOptionsDisabled = useMemo(
+    () =>
+      positionFieldsWithDisabledOptions.map((field) => {
+        if (field.subtype !== "diagnosticType" || !field.options?.length) return field;
+        if (!isSparePartTypeRestricted) return field;
+
+        return {
+          ...field,
+          options: field.options.map((option) => {
+            const optionValue = String(option.value ?? "").toUpperCase();
+            if (!TYPE_OPTIONS_DISABLED_FOR_INVALID_SPARE_PART.has(optionValue)) return option;
+            return { ...option, disabled: true };
+          }),
+        };
+      }),
+    [positionFieldsWithDisabledOptions, isSparePartTypeRestricted],
+  );
+
   return (
     <div className="spare-parts-row-wrapper">
       <div className={`spare-parts-row ${hasPriceViewPermission ? "admin" : ""}`}>
@@ -180,7 +228,7 @@ function ClaimSparePartsRow({
         )}
         <SparePartsMainFields
           mainFields={mainFields}
-          positionFieldsWithDisabledOptions={positionFieldsWithDisabledOptions}
+          positionFieldsWithDisabledOptions={fieldsWithTypeOptionsDisabled}
           applyFieldPermissions={applyFieldPermissions}
         />
         {canDeleteRows && !isAutomaticRow && (

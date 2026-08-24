@@ -64,6 +64,7 @@ export interface Material {
   quantity: number;
   isValidated: boolean;
   isPriceManuallySet: boolean;
+  reimbursementPaymentMethod?: string | null;
   price: Price;
 }
 
@@ -85,6 +86,7 @@ export interface ClaimItem {
   exchangeReason?: string | null;
   claimNotes: string;
   customer: Customer;
+  customerId: string;
   job: Job;
   materials: Material[];
   archivedMaterials?: Material[];

@@ -17,14 +17,17 @@ import { ActivityIndicator } from "@bosch/react-frok";
 import JobActionsFlyout from "./JobListTable/JobActionsFlyout/JobActionsFlyout";
 import DocumentsModal from "components/ui/DocumentsModal/DocumentsModal";
 import MessagesModal from "components/ui/MessagesModal/MessagesModal";
-import CustomizeColumnsPopup from "./FiltersBar/FilterOptionsPopup/CustomizeColumnsPopup/CustomizeColumnsPopup";
 import {
   getDefaultFixedColumns,
   getVisibleColumns,
   getJobListColumns,
   JobColumnConfiguration,
+  isColumnDisabled,
+  saveVisibleColumns,
 } from "./JobList.columns.utils";
 import { filterJobs, getJobNavigationPath } from "./JobList.utils";
+import { getJobColumns } from "./JobListTable/JobListColumns.config";
+import CustomizeColumnsPopup from "@/components/ui/List/Filters/FiltersOptionsPopup/CustomizeColumnsPopup/CustomizeColumnsPopup";
 
 function JobList() {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
@@ -86,6 +89,7 @@ function JobList() {
 
   const handlePageSizeChange = (option: string) => {
     sessionStorage.setItem("jobList-pageSize", option);
+    sessionStorage.setItem("jobList-currentPage", "1");
     setPagination({ page: 1, pageSize: Number(option) });
   };
 
@@ -138,7 +142,15 @@ function JobList() {
         }}
         type="job"
         optionsContent={
-          <CustomizeColumnsPopup columnConfig={columnConfig} setColumnConfig={setColumnConfig} />
+          <CustomizeColumnsPopup
+            columnConfig={columnConfig}
+            setColumnConfig={setColumnConfig}
+            getColumnOptions={getJobColumns}
+            isColumnDisabled={isColumnDisabled}
+            getDefaultFixedColumns={getDefaultFixedColumns}
+            saveVisibleColumns={saveVisibleColumns}
+            saveErrorMessage={t("failedToSaveJobColumnPreferences")}
+          />
         }
       />
       <Table<Job>
@@ -155,6 +167,7 @@ function JobList() {
             setShowMessagesModal={setShowMessagesModal}
           />
         )}
+        emptyListMessage="noJobsFoundMessage"
       />
       <Pagination
         page={pagination.page}

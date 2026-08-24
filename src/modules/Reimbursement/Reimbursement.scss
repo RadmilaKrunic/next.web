@@ -1,0 +1,141 @@
+// Reimbursement List Container
+.reimbursement-list-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+
+  .reimbursement-filters-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+
+    .inline-date-filter {
+      min-width: 250px;
+
+      form {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+    }
+
+    .quick-filters {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+  }
+}
+
+// Reimbursement Filters Wrapper (Shared)
+.reimbursement-filters-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  .inline-date-filter {
+    min-width: 300px;
+
+    .custom-date-picker {
+      margin-bottom: 0;
+    }
+
+    form {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+  }
+
+  .quick-filters {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .search-field {
+    margin-left: auto;
+    min-width: 250px;
+  }
+}
+
+// Reimbursement Claims Container
+.reimbursement-claims-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+
+  .reimbursement-claims-header {
+    h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+  }
+
+  .claims-filters-wrapper {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+
+    .search-field {
+      flex: 1;
+      min-width: 200px;
+    }
+  }
+}
+
+.reimbursement-header {
+  display: flex;
+  padding: 24px 32px;
+  flex-direction: row;
+  gap: 1rem;
+  width: 100%;
+  background-color: var(--bosch-gray-95);
+  align-items: center;
+  margin-bottom: 1rem;
+
+  .strong {
+    font-weight: 600;
+  }
+
+  .header-with-separator {
+    padding: 0 1rem;
+
+    &::before {
+      content: "";
+      display: inline-block;
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 0.25rem;
+      background-color: var(--bosch-gray-70);
+      margin-right: 0.5rem;
+    }
+  }
+}
+
+.reimbursement-action-button {
+  appearance: none;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  align-self: stretch;
+  border-bottom: 0.0625rem solid var(--bosch-gray-90);
+  height: 2.25rem;
+  min-width: 13.75rem;
+  margin-top: 0.75rem;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}

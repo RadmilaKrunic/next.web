@@ -12,6 +12,7 @@ interface UseFormValidationProps {
   allFields: Field[] | null;
   mandatoryFieldsMap: Record<string, ActionMandatoryFields> | null;
   autocompleteValidationRef?: React.RefObject<Record<string, boolean>>;
+  sparePartNotBelongsToToolRef?: React.RefObject<Record<string, boolean>>;
 }
 
 interface UseFormValidationReturn {
@@ -27,6 +28,7 @@ export const useFormValidation = ({
   allFields,
   mandatoryFieldsMap,
   autocompleteValidationRef,
+  sparePartNotBelongsToToolRef,
 }: UseFormValidationProps): UseFormValidationReturn => {
   const validateFormByAction = useValidator();
   const [validationState, setValidationState] = useState<ValidationState>({
@@ -57,9 +59,16 @@ export const useFormValidation = ({
         values,
         mandatoryFields: getMandatoryFieldsList(actionName),
         autocompleteValidationRef,
+        sparePartNotBelongsToToolRef,
       });
     },
-    [allFields, validateFormByAction, getMandatoryFieldsList, autocompleteValidationRef],
+    [
+      allFields,
+      validateFormByAction,
+      getMandatoryFieldsList,
+      autocompleteValidationRef,
+      sparePartNotBelongsToToolRef,
+    ],
   );
 
   const startValidation = useCallback((actionName: string) => {
@@ -92,9 +101,10 @@ export const useFormValidation = ({
           values,
           mandatoryFields: alwaysValidatedFields,
           autocompleteValidationRef,
+          sparePartNotBelongsToToolRef,
         });
 
-        // Filter to only include autocomplete and serial number errors
+        // Filter to only include autocomplete, serial number and spare-part compatibility errors
         const filteredErrors: Record<string, string> = {};
         for (const [fieldName, error] of Object.entries(errors)) {
           const field = allFields.find((f) => f.name === fieldName);
@@ -104,7 +114,8 @@ export const useFormValidation = ({
               (fieldName?.toLowerCase().includes("baretoolnumber") ||
                 fieldName?.toLowerCase().includes("toolmodelname"));
             const isSerialNumber = field.fieldMapping?.originalName === "serialNumber";
-            if (isAutocomplete || isSerialNumber) {
+            const isSparePartCompatibility = fieldName?.toLowerCase().includes("sparepartnumber");
+            if (isAutocomplete || isSerialNumber || isSparePartCompatibility) {
               filteredErrors[fieldName] = error;
             }
           }
@@ -117,7 +128,13 @@ export const useFormValidation = ({
       const actionErrors = validateByAction(currentState.currentAction, values);
       return actionErrors;
     },
-    [allFields, validateByAction, validateFormByAction, autocompleteValidationRef],
+    [
+      allFields,
+      validateByAction,
+      validateFormByAction,
+      autocompleteValidationRef,
+      sparePartNotBelongsToToolRef,
+    ],
   );
 
   return {

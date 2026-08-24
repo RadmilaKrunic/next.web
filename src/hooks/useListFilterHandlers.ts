@@ -7,7 +7,7 @@ export function useListFilterHandlers(
   setQuickFilters: Dispatch<SetStateAction<QuickFilter[]>>,
   setAdvancedFilters: Dispatch<SetStateAction<Filter[]>>,
   setPagination: Dispatch<SetStateAction<{ page: number; pageSize: number }>>,
-  type?: "job" | "claim" | "approval",
+  type?: "job" | "claim" | "approval" | "reimbursement",
 ) {
   const handleToggleFilter = (key: string) => {
     setQuickFilters((prev) => {
@@ -23,14 +23,16 @@ export function useListFilterHandlers(
     (filters: Filter[]) => {
       setAdvancedFilters(filters.filter(hasFilterValue));
       setPagination((prev) => ({ ...prev, page: 1 }));
+      sessionStorage.setItem(`${type}List-currentPage`, "1");
     },
-    [setAdvancedFilters, setPagination],
+    [setAdvancedFilters, setPagination, type],
   );
 
   const resetAdvancedFilters = useCallback(() => {
     setAdvancedFilters([]);
     setPagination((prev) => ({ ...prev, page: 1 }));
-  }, [setAdvancedFilters, setPagination]);
+    sessionStorage.setItem(`${type}List-currentPage`, "1");
+  }, [setAdvancedFilters, setPagination, type]);
 
   return { handleToggleFilter, applyAdvancedFilters, resetAdvancedFilters };
 }

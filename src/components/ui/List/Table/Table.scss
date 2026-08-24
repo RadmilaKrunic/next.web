@@ -1,5 +1,4 @@
 .job-table-wrapper {
-  overflow: auto;
   flex: 1;
   flex-basis: 300px;
 
@@ -51,17 +50,18 @@
       text-align: center;
     }
 
-    .job-actions-popover--bottom {
+    .actions-popover--bottom {
       bottom: -18px !important;
       right: 0.5rem !important;
     }
-    .job-actions-popover--top {
+    .actions-popover--top {
       top: -19px !important;
       right: 0.5rem !important;
     }
   }
 }
-.job-actions-popover-trigger {
+
+.actions-popover-trigger {
   color: var(--bosch-blue-50);
   background-color: transparent;
   vertical-align: middle;

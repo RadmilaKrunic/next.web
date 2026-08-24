@@ -520,7 +520,7 @@ describe("GenericArea", () => {
 
       fireEvent.change(field, { target: { value: "changed" } });
 
-      expect(onAreaValueChange).toHaveBeenCalledWith("diagnosticData_main");
+      expect(onAreaValueChange).toHaveBeenCalledWith("diagnosticData_main", expect.any(Object));
     });
   });
 });

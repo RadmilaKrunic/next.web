@@ -38,6 +38,9 @@ vi.mock("../modules/ClaimManagement/ApprovalList/ApprovalList", () => ({
 vi.mock("../modules/JobManagement/CreateJob/CreateJob", () => ({
   default: () => React.createElement("div", { "data-testid": "create-job" }),
 }));
+vi.mock("../modules/AccountManagement/ASC/AddAsc/AddASC", () => ({
+  default: () => React.createElement("div", { "data-testid": "add-asc" }),
+}));
 vi.mock("../modules/JobManagement/JobOverview/JobOverview", () => ({
   default: () => React.createElement("div", { "data-testid": "job-overview" }),
 }));
@@ -54,6 +57,7 @@ vi.mock("hooks/useHasPermission", () => ({ useHasPermission: vi.fn().mockReturnV
 
 import AppRoutes from "./Routes";
 import { useHasPermission } from "hooks/useHasPermission";
+import { PERMISSIONS } from "utils/Permissions";
 
 function renderRoutes(path: string) {
   const qc = new QueryClient();
@@ -106,5 +110,16 @@ describe("AppRoutes", () => {
     vi.mocked(useHasPermission).mockReturnValueOnce(false);
     renderRoutes("/job-list");
     expect(screen.getByText(/permission/i)).toBeInTheDocument();
+  });
+
+  it("renders AddASC only when AG_M is requested", () => {
+    vi.mocked(useHasPermission).mockImplementation(
+      (requiredPermissions?: string[]) =>
+        requiredPermissions?.includes(PERMISSIONS.ACCESS.CAN_ACCESS_ASC_GLOBALLY) ?? true,
+    );
+
+    renderRoutes("/add-asc");
+
+    expect(screen.getByTestId("add-asc")).toBeInTheDocument();
   });
 });

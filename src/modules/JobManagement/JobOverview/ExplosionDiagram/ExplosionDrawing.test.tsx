@@ -100,14 +100,23 @@ vi.mock("@bosch/react-frok", async () => {
 
 const mockGetExplosionDrawing = vi.mocked(getExplosionDrawing);
 
-const createTestQueryClient = () =>
-  new QueryClient({
+const createTestQueryClient = () => {
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
         retry: false,
       },
     },
   });
+
+  queryClient.setQueryData(["user"], {
+    countryCode: "ZA",
+    language: "en",
+    locale: "en-US",
+  });
+
+  return queryClient;
+};
 
 const renderWithQueryClient = (component: React.ReactElement) => {
   const queryClient = createTestQueryClient();
@@ -170,24 +179,10 @@ describe("ExplosionDrawing", () => {
     mockOnSubmitParts = vi.fn();
 
     mockGetExplosionDrawing.mockResolvedValue(mockIllustration);
-    const store: Record<string, string> = { selectedLanguage: "en" };
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => store[key] ?? null,
-      setItem: (key: string, value: string) => {
-        store[key] = value;
-      },
-      removeItem: (key: string) => {
-        delete store[key];
-      },
-      clear: () => {
-        Object.keys(store).forEach((k) => delete store[k]);
-      },
-    });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllGlobals();
   });
 
   const renderExplosionDrawing = (

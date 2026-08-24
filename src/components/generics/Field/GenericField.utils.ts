@@ -2,6 +2,7 @@ import { FormikContextType, FormikErrors } from "formik";
 import { TFunction } from "i18next";
 import { getManufacturedDate } from "../../../api/services/orders/orders";
 import Field from "./GenericField.types";
+import type { AllowedPosition } from "api/services/countryConfiguration/countryConfiguration";
 
 export const getSerialNumberErrorKey = (
   value: string,
@@ -122,13 +123,16 @@ export const onBlurActions = (
 /**
  * Handles populating related fields when a fault code is selected from the dropdown.
  * Sets faultCode, faultCodeDescription, faultCodeLabourQuantity from the raw API item,
- * and updates the quantity on any spare parts row whose position is "LA".
+ * and updates the quantity on any spare parts row whose position is "LA" —
+ * but only when the LA position's configured quantitySource is "FAULT_CODES".
+ * When `allowedPositions` is not supplied, the LA-source check is skipped (legacy behavior).
  */
 export const handleFaultCodeSelection = (
   rawItem: Record<string, unknown>,
   setFieldValue: (field: string, value: unknown) => Promise<void | FormikErrors<unknown>>,
   allFields: Field[] | null,
   formValues: Record<string, unknown>,
+  allowedPositions?: AllowedPosition[],
 ): void => {
   if (!allFields) return;
 
@@ -136,6 +140,11 @@ export const handleFaultCodeSelection = (
 
   for (const fieldName of faultCodeNameList) {
     void setFieldValue(fieldName, rawItem?.[fieldName]);
+  }
+
+  if (allowedPositions) {
+    const laPosConfig = allowedPositions.find((p) => p.position === "LA");
+    if (laPosConfig?.quantity.quantitySource !== "FAULT_CODES") return;
   }
 
   const labourQty = Number(rawItem?.faultCodeLabourQuantity) || 0;

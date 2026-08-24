@@ -66,7 +66,11 @@ describe("useBulkApproveClaims", () => {
   it("calls postBulkApproveClaims on mutate", async () => {
     vi.mocked(postBulkApproveClaims).mockResolvedValue(undefined);
     const { result } = renderHook(() => useBulkApproveClaims(), { wrapper: makeWrapper() });
-    result.current.mutate({ claimIds: ["c1", "c2"] } as never);
+    result.current.mutate({
+      claimIds: ["c1", "c2"],
+      decision: "APPROVED",
+      message: "Approved after bulk review",
+    });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(postBulkApproveClaims).toHaveBeenCalled();
   });

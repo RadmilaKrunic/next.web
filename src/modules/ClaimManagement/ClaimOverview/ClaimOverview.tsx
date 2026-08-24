@@ -13,6 +13,7 @@ import { useFormValidation } from "components/generics/Form/useFormValidation";
 import { scrollToTop } from "utils/scrollToError";
 import { useTranslation } from "react-i18next";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useAnalytics, toClaimStatus, NoteContext } from "@/analytics";
 import { useBreadcrumbs } from "hooks/useBreadcrumbs";
 import { postMessage } from "api/services/jobs/action";
 import ClaimOverviewHeader from "./ClaimOverviewHeader/ClaimOverviewHeader";
@@ -84,6 +85,7 @@ export default function ClaimOverview() {
   const claimOverviewForm =
     uiConfigurationForms?.forms.find((form) => form.name === "ClaimOverview") ?? null;
   const { claimId } = useParams<{ claimId: string }>();
+  const analytics = useAnalytics();
   const [isDeletingFile, setIsDeletingFile] = useState(false);
   const [isClaimNoteModalOpen, setIsClaimNoteModalOpen] = useState(false);
   const [claimNoteModalAction, setClaimNoteModalAction] = useState<string>("");
@@ -106,6 +108,11 @@ export default function ClaimOverview() {
       if (jobId) {
         void queryClient.invalidateQueries({ queryKey: ["messages", jobId] });
       }
+      // Analytics: claim note successfully saved.
+      analytics.trackNoteAdded({
+        noteContext: NoteContext.CLAIM,
+        claimStatus: toClaimStatus(currentStatus),
+      });
     },
     onError: (error) => {
       console.error("Failed to post message:", error);
@@ -130,6 +137,7 @@ export default function ClaimOverview() {
   const { data: claimData, isLoading: loading, error } = useClaimById(claimId || "");
 
   const currentStatus = claimData?.claimStatus || "";
+  const isClaimPending = currentStatus === "PENDING";
 
   const [selectedTab, setSelectedTab] = useState<string>("");
   const [currentActionType, setCurrentActionType] = useState(
@@ -161,6 +169,11 @@ export default function ClaimOverview() {
   // validation — React effects in ClaimSparePartsRow fire synchronously on the
   // same render cycle when arePricesValidated flips to true (row collapse effect).
   const suppressDirtyRef = useRef(false);
+  // Tracks per-part-number-field whether the currently selected spare part does
+  // NOT belong to the tool (set by GenericField's autocomplete handler). Mirrors
+  // JobOverview's sparePartNotBelongsToToolRef so ClaimSparePartsRow can restrict
+  // WARRANTY/SERVICE_OFFERING type options the same way jobs do.
+  const sparePartNotBelongsToToolRef = useRef<Record<string, boolean>>({});
 
   const tabsReady = tabs.length > 0;
 
@@ -237,6 +250,7 @@ export default function ClaimOverview() {
     useFormValidation({
       allFields,
       mandatoryFieldsMap: mandatoryFields,
+      sparePartNotBelongsToToolRef,
     });
 
   const visibleTabs = useMemo(() => {
@@ -380,14 +394,53 @@ export default function ClaimOverview() {
           (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0),
         );
 
-        // Send required top-level identifiers + updated materials
+        // Compute price summary by aggregating all material rows
+        const claimPriceSummary = sortedMaterials.reduce(
+          (acc, m) => {
+            const price = (m as { price?: Record<string, number> }).price ?? {};
+            return {
+              netAmount: acc.netAmount + (Number(price.netAmount) || 0),
+              suggestedNetPrice: acc.suggestedNetPrice + (Number(price.suggestedNetPrice) || 0),
+              grossAmount: acc.grossAmount + (Number(price.grossAmount) || 0),
+              discount: acc.discount + (Number(price.discount) || 0),
+              totalAmount: acc.totalAmount + (Number(price.totalAmount) || 0),
+              taxAmount: acc.taxAmount + (Number(price.taxAmount) || 0),
+            };
+          },
+          {
+            netAmount: 0,
+            suggestedNetPrice: 0,
+            grossAmount: 0,
+            discount: 0,
+            totalAmount: 0,
+            taxAmount: 0,
+          },
+        );
+
+        // Send full claim payload
         const payload = {
           id: claimData.id,
           jobId: claimData.jobId,
           ascId: claimData.ascId,
+          customerId: claimData.customerId,
+          ascName: claimData.ascName,
+          diagnosticId: claimData.diagnosticId,
+          countryCode: claimData.countryCode,
+          actionType: claimData.actionType,
+          jobType: claimData.jobType,
+          typeOfUsage: claimData.typeOfUsage,
+          faultCode: claimData.faultCode,
+          faultCodeDescription: claimData.faultCodeDescription,
+          faultCodeLabourQuantity: claimData.faultCodeLabourQuantity,
+          exchangeReason: claimData.exchangeReason,
           claimStatus: claimData.claimStatus,
+          claimNotes: claimData.claimNotes,
+          customer: claimData.customer,
+          job: claimData.job,
           materials: sortedMaterials,
           archivedMaterials: archivedMaterials.filter((m) => Boolean(m.partNumber)),
+          claimPriceSummary,
+          jobDiagnostic: claimData.jobDiagnostic,
         };
 
         try {
@@ -499,7 +552,8 @@ export default function ClaimOverview() {
 
   const handleExplosionDrawingSubmit = useCallback(
     (positions: PositionItem[]) => {
-      const jobType = (formValuesRef.current?.jobType as string) || "";
+      // Rows added from the explosion drawing / product details default to
+      // WARRANTY (per PTBASS product requirement), not the claim's jobType.
       addMaterialsToForm(
         positions
           .filter((p) => p.partNumber)
@@ -507,7 +561,7 @@ export default function ClaimOverview() {
             position: "SP",
             partNumber: p.partNumber,
             description: p.partName,
-            type: jobType,
+            type: "WARRANTY",
             quantity: p.quantity,
             unitPrice: null,
             origin: "explosionDrawing" as const,
@@ -523,6 +577,29 @@ export default function ClaimOverview() {
   const onProductDetails = useCallback(() => {
     setIsExplosionDrawingModalOpen(true);
   }, []);
+
+  // Parts picked from the explosion drawing are confirmed to belong to the
+  useEffect(() => {
+    if (materials.length === 0) return;
+
+    const claimsTab = tabs.find((t) => t.name === "claims");
+    const sparePartsAreas = (claimsTab?.areas ?? []).filter(
+      (a) =>
+        a.isMultiple &&
+        a.name.includes("claimSpareParts") &&
+        !a.name.includes("claimArchivedSpareParts"),
+    );
+
+    materials.forEach((material, index) => {
+      if (material.origin !== "explosionDrawing") return;
+
+      const area = sparePartsAreas[index];
+      const fieldName = area?.fields.find((f) => f.subtype === "diagnosticPartNumber")?.name;
+      if (!fieldName) return;
+
+      sparePartNotBelongsToToolRef.current[fieldName] = false;
+    });
+  }, [tabs, materials]);
 
   const enableAddingSparePart = useCallback(() => {
     if (allowedPositions.length === 0) return false;
@@ -680,6 +757,7 @@ export default function ClaimOverview() {
       radioSourceCallbacks: {
         getRadioButtonsForSummaryType: () => summaryTypeOptions,
       },
+      sparePartNotBelongsToTool: sparePartNotBelongsToToolRef,
       onDeleteStart: () => setIsDeletingFile(true),
       onDeleteEnd: () => setIsDeletingFile(false),
     }),
@@ -728,7 +806,7 @@ export default function ClaimOverview() {
       markRowDirty: () => {},
       summaryTypeOptions: [{ value: "totalSummary", label: "totalSummary" }],
       setSummaryTypeOptions: () => {},
-      setRevisedRowPending: () => {},
+      setRevisedRejectedRowPending: () => {},
       isArchivedExpanded: false,
       setIsArchivedExpanded: () => {},
       canArchiveOnDelete: false,
@@ -738,6 +816,7 @@ export default function ClaimOverview() {
       apiMaterialsLoaded: false,
       apiMaterialsEmpty: false,
       hasExistingDiagnostic: false,
+      isValidating: false,
     }),
     [discountBase],
   );
@@ -793,6 +872,7 @@ export default function ClaimOverview() {
       archivedMaterials,
       isArchivedExpanded,
       setIsArchivedExpanded,
+      isClaimPending,
     }),
     [
       materials,
@@ -818,6 +898,7 @@ export default function ClaimOverview() {
       archivedMaterials,
       isArchivedExpanded,
       setIsArchivedExpanded,
+      isClaimPending,
     ],
   );
 
@@ -941,7 +1022,6 @@ export default function ClaimOverview() {
               const sectionWithFields = setSectionDisabledState(tab, fieldsDisabled);
 
               // For TR/ZA in edit mode: claimData (dropdowns) and summary area must stay
-              // fully disabled — only the sparse-parts price field is editable (handled in
               // ClaimSparePartsRow.applyFieldPermissions via countryCode).
               const isCountryWithRestrictedEdit =
                 isClaimEditMode &&

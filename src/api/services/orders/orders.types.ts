@@ -109,5 +109,36 @@ export interface BareToolOption {
   tradeName: string;
   voltage: string;
   price?: number;
-  belongsToTool?: boolean;
+  notBelongsToTool?: boolean;
+}
+
+export interface WarrantyCheckRequest {
+  brand: string;
+  country: string;
+  bareToolNumber: string;
+  serialNumber: string;
+  purchaseDate: string;
+}
+
+export interface WarrantyCheckResponse {
+  evaluationStatus: "ELIGIBLE" | "INELIGIBLE" | "SKIPPED";
+  supportedWarrantyType: "STANDARD_WARRANTY" | "EXTENDED_WARRANTY" | "BOSCH_PRO_SERVICE" | null;
+  proServiceType: string | null;
+  reasonKey: "UNKNOWN_SERIAL_NUMBER" | "WARRANTY_EXPIRED" | "ALLOWED_REPAIR_COUNT_EXCEEDED" | null;
+  validityExpirationDate: string | null;
+  allowedWarrantyRepairCount: number | null;
+  usedWarrantyRepairCount: number | null;
+}
+
+export interface SparePartsSearchRequest {
+  bareToolNumber?: string;
+  tradeName?: string;
+  countryCode?: string;
+  languageCode?: string;
+  brand?: string;
+  size?: number;
+  pageNumber?: number;
+  isExchange?: boolean;
+  bareTool?: string;
+  position?: string;
 }

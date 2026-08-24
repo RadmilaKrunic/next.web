@@ -79,7 +79,33 @@ describe("downloadFileFromServer", () => {
     expect(result).toBe(blob);
     expect(mockPost).toHaveBeenCalledWith(
       "/download",
-      { fileId: "file-123", fileType: "PDF" },
+      { fileId: "file-123", fileType: "PDF", sourceReferenceId: null },
+      { responseType: "blob", headers: { Accept: "application/octet-stream" } },
+    );
+  });
+
+  it("passes sourceReferenceId when provided", async () => {
+    const blob = new Blob(["file content"]);
+    mockPost.mockResolvedValueOnce({ data: blob });
+
+    await downloadFileFromServer("file-123", "PDF", "source-456");
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "/download",
+      { fileId: "file-123", fileType: "PDF", sourceReferenceId: "source-456" },
+      { responseType: "blob", headers: { Accept: "application/octet-stream" } },
+    );
+  });
+
+  it("passes null sourceReferenceId when missing", async () => {
+    const blob = new Blob(["file content"]);
+    mockPost.mockResolvedValueOnce({ data: blob });
+
+    await downloadFileFromServer("file-123", "PDF", null);
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "/download",
+      { fileId: "file-123", fileType: "PDF", sourceReferenceId: null },
       { responseType: "blob", headers: { Accept: "application/octet-stream" } },
     );
   });

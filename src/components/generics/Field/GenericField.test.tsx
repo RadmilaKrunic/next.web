@@ -6,6 +6,15 @@ import GenericField from "./GenericField";
 import Field from "./GenericField.types";
 import { GenericFormContext } from "../Form/GenericForm.context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { handleFaultCodeSelection } from "./GenericField.utils";
+import type { AllowedPosition } from "api/services/countryConfiguration/countryConfiguration";
+
+const mockUseDiagnosticsContext = vi.fn(
+  () => ({ allowedPositions: [] }) as { allowedPositions: AllowedPosition[]; jobStatus?: string },
+);
+vi.mock("modules/JobManagement/JobOverview/DiagnosticsContext", () => ({
+  useDiagnosticsContext: () => mockUseDiagnosticsContext(),
+}));
 
 // Mock react-i18next
 vi.mock("react-i18next", () => ({
@@ -228,12 +237,14 @@ vi.mock("components/ui/DynamicDropdown/DynamicDropdown", () => ({
     value,
     onChange,
     disabled,
+    onRawOptionSelect,
   }: {
     name: string;
     label: string;
     value: string;
     onChange: (value: string) => void;
     disabled?: boolean;
+    onRawOptionSelect?: (rawItem: Record<string, unknown>) => void;
   }) => (
     <div>
       <label htmlFor={name}>{label}</label>
@@ -247,6 +258,14 @@ vi.mock("components/ui/DynamicDropdown/DynamicDropdown", () => ({
       >
         <option value="">Select</option>
       </select>
+      {onRawOptionSelect && (
+        <button
+          data-testid={`raw-option-select-${name}`}
+          onClick={() => onRawOptionSelect({ faultCode: "E001", faultCodeLabourQuantity: 3 })}
+        >
+          Select Raw Option
+        </button>
+      )}
     </div>
   ),
 }));
@@ -312,6 +331,27 @@ describe("GenericField", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseDiagnosticsContext.mockReturnValue({ allowedPositions: [] });
+  });
+
+  it("uses live diagnostics status to disable fields without waiting for formik refresh", () => {
+    mockUseDiagnosticsContext.mockReturnValue({
+      allowedPositions: [],
+      jobStatus: "IN_DIAGNOSTICS",
+    });
+
+    const field: Field = {
+      name: "testField",
+      label: "Test Field",
+      type: "text",
+      isRequired: false,
+      disabledForStatuses: ["IN_DIAGNOSTICS"],
+      fieldMapping: { originalName: "testField" },
+    };
+
+    renderWithContext(field);
+
+    expect(screen.getByTestId("text-field-testField")).toBeDisabled();
   });
 
   describe("Text Field", () => {
@@ -580,6 +620,42 @@ describe("GenericField", () => {
       await user.selectOptions(dropdown, "");
 
       expect(dropdown).toHaveValue("");
+    });
+
+    it("passes allowedPositions from DiagnosticsContext into handleFaultCodeSelection on raw option select", async () => {
+      const user = userEvent.setup();
+      const allowedPositions = [
+        {
+          position: "LA",
+          minCount: 1,
+          maxCount: 1,
+          quantity: { quantitySource: "DEFAULT", defaultQuantity: 3 },
+          unitPriceSource: "SAP",
+        },
+      ];
+      mockUseDiagnosticsContext.mockReturnValue({ allowedPositions });
+
+      const field: Field = {
+        name: "faultCodeDropdown",
+        label: "Fault Code",
+        type: "dropdown",
+        subtype: "diagnosticFaultCode",
+        isRequired: false,
+        fieldMapping: { originalName: "faultCodeDropdown" },
+      };
+
+      renderWithContext(field);
+
+      const button = screen.getByTestId("raw-option-select-faultCodeDropdown");
+      await user.click(button);
+
+      expect(handleFaultCodeSelection).toHaveBeenCalledWith(
+        { faultCode: "E001", faultCodeLabourQuantity: 3 },
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        allowedPositions,
+      );
     });
   });
 

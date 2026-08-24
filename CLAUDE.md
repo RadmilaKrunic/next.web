@@ -214,7 +214,32 @@ Requires `.npmrc` with credentials:
 DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=<path-to-.npmrc> -t ptdpacr.azurecr.io/com.bosch.pt/bass-web:latest .
 ```
 
-## Skills System
+## Coding Rules & Skills
+
+### Auto-loaded Rules (`.claude/rules/`)
+
+These rules automatically load when working with matching files:
+
+| Rule file | Auto-loads when touching |
+|-----------|------------------------|
+| `typescript-conventions.md` | `src/**/*.ts`, `src/**/*.tsx` |
+| `react-conventions.md` | `src/components/**/*.tsx`, `src/modules/**/*.tsx` |
+| `api-domain-pattern.md` | `src/api/services/**` |
+| `metadata-driven-forms.md` | `src/components/generics/**` |
+| `price-calculator.md` | `src/utils/priceCalculator.ts`, `src/hooks/useDiagnosticsManager.ts` |
+| `testing.md` | `src/**/*.test.ts`, `src/**/*.test.tsx` |
+
+### Skills (`.claude/skills/`)
+
+Generated skills for common workflows:
+
+| Scope | Skill |
+|-------|-------|
+| Add a new field type to GenericField | `bass-generic-field` |
+| Create custom area components | `bass-custom-area` |
+| Add diagnostics spare part rows | `bass-diagnostics-material` |
+
+### Legacy Skills (`.github/skills/`)
 
 The following skill files contain deep, code-verified knowledge for specific subsystems. **Load the relevant SKILL.md before working on any task in that domain** - reading the skill first is not optional:
 
@@ -266,3 +291,11 @@ The following skill files contain deep, code-verified knowledge for specific sub
 - Use subject-verb-object sentence structure
 - Prefer code over prose
 - Default to no comments unless WHY is non-obvious
+
+## How This Project Is Onboarded
+
+Claude's understanding of this project was bootstrapped by claudboard:
+
+- **Convention catalog:** `.claudboard/catalog.json` — source of truth for regeneration; re-run `/analyse` to refresh.
+
+To regenerate artifacts after major codebase changes: run `/analyse` → `/generate` in a fresh session.

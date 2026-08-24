@@ -13,6 +13,13 @@ export interface PaginationProps {
   onDropdownOptionChange: (option: string) => unknown;
 }
 
+export interface PaginationPage {
+  number: number;
+  totalElements: number;
+  totalPages: number;
+  size: number;
+}
+
 function Pagination({
   totalResults,
   page,

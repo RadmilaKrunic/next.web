@@ -17,5 +17,5 @@ export type FiltersBarProps = {
   applyAdvancedFilters?: (filters: Filter[]) => void;
   resetAdvancedFilters?: () => void;
   optionsContent?: React.ReactNode;
-  type?: "job" | "claim" | "approval" | "employee";
+  type?: "job" | "claim" | "approval" | "employee" | "asc";
 };

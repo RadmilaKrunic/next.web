@@ -26,7 +26,7 @@ function NavItem({
 
   const onItemClick = () => {
     if (!isOpen) {
-      setIsOpen(true);
+      setIsOpen?.(true);
     }
     if (subNavItems && subNavItems.length > 0) {
       setDisplaySubNav(!displaySubNav);

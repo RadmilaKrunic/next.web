@@ -77,6 +77,6 @@ export function filterClaims(
   });
 }
 
-export function getClaimNavigationPath(claim: Claim): string {
-  return `/claim-overview/${claim.claimId}/#claims`;
+export function getClaimNavigationPath(claimId: string): string {
+  return `/claim-overview/${claimId}/#claims`;
 }

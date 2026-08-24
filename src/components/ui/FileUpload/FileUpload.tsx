@@ -7,7 +7,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   deleteFileFromServer,
   uploadFileToServer,
-  UploadResponse,
+  AttachmentsUploadResponse,
+  FileResponse,
 } from "../../../api/services/file/action";
 import {
   isFilenameSafe,
@@ -16,33 +17,7 @@ import {
   isBlockedExtension,
 } from "utils/fileValidation";
 import DocumentFile from "../DocumentFile/DocumentFile";
-import { GenericOptionProps } from "components/generics/Field/GenericField.types";
-
-interface FileUploadProps {
-  name: string;
-  onFilesSelected?: (attachments: Attachments[]) => void;
-  allowedFormats?: string[];
-  maxFilesAllowed?: number;
-  maxFileSizeInMb?: number;
-  multiple?: boolean;
-  fileTypeOptions: GenericOptionProps[];
-  isDisabled?: boolean;
-  initialFiles?: Attachments[];
-  existingFiles?: { name: string; type?: string }[];
-  onDeleteStart?: () => void;
-  onDeleteEnd?: () => void;
-}
-
-export interface FileProps {
-  file: File;
-  fileType: string;
-}
-
-export interface Attachments {
-  name: string;
-  type: string;
-  attachmentId: string;
-}
+import { FileUploadProps, Attachments, FileProps } from "./FileUpload.types";
 
 const isCountableFile = (f: { type?: string }) => f.type !== "SYSTEM_GENERATED_RECEIPT";
 
@@ -73,19 +48,30 @@ export default function FileUpload({
     setFiles(initialFiles);
   }, [initialFiles]);
 
-  const handleUploadSuccess = (response: UploadResponse) => {
-    const attachments: Attachments[] =
-      response?.attachments?.map((item) => {
-        return {
-          name: item.filename,
-          type: item.type,
-          attachmentId: item.id,
-        };
-      }) ?? [];
-    const merged = [...files, ...attachments];
-    void queryClient.invalidateQueries({ queryKey: ["attachments"] });
-    onFilesSelected?.(merged);
-    setFiles(merged);
+  const handleUploadSuccess = (response: AttachmentsUploadResponse | FileResponse) => {
+    if ((response as FileResponse)?.type === "ASC_LOGO") {
+      const file = {
+        name: (response as FileResponse)?.filename,
+        type: (response as FileResponse)?.type,
+        attachmentId: (response as FileResponse)?.id,
+      };
+      setFiles([file]);
+      onFilesSelected?.([file]);
+    } else {
+      const attachments: Attachments[] =
+        (response as AttachmentsUploadResponse)?.attachments?.map((item) => {
+          return {
+            name: item.filename,
+            type: item.type,
+            attachmentId: item.id,
+          };
+        }) ?? [];
+      const merged = [...files, ...attachments];
+      void queryClient.invalidateQueries({ queryKey: ["attachments"] });
+      onFilesSelected?.(merged);
+      setFiles(merged);
+    }
+
     setShowUploadModal(false);
     setPendingFiles([]);
   };
@@ -218,17 +204,26 @@ export default function FileUpload({
     onSuccess: () => {
       onDeleteEnd?.();
     },
-    onError: (error, attachments) => {
-      setFiles(attachments);
-      onFilesSelected?.(attachments);
+    onError: (error: any, attachments: Attachments[]) => {
+      if (
+        attachments[0].type === "ASC_LOGO" &&
+        error?.response?.data?.detail?.includes("already deleted")
+      ) {
+        setFiles([]);
+        onFilesSelected?.([]);
+      } else {
+        setFiles(attachments);
+        onFilesSelected?.(attachments);
+      }
       onDeleteEnd?.();
-      console.error("Error deleting files:", error);
     },
   });
 
-  const isUploadDisabled =
-    files.filter(isCountableFile).length + existingFiles.filter(isCountableFile).length >=
-      maxFilesAllowed || isDisabled;
+  const isMaxReached =
+    files?.filter(isCountableFile).length + existingFiles.filter(isCountableFile).length >=
+    maxFilesAllowed;
+
+  const isUploadAllowed = isDisabled || isMaxReached;
 
   return (
     <>
@@ -256,10 +251,10 @@ export default function FileUpload({
         </div>
 
         <div
-          className={`file-upload-box ${isDragging ? "dragging" : ""} ${isUploadDisabled ? "disabled" : ""}`}
-          onDragOver={isUploadDisabled ? undefined : handleDragOver}
-          onDragLeave={isUploadDisabled ? undefined : handleDragLeave}
-          onDrop={isUploadDisabled ? undefined : handleDrop}
+          className={`file-upload-box ${isDragging ? "dragging" : ""} ${isUploadAllowed ? "disabled" : ""}`}
+          onDragOver={isUploadAllowed ? undefined : handleDragOver}
+          onDragLeave={isUploadAllowed ? undefined : handleDragLeave}
+          onDrop={isUploadAllowed ? undefined : handleDrop}
         >
           {errorMessages.length > 0 && (
             <Notification
@@ -280,21 +275,23 @@ export default function FileUpload({
             accept={(allowedFormats ?? []).join(",")}
             multiple={multiple}
             onChange={handleFileChange}
-            disabled={isUploadDisabled}
+            disabled={isUploadAllowed}
             style={{ display: "none" }}
           />
           <label
-            className={`file-upload-label ${isUploadDisabled ? "disabled" : ""}`}
+            className={`file-upload-label ${isUploadAllowed ? "disabled" : ""}`}
             htmlFor={name}
           >
             <Icon iconName="upload" aria-hidden="true" className="icon-upload" />
             <div className="upload-content">
               <span className="upload-text">
                 {(() => {
-                  if (isUploadDisabled) {
+                  if (isMaxReached) {
                     return "Maximum files reached";
                   } else if (isDragging) {
                     return t("dropFilesHere");
+                  } else if (isDisabled) {
+                    return t("fileUploadDisabled");
                   } else {
                     return (
                       <>
@@ -332,9 +329,9 @@ export default function FileUpload({
                 removeFilesMutation.mutate(files);
               }}
               icon={{ iconName: "delete", title: "delete" }}
-              label={t("removeAll")}
+              label={files.length > 1 ? t("removeAll") : t("remove")}
               className="action-buttons"
-              disabled={removeFilesMutation.isPending}
+              disabled={removeFilesMutation.isPending || isDisabled}
             />
           </div>
         )}

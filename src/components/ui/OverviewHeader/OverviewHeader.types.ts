@@ -1,9 +1,11 @@
-export type OverviewType = "job" | "claim";
+export type OverviewType = "job" | "claim" | "employee" | "ASC";
 
 export interface OverviewHeaderItem {
   icon: string;
   title: string;
   subtitle?: string;
+  isImage?: boolean;
+  imgUrl?: string;
 }
 
 export interface OverviewHeaderProps {

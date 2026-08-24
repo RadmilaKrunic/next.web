@@ -16,6 +16,7 @@ import {
   putClaimPrices,
   patchClaimStatusPending,
   ClaimDecisionPayload,
+  BulkApproveClaimsPayload,
 } from "./action";
 
 export const useClaimById = (
@@ -65,10 +66,10 @@ export const useClaimDecision = (
 };
 
 export const useBulkApproveClaims = (
-  options?: UseMutationOptions<void, Error, { claimIds: string[] }>,
+  options?: UseMutationOptions<void, Error, BulkApproveClaimsPayload>,
 ) => {
   return useMutation({
-    mutationFn: ({ claimIds }: { claimIds: string[] }) => postBulkApproveClaims(claimIds),
+    mutationFn: (payload: BulkApproveClaimsPayload) => postBulkApproveClaims(payload),
     ...options,
   });
 };

@@ -1,0 +1,46 @@
+.claim-list-export-dialog {
+  overflow: visible !important;
+
+  .m-dialog__content {
+    overflow-y: visible;
+    padding: 1.5rem;
+
+    .m-dialog__headline {
+      text-align: left;
+    }
+
+    .dialog-description {
+      margin-bottom: 15px;
+      border-bottom: 1px solid #c1c7cc;
+      padding-bottom: 15px;
+    }
+
+    .dialog-instruction {
+      margin-top: 15px;
+      margin-bottom: 15px;
+    }
+
+    .m-dialog__actions {
+      flex-direction: row-reverse;
+      align-items: flex-end;
+      justify-content: flex-start;
+      margin-bottom: 0;
+      margin-top: 2rem;
+
+      button {
+        margin-left: 0;
+      }
+    }
+  }
+  .a-divider {
+    display: none;
+  }
+
+  .m-dialog__header {
+    font-size: 1.5rem;
+    margin-top: 1.5rem;
+    .a-button--integrated {
+      margin-right: -1rem;
+    }
+  }
+}

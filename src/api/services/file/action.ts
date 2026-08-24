@@ -7,25 +7,36 @@ const filesAxiosClient = axios.create({
   timeout: 120000,
 });
 
-export interface UploadResponse {
-  attachments: {
-    id: string;
-    filename: string;
-    type: string;
-    createdAt: string;
-  }[];
+export interface FileResponse {
+  id: string;
+  filename: string;
+  type: string;
+  createdAt: string;
 }
 
-export async function uploadFileToServer(files: File[], types: string[]): Promise<UploadResponse> {
+export interface AttachmentsUploadResponse {
+  attachments: FileResponse[];
+}
+
+export async function uploadFileToServer(
+  files: File[],
+  types: string[],
+): Promise<AttachmentsUploadResponse | FileResponse> {
   try {
     const formData = new FormData();
+    let endpoint;
+    if (files.length === 1 && !types[0]) {
+      endpoint = "/static/upload";
+      formData.append("file", files[0]);
+    } else {
+      files.forEach((file) => {
+        formData.append("files", file);
+      });
+      endpoint = `/upload?source=Orders&types=${types.join(",")}`;
+    }
 
-    files.forEach((file) => {
-      formData.append("files", file);
-    });
-
-    const response = await filesAxiosClient.post<UploadResponse>(
-      `/upload?source=Orders&types=${types.join(",")}`,
+    const response = await filesAxiosClient.post<AttachmentsUploadResponse | FileResponse>(
+      endpoint,
       formData,
       {
         headers: { "Content-Type": "multipart/form-data" },
@@ -51,11 +62,12 @@ export async function deleteFileFromServer(fileId: string): Promise<void> {
 export async function downloadFileFromServer(
   fileId: string,
   fileType: string,
+  sourceReferenceId: string | null = null,
 ): Promise<Blob | null> {
   try {
     const response = await filesAxiosClient.post(
       "/download",
-      { fileId, fileType },
+      { fileId, fileType, sourceReferenceId },
       {
         responseType: "blob",
         headers: {

@@ -4,7 +4,7 @@ import GenericAction from "components/generics/Action/GenericAction";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import GenericField from "components/generics/Field/GenericField";
 import DocumentFile from "components/ui/DocumentFile/DocumentFile";
-import { Attachments } from "components/ui/FileUpload/FileUpload";
+import { Attachments } from "components/ui/FileUpload/FileUpload.types";
 import { Attachment } from "modules/JobManagement/JobList/JobList.types";
 import { useCallback, useContext } from "react";
 import { useTranslation } from "react-i18next";
@@ -129,6 +129,7 @@ export default function DocumentTabArea({
               name={attachment.name}
               type={attachment.type}
               fileId={attachment.attachmentId}
+              sourceReferenceId={attachment.sourceReferenceId}
               jobId={entityId}
               dataTestid={attachment.attachmentId}
               enableDownload={true}

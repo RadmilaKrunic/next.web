@@ -109,6 +109,7 @@ describe("Approval CustomizeColumnsPopup", () => {
     renderPopup();
     fireEvent.click(screen.getByText("customizeColumns"));
     expect(screen.getByTestId("popover")).toBeInTheDocument();
+    expect(screen.getByText("customizeColumnsClaimPopupHeader")).toBeInTheDocument();
     expect(screen.getByLabelText("approvalStatus")).toBeInTheDocument();
   });
 

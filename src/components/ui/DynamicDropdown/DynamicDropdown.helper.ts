@@ -54,7 +54,7 @@ export const mapDropdownOptions = (
       const translated = t(values[i]);
       const name = translated.includes("app.") ? values[i] : translated;
       dropdownOptions.push({
-        value: values[i],
+        value: keys[i],
         name,
         key: keys[i],
       });
@@ -82,6 +82,14 @@ export const mapDropdownOptions = (
     }));
   }
 
+  if (fieldName === "ascDetails") {
+    return apiResponse.map((item, index) => ({
+      value: item.ascId || "",
+      name: `${item.name || ""}`,
+      key: `${fieldName}-${item.ascId || index}`,
+    }));
+  }
+
   if (fieldSubtype === "diagnosticFaultCode") {
     return apiResponse.map((item, index) => ({
       value: `${item.faultCode ?? ""}`,
@@ -103,14 +111,21 @@ export const mapDropdownOptions = (
   }
 
   if (fieldName === "accountRoles") {
-    const mapped = apiResponse.map((item) => {
-      const option = {
-        value: item.roleId || "",
-        name: t(item.name.toLowerCase().split(" ").join("")) || "",
-        key: item.id,
-      };
-      return option;
-    });
+    const mapped = apiResponse
+      .filter(
+        (item) =>
+          item.roleId !== "APPLICATION_ADMINISTRATOR" &&
+          item.roleId !== "COUNTRY_MANAGER" &&
+          item.roleId !== "BOSCH_REGIONAL_MANAGER",
+      )
+      .map((item) => {
+        const option = {
+          value: item.roleId || "",
+          name: t(item.name.toLowerCase().split(" ").join("")) || "",
+          key: item.id,
+        };
+        return option;
+      });
 
     return mapped;
   }
@@ -173,15 +188,30 @@ export const translateStaticOptions = (
   opts: GenericOptionProps[],
   t: TFunction,
 ): GenericOptionProps[] => {
+  const shouldDisplaySelectOption =
+    !dropDownName.includes("reimbursementMethod") &&
+    !dropDownName.includes("reimbursementCreateOn") &&
+    !dropDownName.includes("reimbursementPeriodType");
+
   if (!opts) return [];
-  const hasSelectTextValue = opts?.some((option) => option.name === "SelectAnOption");
-  const optionsWithSelect = hasSelectTextValue
-    ? opts
-    : [{ value: "", name: "SelectAnOption" }, ...opts];
-  return optionsWithSelect?.map((option) => ({
+  // Some callers (e.g. ClaimSparePartsRow/SparePartsRow position fields) already
+  // prepend their own empty-value placeholder option. Avoid adding a second one,
+  // which would create two options with the same value/key and trigger a
+  // "duplicate key" React warning.
+  const hasPlaceholder = opts.some((option) => (option.value ?? "") === "");
+  const options =
+    shouldDisplaySelectOption && !hasPlaceholder
+      ? [{ value: "", name: "SelectAnOption" }, ...opts]
+      : opts;
+
+  return options?.map((option, index) => ({
     ...option,
     name: option.name === "" ? "" : t(option.name),
-    key: option.key ?? `${dropDownName}-${option.value as string}`,
+    key:
+      option.key ??
+      (option.value === ""
+        ? `${dropDownName}-empty-${index}`
+        : `${dropDownName}-${option.value as string}`),
   }));
 };
 

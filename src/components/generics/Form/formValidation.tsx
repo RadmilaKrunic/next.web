@@ -4,6 +4,7 @@ import Section from "../Section/GenericSection.types";
 import Field from "../Field/GenericField.types";
 import { isFieldVisible } from "../utils";
 import GenericForm, { ActionMandatoryFields } from "./GenericForm.types";
+import { getSparePartCompatibilityMessage } from "../../ui/AutoComplete/AutoComplete.helper";
 
 export type ValidationErrors = Record<string, string>;
 
@@ -343,6 +344,47 @@ function validateSerialNumberField({
   }
 }
 
+function validateSparePartCompatibility({
+  field,
+  errors,
+  fieldName,
+  values,
+  fields,
+  sparePartNotBelongsToToolRef,
+  t,
+}: {
+  field: Field;
+  errors: Record<string, string>;
+  fieldName: string;
+  values: Record<string, unknown>;
+  fields: Field[];
+  sparePartNotBelongsToToolRef: RefObject<Record<string, boolean>> | undefined;
+  t: (key: string) => string;
+}): void {
+  const messageKey = getSparePartCompatibilityMessage(
+    field,
+    fieldName,
+    values,
+    fields,
+    sparePartNotBelongsToToolRef?.current,
+  );
+
+  if (messageKey) {
+    // Don't clobber an existing error (e.g. pattern/length) already set on this field.
+    if (!errors[fieldName]) {
+      errors[fieldName] = t(messageKey);
+    }
+    return;
+  }
+
+  if (
+    errors[fieldName] === t("incompatibleWarrantyType") ||
+    errors[fieldName] === t("incompatibleServiceOfferingType")
+  ) {
+    delete errors[fieldName];
+  }
+}
+
 interface ValidateSingleFieldParams {
   field: Field;
   errors: Record<string, string>;
@@ -353,6 +395,7 @@ interface ValidateSingleFieldParams {
   touchedFields: Record<string, boolean> | undefined;
   t: (key: string) => string;
   autocompleteValidationRef?: RefObject<Record<string, boolean>>;
+  sparePartNotBelongsToToolRef?: RefObject<Record<string, boolean>>;
 }
 
 function validateSingleField({
@@ -365,6 +408,7 @@ function validateSingleField({
   touchedFields,
   t,
   autocompleteValidationRef,
+  sparePartNotBelongsToToolRef,
 }: ValidateSingleFieldParams): void {
   const fieldName = field.name;
   const originalName = field.fieldMapping?.originalName;
@@ -453,6 +497,15 @@ function validateSingleField({
     touchedFields,
     t,
   });
+  validateSparePartCompatibility({
+    field,
+    errors,
+    fieldName,
+    values,
+    fields,
+    sparePartNotBelongsToToolRef,
+    t,
+  });
 }
 
 export const validateByAction = ({
@@ -464,6 +517,7 @@ export const validateByAction = ({
   touchedFields,
   t,
   autocompleteValidationRef,
+  sparePartNotBelongsToToolRef,
 }: {
   errors: Record<string, string>;
   mandatoryFields: string[];
@@ -473,6 +527,7 @@ export const validateByAction = ({
   touchedFields?: Record<string, boolean>;
   t: (key: string) => string;
   autocompleteValidationRef?: RefObject<Record<string, boolean>>;
+  sparePartNotBelongsToToolRef?: RefObject<Record<string, boolean>>;
 }): ValidationErrors => {
   fields.forEach((field) => {
     validateSingleField({
@@ -485,6 +540,7 @@ export const validateByAction = ({
       touchedFields,
       t,
       autocompleteValidationRef,
+      sparePartNotBelongsToToolRef,
     });
   });
   return errors;
@@ -498,6 +554,7 @@ export const useValidator = () => {
     onlyTouched = false,
     touchedFields = {},
     autocompleteValidationRef,
+    sparePartNotBelongsToToolRef,
   }: {
     fields: Field[];
     values: Record<string, unknown>;
@@ -505,6 +562,7 @@ export const useValidator = () => {
     onlyTouched?: boolean;
     touchedFields?: Record<string, boolean>;
     autocompleteValidationRef?: RefObject<Record<string, boolean>>;
+    sparePartNotBelongsToToolRef?: RefObject<Record<string, boolean>>;
   }): ValidationErrors => {
     const errors: ValidationErrors = {};
 
@@ -517,6 +575,7 @@ export const useValidator = () => {
       touchedFields,
       t,
       autocompleteValidationRef,
+      sparePartNotBelongsToToolRef,
     });
 
     return errors;
@@ -525,10 +584,18 @@ export const useValidator = () => {
   return validated;
 };
 
-export const getMandatoryFields = (form: GenericForm): Record<string, ActionMandatoryFields> => {
+export const getMandatoryFields = (
+  form: GenericForm,
+  userPermissions: string[] = [],
+): Record<string, ActionMandatoryFields> => {
   const result: Record<string, ActionMandatoryFields> = {};
   form.sections.forEach((section) => {
-    if (section.actions) {
+    if (
+      section.actions &&
+      (section?.permissions?.length
+        ? section?.permissions?.some((p) => userPermissions.includes(p))
+        : true)
+    ) {
       section.actions.forEach((action) => {
         if (!action?.name) return;
         const key = action.name.toLowerCase();
@@ -542,7 +609,10 @@ export const getMandatoryFields = (form: GenericForm): Record<string, ActionMand
       });
     }
   });
-  if (form.actions) {
+  if (
+    form.actions &&
+    (form?.permissions?.length ? form?.permissions?.some((p) => userPermissions.includes(p)) : true)
+  ) {
     form.actions.forEach((action) => {
       if (!action?.name) return;
       const key = action.name.toLowerCase();

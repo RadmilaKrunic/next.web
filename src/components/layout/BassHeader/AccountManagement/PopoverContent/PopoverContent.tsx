@@ -27,12 +27,12 @@ function PopoverContent() {
   const languageOptions =
     countryConfiguration?.localizationConfiguration.map((lang) => ({
       name: "",
-      value: lang.language,
-      label: t(lang.language),
+      value: lang.locale,
+      label: t(lang.locale),
     })) || [];
 
   const [currentLanguage, setCurrentLanguage] = useState<string>(() => {
-    const resolved = user?.language ?? primaryLanguage?.language ?? "en";
+    const resolved = user?.locale ?? primaryLanguage?.locale ?? "en-US";
     localStorage.setItem("selectedLanguage", resolved);
     return resolved;
   });
@@ -94,7 +94,14 @@ function PopoverContent() {
               setCurrentLanguage(newLanguage);
               localStorage.setItem("selectedLanguage", newLanguage);
               void i18n?.changeLanguage(newLanguage);
-              updateLanguagePreference(newLanguage.toLocaleUpperCase());
+              const updatePayload: { language: string; locale: string } = {
+                language:
+                  countryConfiguration?.localizationConfiguration?.find(
+                    (lang) => lang.locale === newLanguage,
+                  )?.language || "en",
+                locale: newLanguage,
+              };
+              updateLanguagePreference(updatePayload);
             }}
             options={languageOptions}
           />

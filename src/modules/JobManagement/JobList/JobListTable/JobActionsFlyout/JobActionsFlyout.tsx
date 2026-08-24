@@ -70,11 +70,11 @@ export default function JobActionsFlyout({
   return (
     <ScrollablePopover
       data-testid={`job-actions-popover-${job.jobId}`}
-      className={`job-actions-popover`}
+      className={`actions-popover`}
       trigger={
         <Button
           icon={"options"}
-          className="job-actions-popover-trigger"
+          className="actions-popover-trigger"
           tabIndex={0}
           aria-label="More job options"
           data-testid={`job-actions-popover-trigger-${job.jobId}`}

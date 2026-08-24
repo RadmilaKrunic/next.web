@@ -5,10 +5,11 @@ import React from "react";
 
 vi.mock("./orders", () => ({
   getOrderById: vi.fn().mockResolvedValue({ id: "o1" }),
+  postWarrantyCheck: vi.fn().mockResolvedValue({ evaluationStatus: "SKIPPED" }),
 }));
 
-import { useOrderById } from "./hooks";
-import { getOrderById } from "./orders";
+import { useOrderById, usePostWarrantyCheck } from "./hooks";
+import { getOrderById, postWarrantyCheck } from "./orders";
 
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -33,5 +34,28 @@ describe("useOrderById", () => {
   it("is disabled when orderId is empty string", () => {
     const { result } = renderHook(() => useOrderById(""), { wrapper: makeWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("usePostWarrantyCheck", () => {
+  it("posts warranty check payload", async () => {
+    const { result } = renderHook(() => usePostWarrantyCheck(), { wrapper: makeWrapper() });
+    result.current.mutate({
+      brand: "BOSCH",
+      country: "DE",
+      bareToolNumber: "1607A350C5",
+      serialNumber: "929030435",
+      purchaseDate: "2026-06-15",
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(postWarrantyCheck).toHaveBeenCalledWith(
+      expect.objectContaining({
+        brand: "BOSCH",
+        country: "DE",
+        bareToolNumber: "1607A350C5",
+      }),
+      expect.anything(),
+    );
   });
 });

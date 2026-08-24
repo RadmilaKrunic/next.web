@@ -15,7 +15,7 @@ const DATE_FORMAT = "dd.MM.yyyy";
 interface FiltersChipsProps {
   filters?: Section;
   locale?: Locale;
-  type?: "job" | "claim" | "approval" | "employee";
+  type?: "job" | "claim" | "approval" | "employee" | "asc";
 }
 
 type FieldOptionMap = Record<string, Record<string, string>>;
@@ -54,6 +54,19 @@ function FiltersChips({ filters, locale, type }: Readonly<FiltersChipsProps>) {
         optionsEndpoint.queryParams,
       ]);
       const optionName = names?.find((n: any) => String(n.ascId) === value)?.name;
+      return optionName ?? t(value);
+    }
+    if (filterKey === "categoryId") {
+      const optionsEndpoint = filters?.areas
+        .flatMap((area) => area.fields)
+        .find((field) => field.name === "categoryId")?.optionsEndpoint;
+      if (!optionsEndpoint) return value;
+      const categories = queryClient.getQueryData<any>([
+        "dynamicOptions",
+        optionsEndpoint.url,
+        optionsEndpoint.queryParams,
+      ]);
+      const optionName = categories?.categories[value] ?? value;
       return optionName ?? t(value);
     }
     const optionName = fieldOptionMap[filterKey]?.[value];

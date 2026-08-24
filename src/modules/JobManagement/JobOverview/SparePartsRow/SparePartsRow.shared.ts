@@ -42,6 +42,7 @@ export function useSparePartsRowCommon({
   values,
   markRowDirty,
   areaIndex,
+  isValidating,
 }: {
   fields: Field[];
   activeDiscountFieldName: string;
@@ -54,6 +55,7 @@ export function useSparePartsRowCommon({
   values: Record<string, unknown>;
   markRowDirty: (i: number) => void;
   areaIndex: number;
+  isValidating?: boolean;
 }): string {
   useSparePartPriceCalculation({
     quantity: getSubtypeName(fields, "diagnosticQuantity"),
@@ -65,12 +67,13 @@ export function useSparePartsRowCommon({
     taxAmount: getSubtypeName(fields, "diagnosticTaxAmount"),
     discount: activeDiscountFieldName,
     discountSibling: discountSiblingFieldName || undefined,
-    discountHidden: discountHiddenFieldName || undefined,
+    discountHidden: discountHiddenFieldName,
     discountAmountHidden: discountAmountHiddenFieldName || undefined,
     totalAmount: getSubtypeName(fields, "diagnosticTotalAmount"),
     areaNamePrefix,
     isResyncingRef,
     discountBase,
+    isValidating,
     onUserEdit: () => {
       markRowDirty(areaIndex);
     },

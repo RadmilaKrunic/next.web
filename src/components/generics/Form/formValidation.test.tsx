@@ -29,6 +29,9 @@ vi.mock("react-i18next", () => ({
         fieldRequired: "This field is required",
         fieldDependencyError: "This field is required based on other field values",
         toolModelNameNotFound: "Tool model name '{{name}}' not found.",
+        incompatibleWarrantyType: "Incompatible part/material. Warranty not applicable",
+        incompatibleServiceOfferingType:
+          "Incompatible part/material. Service offering not applicable",
       };
       return translations[key] || key;
     },
@@ -222,6 +225,9 @@ describe("formValidation", () => {
         valueIsLessThanMinValue: "Value is less than minimum value",
         valueExceedsMaxValue: "Value exceeds maximum value",
         toolModelNameNotFound: "Tool model name '{{name}}' not found.",
+        incompatibleWarrantyType: "Incompatible part/material. Warranty not applicable",
+        incompatibleServiceOfferingType:
+          "Incompatible part/material. Service offering not applicable",
       };
       return translations[key] || key;
     };
@@ -953,6 +959,141 @@ describe("formValidation", () => {
         });
 
         expect(errors.toolModelName).toBeDefined();
+      });
+    });
+
+    describe("spare part compatibility validation", () => {
+      const buildSparePartFields = () => [
+        createMockField({
+          name: "sparePartNumber",
+          type: "autocomplete",
+          fieldMapping: { originalName: "sparePartNumber", nameStartsWith: "row1" },
+        }),
+        createMockField({
+          name: "rowType",
+          subtype: "diagnosticType",
+          fieldMapping: { originalName: "rowType", nameStartsWith: "row1" },
+        }),
+      ];
+
+      it("blocks submission for WARRANTY part flagged as not belonging to the tool", () => {
+        const fields = buildSparePartFields();
+        const errors: ValidationErrors = {};
+        const values = { sparePartNumber: "123456789", rowType: "WARRANTY", actionType: "REPAIR" };
+        const sparePartNotBelongsToToolRef = { current: { sparePartNumber: true } };
+
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values,
+          fields,
+          t: mockT,
+          sparePartNotBelongsToToolRef,
+        });
+
+        expect(errors.sparePartNumber).toBe("Incompatible part/material. Warranty not applicable");
+      });
+
+      it("blocks submission for SERVICE_OFFERING part flagged as not belonging to the tool", () => {
+        const fields = buildSparePartFields();
+        const errors: ValidationErrors = {};
+        const values = {
+          sparePartNumber: "123456789",
+          rowType: "SERVICE_OFFERING",
+          actionType: "REPAIR",
+        };
+        const sparePartNotBelongsToToolRef = { current: { sparePartNumber: true } };
+
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values,
+          fields,
+          t: mockT,
+          sparePartNotBelongsToToolRef,
+        });
+
+        expect(errors.sparePartNumber).toBe(
+          "Incompatible part/material. Service offering not applicable",
+        );
+      });
+
+      it("allows submission when actionType is an exchange type", () => {
+        const fields = buildSparePartFields();
+        const errors: ValidationErrors = {};
+        const values = {
+          sparePartNumber: "123456789",
+          rowType: "WARRANTY",
+          actionType: "NEW_TOOL_EXCHANGE",
+        };
+        const sparePartNotBelongsToToolRef = { current: { sparePartNumber: true } };
+
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values,
+          fields,
+          t: mockT,
+          sparePartNotBelongsToToolRef,
+        });
+
+        expect(errors.sparePartNumber).toBeUndefined();
+      });
+
+      it("does not overwrite an existing pattern/length error on the same field", () => {
+        const emailPattern = btoa("^[0-9]+$");
+        const fields = [
+          createMockField({
+            name: "sparePartNumber",
+            type: "autocomplete",
+            pattern: emailPattern,
+            patternText: "invalidEmail",
+            fieldMapping: { originalName: "sparePartNumber", nameStartsWith: "row1" },
+          }),
+          createMockField({
+            name: "rowType",
+            subtype: "diagnosticType",
+            fieldMapping: { originalName: "rowType", nameStartsWith: "row1" },
+          }),
+        ];
+        const errors: ValidationErrors = {};
+        const values = {
+          sparePartNumber: "NOT-NUMERIC",
+          rowType: "WARRANTY",
+          actionType: "REPAIR",
+        };
+        const sparePartNotBelongsToToolRef = { current: { sparePartNumber: true } };
+
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values,
+          fields,
+          t: mockT,
+          sparePartNotBelongsToToolRef,
+        });
+
+        expect(errors.sparePartNumber).toBe("Invalid email format");
+      });
+
+      it("clears a stale incompatibility error once the part is no longer flagged", () => {
+        const fields = buildSparePartFields();
+        const errors: ValidationErrors = {
+          sparePartNumber: "Incompatible part/material. Warranty not applicable",
+        };
+        const values = { sparePartNumber: "123456789", rowType: "WARRANTY", actionType: "REPAIR" };
+        const sparePartNotBelongsToToolRef = { current: { sparePartNumber: false } };
+
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values,
+          fields,
+          t: mockT,
+          sparePartNotBelongsToToolRef,
+        });
+
+        expect(errors.sparePartNumber).toBeUndefined();
       });
     });
   });

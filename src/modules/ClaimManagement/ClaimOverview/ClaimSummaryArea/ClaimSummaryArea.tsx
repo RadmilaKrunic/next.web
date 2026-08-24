@@ -46,7 +46,7 @@ function ClaimSummaryArea({ area }: Readonly<{ area: Area }>) {
       markRowDirty: () => {},
       summaryTypeOptions: [{ value: "totalSummary", label: "totalSummary" }],
       setSummaryTypeOptions,
-      setRevisedRowPending: () => {},
+      setRevisedRejectedRowPending: () => {},
       isArchivedExpanded: false,
       setIsArchivedExpanded: () => {},
       canArchiveOnDelete: false,
@@ -57,6 +57,7 @@ function ClaimSummaryArea({ area }: Readonly<{ area: Area }>) {
       apiMaterialsLoaded: false,
       apiMaterialsEmpty: true,
       hasExistingDiagnostic: false,
+      isValidating: false,
     }),
     [
       materials,

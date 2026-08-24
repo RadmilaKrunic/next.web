@@ -135,6 +135,60 @@ describe("useDatePicker", () => {
     expect(result.current.selectedDate).toBeInstanceOf(Date);
   });
 
+  it("keeps selectedDate null for stored range values", () => {
+    setupMocks({ values: { date: "2024-01-01T00:00:00.000Z,2024-01-10T23:59:59.999Z" } });
+
+    const { result } = renderHook(() =>
+      useDatePicker({
+        name: "date",
+        calendar: {
+          useDateInput: true,
+          useDatePicker: true,
+          allowDateRange: true,
+          dateFormat: "dd.MM.yyyy",
+        } as never,
+      }),
+    );
+
+    expect(result.current.selectedDate).toBeNull();
+  });
+
+  it("keeps selectedDate null for comma value when range mode is off", () => {
+    setupMocks({ values: { date: "2024-01-01T00:00:00.000Z,2024-01-10T23:59:59.999Z" } });
+
+    const { result } = renderHook(() =>
+      useDatePicker({
+        name: "date",
+        calendar: {
+          useDateInput: true,
+          useDatePicker: true,
+          allowDateRange: false,
+          dateFormat: "dd.MM.yyyy",
+        } as never,
+      }),
+    );
+
+    expect(result.current.selectedDate).toBeNull();
+  });
+
+  it("parses non-ISO fallback date strings", () => {
+    setupMocks({ values: { date: "2024/01/10" } });
+
+    const { result } = renderHook(() =>
+      useDatePicker({
+        name: "date",
+        calendar: {
+          useDateInput: true,
+          useDatePicker: true,
+          allowDateRange: false,
+          dateFormat: "dd.MM.yyyy",
+        } as never,
+      }),
+    );
+
+    expect(result.current.selectedDate).toBeInstanceOf(Date);
+  });
+
   it("sets default today when setDefaultToday=true and no value", () => {
     const { setFieldValue } = setupMocks({ values: { date: null } });
 

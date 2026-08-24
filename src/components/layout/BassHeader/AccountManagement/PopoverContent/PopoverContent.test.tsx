@@ -58,6 +58,9 @@ vi.mock("react-i18next", () => ({
         en: "English",
         de: "German",
         tr: "Turkish",
+        "en-US": "English",
+        "de-DE": "German",
+        "tr-TR": "Turkish",
       };
       return translations[key] || key;
     },
@@ -120,6 +123,45 @@ describe("PopoverContent", () => {
       rules: [],
       discountBase: "NET_PRICE" as const,
     },
+    reimbursementConfig: [
+      {
+        category: "LABOR",
+        reimbursementMethods: {
+          REPAIR: "MONEY_TRANSFER",
+          EXCHANGE: "MONEY_TRANSFER",
+        },
+      },
+      {
+        category: "FREIGHT",
+        reimbursementMethods: {
+          REPAIR: "MONEY_TRANSFER",
+          EXCHANGE: "MONEY_TRANSFER",
+        },
+      },
+      {
+        category: "PACKAGING",
+        reimbursementMethods: {
+          REPAIR: "MONEY_TRANSFER",
+          EXCHANGE: "MONEY_TRANSFER",
+        },
+      },
+      {
+        category: "MATERIAL",
+        reimbursementMethods: {
+          REPAIR: "MATERIAL",
+          EXCHANGE: "MATERIAL",
+        },
+      },
+      {
+        category: "SPECIAL_MATERIAL",
+        reimbursementMethods: {
+          REPAIR: "MATERIAL",
+          EXCHANGE: "MATERIAL",
+        },
+      },
+    ],
+    reimbursementCreateOn: "1",
+    reimbursementPeriodType: "WEEKLY",
   };
 
   beforeEach(() => {
@@ -154,6 +196,7 @@ describe("PopoverContent", () => {
     language: "en",
     type: "ASC",
     ascId: "ASC-123",
+    locale: "en-TR",
     roles: ["admin"],
     permissions: ["read"],
   };
@@ -169,7 +212,7 @@ describe("PopoverContent", () => {
     // Check if English option exists within the select
     const englishOption = screen.getByRole("option", { name: "English" });
     expect(englishOption).toBeInTheDocument();
-    expect(englishOption).toHaveValue("en");
+    expect(englishOption).toHaveValue("en-US");
   });
 
   it("displays first letter of name when no profile image", () => {
@@ -220,9 +263,9 @@ describe("PopoverContent", () => {
     renderWithProviders(mockUser);
 
     const select = screen.getByRole("combobox");
-    fireEvent.change(select, { target: { value: "de" } });
+    fireEvent.change(select, { target: { value: "de-DE" } });
 
-    expect(select).toHaveValue("de");
+    expect(select).toHaveValue("de-DE");
   });
 
   it("renders Profile ID link", () => {

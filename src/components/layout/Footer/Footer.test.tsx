@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import Footer from "./Footer";
@@ -55,6 +56,27 @@ describe("Footer", () => {
     });
     renderFooter(qc);
     expect(screen.getByText("paiaLink")).toBeInTheDocument();
+  });
+
+  it("opens the privacy settings dialog on button click", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const dock = document.createElement("dock-privacy-settings");
+    document.body.appendChild(dock);
+    renderFooter(qc);
+
+    await userEvent.click(screen.getByRole("button", { name: "privacySettings" }));
+
+    expect(dock).toHaveAttribute("visible", "true");
+    dock.remove();
+  });
+
+  it("does not throw when the consent layer is not on the page", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderFooter(qc);
+
+    await userEvent.click(screen.getByRole("button", { name: "privacySettings" }));
+
+    expect(screen.getByRole("button", { name: "privacySettings" })).toBeInTheDocument();
   });
 
   it("does not render paiaLink when it is '#'", () => {

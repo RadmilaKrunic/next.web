@@ -8,6 +8,7 @@ import {
   type PriceInputs,
 } from "../../../../utils/priceCalculator";
 import type { discountBase } from "../../../../api/services/countryConfiguration/countryConfiguration";
+import { useDebouncedValue } from "../../../../hooks/useDebouncedValue";
 
 interface SparePartFieldNames {
   quantity: string;
@@ -19,7 +20,7 @@ interface SparePartFieldNames {
   /** The sibling discount field (opposite mode). Updated in sync with `discount`. */
   discountSibling?: string;
   /** Hidden field that always holds the current discount value for API mapping. */
-  discountHidden?: string;
+  discountHidden: string;
   /** Hidden field that always holds the calculated discount amount for API mapping. */
   discountAmountHidden?: string;
   taxAmount: string;
@@ -34,6 +35,8 @@ interface SparePartFieldNames {
    * Country-level price calculation mode.
    */
   discountBase?: discountBase;
+  /** When true, skip onUserEdit to prevent dirty-marking during validation API in-flight. */
+  isValidating?: boolean;
 }
 
 interface SparePartValues {
@@ -48,10 +51,10 @@ interface SparePartValues {
   totalAmount: number;
 }
 
-function detectChangedField(
+const detectChangedField = (
   prev: SparePartValues,
   cur: SparePartValues,
-): { changedField: FieldName | null; changedValue: number } {
+): { changedField: FieldName | null; changedValue: number } => {
   if (cur.quantity !== prev.quantity)
     return { changedField: "quantity", changedValue: cur.quantity };
   if (cur.unitPrice !== prev.unitPrice)
@@ -66,59 +69,57 @@ function detectChangedField(
   if (cur.totalAmount !== prev.totalAmount)
     return { changedField: "totalAmount", changedValue: cur.totalAmount };
   return { changedField: null, changedValue: 0 };
-}
+};
 
-function buildPriceInputs(
-  isInitialRecalculation: boolean,
+const buildPriceInputs = (
+  // isInitialRecalculation: boolean,
   cur: SparePartValues,
-  prev: SparePartValues,
-): PriceInputs {
-  return isInitialRecalculation
-    ? {
-        quantity: cur.quantity,
-        unitPrice: cur.unitPrice,
-        taxPercent: cur.tax,
-        discountPercent: cur.discount,
-        grossAmount: cur.grossAmount,
-        netAmount: cur.netAmount,
-        suggestedNetPrice: cur.suggestedNetPrice,
-        totalAmount: cur.totalAmount,
-        taxAmount: cur.taxAmount,
-      }
-    : {
-        quantity: prev.quantity,
-        unitPrice: prev.unitPrice,
-        taxPercent: prev.tax,
-        discountPercent: prev.discount,
-        grossAmount: prev.grossAmount,
-        netAmount: prev.netAmount,
-        suggestedNetPrice: prev.suggestedNetPrice,
-        totalAmount: prev.totalAmount,
-        taxAmount: prev.taxAmount,
-      };
-}
+  // prev: SparePartValues,
+): PriceInputs => {
+  return {
+    quantity: cur.quantity,
+    unitPrice: cur.unitPrice,
+    taxPercent: cur.tax,
+    discountPercent: cur.discount,
+    grossAmount: cur.grossAmount,
+    netAmount: cur.netAmount,
+    suggestedNetPrice: cur.suggestedNetPrice,
+    totalAmount: cur.totalAmount,
+    taxAmount: cur.taxAmount,
+  };
+};
 
 type InitialRecalcDecision =
   | { outcome: "skip" }
   | { outcome: "proceed"; changedField: FieldName; changedValue: number }
   | { outcome: "continue" };
 
-function resolveInitialRecalculation(
+const resolveInitialRecalculation = (
   prev: SparePartValues,
   cur: SparePartValues,
   prevRef: { current: SparePartValues },
-): InitialRecalcDecision {
+): InitialRecalcDecision => {
   const isPrevAllZero =
-    prev.quantity === 0 && prev.unitPrice === 0 && prev.netAmount === 0 && prev.grossAmount === 0;
+    !prev ||
+    (prev.quantity === 0 &&
+      prev.unitPrice === 0 &&
+      prev.netAmount === 0 &&
+      prev.grossAmount === 0 &&
+      prev.grossAmount === 0);
+
   const hasAnyNewValue =
-    cur.unitPrice !== 0 || cur.netAmount !== 0 || cur.grossAmount !== 0 || cur.totalAmount !== 0;
-  if (!isPrevAllZero || !hasAnyNewValue) return { outcome: "continue" };
+    cur &&
+    cur.unitPrice !== 0 &&
+    (cur.netAmount !== 0 || cur.grossAmount !== 0 || cur.totalAmount !== 0 || cur.quantity !== 0);
+
+  if (!isPrevAllZero) return { outcome: "continue" };
+  if (!hasAnyNewValue) return { outcome: "skip" };
   prevRef.current = cur;
   const needsInitialRecalculation =
     cur.unitPrice > 0 &&
     cur.quantity > 0 &&
-    cur.tax > 0 &&
     cur.grossAmount === 0 &&
+    cur.netAmount === 0 &&
     cur.totalAmount === 0;
   // Backend may have updated unitPrice/tax while keeping stale downstream prices.
   const needsStaleRecalculation =
@@ -128,46 +129,54 @@ function resolveInitialRecalculation(
     roundToTwo(cur.quantity * cur.unitPrice) !== cur.suggestedNetPrice;
   if (!needsInitialRecalculation && !needsStaleRecalculation) return { outcome: "skip" };
   return { outcome: "proceed", changedField: "unitPrice", changedValue: cur.unitPrice };
-}
+};
 
-function shouldSkipEmptyFieldChange(
+const shouldSkipEmptyFieldChange = (
   changedField: FieldName,
   changedValue: number,
   isInitialRecalculation: boolean,
-  values: Record<string, unknown>,
-  fieldNames: SparePartFieldNames,
+  rawValues: {
+    unitPrice: unknown;
+    netAmount: unknown;
+    grossAmount: unknown;
+    totalAmount: unknown;
+    discount: unknown;
+    taxPercent: unknown;
+  },
   prevRef: { current: SparePartValues },
-): boolean {
+): boolean => {
   if (isInitialRecalculation) return false;
-  const emptyFieldMap: Partial<Record<FieldName, string>> = {
-    unitPrice: fieldNames.unitPrice,
-    netAmount: fieldNames.netAmount,
-    grossAmount: fieldNames.grossAmount,
-    totalAmount: fieldNames.totalAmount,
-    discountPercent: fieldNames.discount,
+  const emptyFieldMap: Partial<Record<FieldName, keyof typeof rawValues>> = {
+    unitPrice: "unitPrice",
+    netAmount: "netAmount",
+    grossAmount: "grossAmount",
+    totalAmount: "totalAmount",
+    discountPercent: "discount",
+    taxPercent: "taxPercent",
   };
   const rawKey = emptyFieldMap[changedField];
-  if (rawKey === undefined || values[rawKey] !== "") return false;
+  if (rawKey === undefined || rawValues[rawKey] !== "") return false;
   const prevKeyMap: Partial<Record<FieldName, keyof SparePartValues>> = {
     unitPrice: "unitPrice",
     netAmount: "netAmount",
     grossAmount: "grossAmount",
     totalAmount: "totalAmount",
     discountPercent: "discount",
+    taxPercent: "tax",
   };
   const prevKey = prevKeyMap[changedField];
   if (prevKey !== undefined) {
     prevRef.current = { ...prevRef.current, [prevKey]: changedValue };
   }
   return true;
-}
+};
 
-function clampChangedValue(
+const clampChangedValue = (
   changedField: FieldName,
   changedValue: number,
   prev: SparePartValues,
   discountBase: discountBase | undefined,
-): number {
+): number => {
   if (changedValue < 0) return 0;
   if (changedField === "totalAmount" && discountBase !== "NET_PRICE") {
     if (prev.grossAmount > 0 && changedValue > prev.grossAmount) return prev.grossAmount;
@@ -177,25 +186,7 @@ function clampChangedValue(
       return prev.suggestedNetPrice;
   }
   return changedValue;
-}
-
-function buildOptionalFieldCalls(
-  fieldNames: SparePartFieldNames,
-  results: { discountPercent: number; discountAmount: number },
-  setFieldValue: (name: string, value: unknown) => Promise<unknown>,
-): Promise<unknown>[] {
-  const calls: Promise<unknown>[] = [];
-  if (fieldNames.discountSibling) {
-    calls.push(setFieldValue(fieldNames.discountSibling, results.discountPercent));
-  }
-  if (fieldNames.discountHidden) {
-    calls.push(setFieldValue(fieldNames.discountHidden, results.discountPercent));
-  }
-  if (fieldNames.discountAmountHidden) {
-    calls.push(setFieldValue(fieldNames.discountAmountHidden, results.discountAmount));
-  }
-  return calls;
-}
+};
 
 /**
  * Custom hook to handle automatic price calculations for spare part fields
@@ -207,22 +198,36 @@ export const useSparePartPriceCalculation = (fieldNames: SparePartFieldNames) =>
   const { values, setFieldValue } = useFormikContext<Record<string, unknown>>();
   const isCalculatingRef = useRef(false);
 
-  useEffect(() => {
-    const current = values[fieldNames.discount];
-    if (current === "" || current == null) {
-      void setFieldValue(fieldNames.discount, 0);
-    }
-  }, [fieldNames.discount, setFieldValue, values]);
+  // Raw field values for empty-check (before Number() coercion)
+  const rawUnitPrice = values[fieldNames.unitPrice];
+  const rawNetAmount = values[fieldNames.netAmount];
+  const rawGrossAmount = values[fieldNames.grossAmount];
+  const rawTotalAmount = values[fieldNames.totalAmount];
+  const rawDiscount = values[fieldNames.discount];
+  const rawTaxPercent = values[fieldNames.tax];
 
   const quantity = Number(values[fieldNames.quantity]) || 0;
-  const unitPrice = Number(values[fieldNames.unitPrice]) || 0;
-  const netAmount = Number(values[fieldNames.netAmount]) || 0;
+  const unitPrice = Number(rawUnitPrice) || 0;
+  const netAmount = Number(rawNetAmount) || 0;
   const suggestedNetPrice = Number(values[fieldNames.suggestedNetPrice]) || 0;
-  const tax = Number(values[fieldNames.tax]) || 0;
+  const tax = Number(rawTaxPercent) || 0;
   const taxAmount = Number(values[fieldNames.taxAmount]) || 0;
-  const grossAmount = Number(values[fieldNames.grossAmount]) || 0;
-  const discount = Number(values[fieldNames.discount]) || 0;
-  const totalAmount = Number(values[fieldNames.totalAmount]) || 0;
+  const grossAmount = Number(rawGrossAmount) || 0;
+  const discount = Number(rawDiscount) || 0;
+  const totalAmount = Number(rawTotalAmount) || 0;
+
+  const recalculationTriggerSnapshot = JSON.stringify([
+    values[fieldNames.quantity],
+    rawUnitPrice,
+    rawNetAmount,
+    values[fieldNames.suggestedNetPrice],
+    rawTaxPercent,
+    values[fieldNames.taxAmount],
+    rawGrossAmount,
+    rawDiscount,
+    rawTotalAmount,
+  ]);
+  const debouncedRecalculationTrigger = useDebouncedValue(recalculationTriggerSnapshot, 300);
 
   const prevValuesRef = useRef({
     quantity,
@@ -236,6 +241,18 @@ export const useSparePartPriceCalculation = (fieldNames: SparePartFieldNames) =>
     totalAmount,
   });
 
+  const setInputsOnPriceOrQuantityChange = (
+    changedField: string,
+    changedValue: number,
+    inputs: PriceInputs,
+  ) => {
+    if (changedField === "unitPrice" || changedField === "quantity") {
+      const freshQty = changedField === "quantity" ? changedValue : inputs.quantity;
+      const freshPrice = changedField === "unitPrice" ? changedValue : inputs.unitPrice;
+      inputs.suggestedNetPrice = roundToTwo(freshQty * freshPrice);
+    }
+    return inputs;
+  };
   useEffect(() => {
     if (isCalculatingRef.current) return;
 
@@ -252,87 +269,7 @@ export const useSparePartPriceCalculation = (fieldNames: SparePartFieldNames) =>
       totalAmount,
     };
     let { changedField, changedValue } = detectChangedField(prev, cur);
-
-    if (changedField) {
-      let isInitialRecalculation = false;
-
-      const initDecision = resolveInitialRecalculation(prev, cur, prevValuesRef);
-      if (initDecision.outcome === "skip") return;
-      if (initDecision.outcome === "proceed") {
-        changedField = initDecision.changedField;
-        changedValue = initDecision.changedValue;
-        isInitialRecalculation = true;
-      }
-
-      const shouldSkipCalc =
-        (cur.unitPrice === 0 && prev.unitPrice === 0) || !!fieldNames.isResyncingRef?.current;
-      if (shouldSkipCalc) {
-        prevValuesRef.current = cur;
-        return;
-      }
-
-      if (
-        shouldSkipEmptyFieldChange(
-          changedField,
-          changedValue,
-          isInitialRecalculation,
-          values,
-          fieldNames,
-          prevValuesRef,
-        )
-      ) {
-        return;
-      }
-
-      // Clamp values to valid ranges
-      changedValue = clampChangedValue(changedField, changedValue, prev, fieldNames.discountBase);
-
-      if (!isInitialRecalculation) {
-        fieldNames.onUserEdit?.();
-      }
-
-      isCalculatingRef.current = true;
-
-      // For initial recalculation use the current values; for user-driven changes use prev
-      const inputs: PriceInputs = buildPriceInputs(isInitialRecalculation, cur, prev);
-
-      const results = calculatePrices(
-        inputs,
-        changedField,
-        changedValue,
-        fieldNames.discountBase ?? "GROSS_PRICE",
-      );
-
-      prevValuesRef.current = {
-        quantity: results.quantity,
-        unitPrice: results.unitPrice,
-        netAmount: results.netAmount,
-        suggestedNetPrice: results.suggestedNetPrice,
-        tax: results.taxPercent,
-        taxAmount: results.taxAmount,
-        grossAmount: results.grossAmount,
-        discount: results.discountPercent,
-        totalAmount: results.totalAmount,
-      };
-
-      const setFieldCalls: Array<Promise<unknown>> = [
-        setFieldValue(fieldNames.quantity, results.quantity),
-        setFieldValue(fieldNames.unitPrice, results.unitPrice),
-        setFieldValue(fieldNames.netAmount, results.netAmount),
-        setFieldValue(fieldNames.suggestedNetPrice, results.suggestedNetPrice),
-        setFieldValue(fieldNames.tax, results.taxPercent),
-        setFieldValue(fieldNames.grossAmount, results.grossAmount),
-        setFieldValue(fieldNames.discount, results.discountPercent),
-        setFieldValue(fieldNames.taxAmount, results.taxAmount),
-        setFieldValue(fieldNames.totalAmount, results.totalAmount),
-      ];
-
-      setFieldCalls.push(...buildOptionalFieldCalls(fieldNames, results, setFieldValue));
-
-      void Promise.all(setFieldCalls).then(() => {
-        isCalculatingRef.current = false;
-      });
-    } else {
+    if (!changedField) {
       prevValuesRef.current = {
         quantity,
         unitPrice,
@@ -344,19 +281,147 @@ export const useSparePartPriceCalculation = (fieldNames: SparePartFieldNames) =>
         discount,
         totalAmount,
       };
+      return;
     }
-  }, [
-    quantity,
-    unitPrice,
-    netAmount,
-    tax,
-    taxAmount,
-    grossAmount,
-    discount,
-    totalAmount,
-    suggestedNetPrice,
-    fieldNames,
-    setFieldValue,
-    values,
-  ]);
+    const skipIfFocused = (
+      name: string | undefined,
+      focusedFieldName: string | null,
+      value: number,
+      setFieldCalls: Array<Promise<unknown>>,
+    ) => {
+      if (name && focusedFieldName !== name) {
+        setFieldCalls.push(setFieldValue(name, value));
+      }
+    };
+    let isInitialRecalculation = false;
+    const initDecision = resolveInitialRecalculation(prev, cur, prevValuesRef);
+    if (initDecision.outcome === "skip") return;
+    if (initDecision.outcome === "proceed") {
+      changedField = initDecision.changedField;
+      changedValue = initDecision.changedValue;
+      isInitialRecalculation = true;
+    }
+
+    // Always recalculate during initial recalc (isResyncingRef must not block it).
+    const hasMissingPrices =
+      cur.unitPrice > 0 &&
+      cur.quantity > 0 &&
+      (cur.suggestedNetPrice === 0 ||
+        cur.netAmount === 0 ||
+        cur.grossAmount === 0 ||
+        cur.totalAmount === 0);
+
+    const fieldManuallyChanged =
+      prev.discount !== cur.discount ||
+      prev.netAmount !== cur.netAmount ||
+      prev.totalAmount !== cur.totalAmount ||
+      prev.tax !== cur.tax;
+    const shouldSkipCalc =
+      !fieldManuallyChanged &&
+      !hasMissingPrices &&
+      !isInitialRecalculation &&
+      (!!fieldNames.isResyncingRef?.current || (cur.unitPrice === 0 && prev.unitPrice === 0));
+
+    if (shouldSkipCalc) {
+      prevValuesRef.current = cur;
+      return;
+    }
+
+    if (
+      shouldSkipEmptyFieldChange(
+        changedField,
+        changedValue,
+        isInitialRecalculation,
+        {
+          unitPrice: rawUnitPrice,
+          netAmount: rawNetAmount,
+          grossAmount: rawGrossAmount,
+          totalAmount: rawTotalAmount,
+          discount: rawDiscount,
+          taxPercent: rawTaxPercent,
+        },
+        prevValuesRef,
+      )
+    ) {
+      return;
+    }
+
+    // Clamp values to valid ranges
+    changedValue = clampChangedValue(changedField, changedValue, prev, fieldNames.discountBase);
+
+    if (!isInitialRecalculation && !fieldNames.isValidating) {
+      fieldNames.onUserEdit?.();
+    }
+
+    isCalculatingRef.current = true;
+
+    let inputs: PriceInputs = buildPriceInputs(cur);
+
+    inputs = setInputsOnPriceOrQuantityChange(changedField, changedValue, inputs);
+
+    const results = calculatePrices(
+      inputs,
+      changedField,
+      changedValue,
+      fieldNames.discountBase ?? "GROSS_PRICE",
+    );
+
+    prevValuesRef.current = {
+      quantity: results.quantity,
+      unitPrice: results.unitPrice,
+      netAmount: results.netAmount,
+      suggestedNetPrice: results.suggestedNetPrice,
+      tax: results.taxPercent,
+      taxAmount: results.taxAmount,
+      grossAmount: results.grossAmount,
+      discount: results.discountPercent,
+      totalAmount: results.totalAmount,
+    };
+
+    // Helper to skip setting a field if it's currently focused (user is typing)
+    // Use document.activeElement to detect the focused field by matching its name attribute
+    const activeElement = document.activeElement as HTMLInputElement | null;
+    const focusedFieldName = activeElement?.getAttribute?.("name") || null;
+    const setIfNotFocused = (name: string, value: unknown) => {
+      if (focusedFieldName !== name) {
+        return setFieldValue(name, value);
+      }
+      return Promise.resolve();
+    };
+    const setFieldCalls: Array<Promise<unknown>> = [
+      setIfNotFocused(fieldNames.quantity, results.quantity),
+      setIfNotFocused(fieldNames.unitPrice, results.unitPrice),
+      setIfNotFocused(fieldNames.netAmount, results.netAmount),
+      setIfNotFocused(fieldNames.suggestedNetPrice, results.suggestedNetPrice),
+      setIfNotFocused(fieldNames.tax, results.taxPercent),
+      setIfNotFocused(fieldNames.grossAmount, results.grossAmount),
+      setIfNotFocused(fieldNames.discount, results.discountPercent),
+      setIfNotFocused(fieldNames.taxAmount, results.taxAmount),
+      setIfNotFocused(fieldNames.totalAmount, results.totalAmount),
+    ];
+
+    skipIfFocused(
+      fieldNames.discountSibling,
+      focusedFieldName,
+      results.discountPercent,
+      setFieldCalls,
+    );
+    skipIfFocused(
+      fieldNames.discountHidden,
+      focusedFieldName,
+      results.discountPercent,
+      setFieldCalls,
+    );
+    skipIfFocused(
+      fieldNames.discountAmountHidden,
+      focusedFieldName,
+      results.discountAmount,
+      setFieldCalls,
+    );
+
+    void Promise.all(setFieldCalls).then(() => {
+      isCalculatingRef.current = false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: gated on the
+  }, [debouncedRecalculationTrigger, fieldNames, setFieldValue]);
 };

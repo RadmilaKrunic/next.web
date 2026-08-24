@@ -27,9 +27,13 @@ vi.mock("@bosch/react-frok", () => ({
       : null,
 }));
 
+const documentFileMock = vi.hoisted(() => vi.fn());
+
 vi.mock("../DocumentFile/DocumentFile", () => ({
-  default: ({ name }: { name: string }) =>
-    React.createElement("div", { "data-testid": `doc-file-${name}` }, name),
+  default: (props: { name: string }) => {
+    documentFileMock(props);
+    return React.createElement("div", { "data-testid": `doc-file-${props.name}` }, props.name);
+  },
 }));
 
 vi.mock("../../../hooks/useClickOutside", () => ({ useClickOutside: vi.fn() }));
@@ -84,5 +88,17 @@ describe("DocumentsModal", () => {
   it("renders modal title", () => {
     renderModal();
     expect(screen.getByText("documents")).toBeInTheDocument();
+  });
+
+  it("forwards sourceReferenceId to document file", () => {
+    renderModal({
+      attachments: [
+        { name: "file1.pdf", type: "INVOICE", attachmentId: "att-1", sourceReferenceId: "src-1" },
+      ],
+    });
+
+    expect(documentFileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceReferenceId: "src-1" }),
+    );
   });
 });

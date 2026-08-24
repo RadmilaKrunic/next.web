@@ -18,6 +18,7 @@ export const localeMap: Record<string, Locale> = {
   "en-ZA": enZA,
   "de-DE": de,
   "sr-BA": sr,
+  "sr-RS": sr,
   "tr-TR": tr,
   "hi-IN": hi,
   "zh-CN": zhCN,

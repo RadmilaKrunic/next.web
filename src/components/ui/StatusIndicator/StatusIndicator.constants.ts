@@ -24,6 +24,8 @@ export const STATUS_TYPE: Record<string, string> = {
   RETURN_UNASSEMBLY: "purple",
   IN_REPAIR: "green",
   READY_FOR_REPAIR: "lightGreen",
+  ACTIVE: "green",
+  INACTIVE: "red",
 };
 
 export const getJobStatusMessages = (t: (key: string) => string): Record<string, string> => ({
@@ -51,9 +53,28 @@ export const getClaimStatusMessages = (t: (key: string) => string): Record<strin
   CANCELLED: t("claimStatusCancelledMessage"),
 });
 
+export const getEmployeeStatusMessages = (t: (key: string) => string): Record<string, string> => ({
+  ACTIVE: t("employeeStatus"),
+  INACTIVE: t("employeeStatus"),
+});
+
+export const getAscStatusMessages = (t: (key: string) => string): Record<string, string> => ({
+  ACTIVE: t("status"),
+  INACTIVE: t("status"),
+  DRAFT: t("status"),
+});
+
 export const getStatusMessages = (
-  type: "job" | "claim" | "sparePart",
+  type: "job" | "claim" | "sparePart" | "employee" | "ASC",
   t: (key: string) => string,
 ): Record<string, string> => {
-  return type === "claim" ? getClaimStatusMessages(t) : getJobStatusMessages(t);
+  if (type === "claim") {
+    return getClaimStatusMessages(t);
+  } else if (type === "employee") {
+    return getEmployeeStatusMessages(t);
+  } else if (type === "ASC") {
+    return getAscStatusMessages(t);
+  } else {
+    return getJobStatusMessages(t);
+  }
 };

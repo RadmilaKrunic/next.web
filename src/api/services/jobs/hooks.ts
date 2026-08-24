@@ -5,7 +5,7 @@ import {
   UseMutationOptions,
   useQueryClient,
 } from "@tanstack/react-query";
-import { DEFAULT_GC_TIME_MS, DEFAULT_STALE_TIME_MS } from "../../../utils/queryConstants";
+import { DEFAULT_STALE_TIME_MS } from "../../../utils/queryConstants";
 import { Job, Message, Attachment } from "modules/JobManagement/JobList/JobList.types";
 import {
   fetchJobs,
@@ -31,6 +31,7 @@ import {
   postCreateCostEstimate,
   postCustomerAnswer,
   updateJobAttachments,
+  postPurchaseDate,
 } from "./action";
 import { SpecialMaterial } from "modules/JobManagement/JobOverview/AddSpecialMaterialModal/SpecialMeterialItem/SpecialMaterialItem";
 
@@ -75,9 +76,9 @@ export const useJobById = (jobId: string) => {
     queryFn: () => fetchJobById(jobId),
     enabled: !!jobId,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    staleTime: DEFAULT_STALE_TIME_MS,
-    gcTime: DEFAULT_GC_TIME_MS,
+    refetchOnMount: "always",
+    staleTime: 0,
+    gcTime: 0,
   });
 };
 
@@ -105,9 +106,9 @@ export const useDiagnosticByJobId = (
     queryFn: () => fetchDiagnosticByJobId(jobId),
     enabled: !!jobId,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    staleTime: DEFAULT_STALE_TIME_MS,
-    gcTime: DEFAULT_GC_TIME_MS,
+    refetchOnMount: "always",
+    staleTime: 0,
+    gcTime: 0,
     ...options,
   });
 };
@@ -265,6 +266,16 @@ export const useUpdateJobAttachments = (
   return useMutation({
     mutationFn: ({ jobId, attachments }: { jobId: string; attachments: Attachment[] }) =>
       updateJobAttachments(jobId, attachments),
+    ...options,
+  });
+};
+
+export const usePostPurchaseDate = (
+  options?: UseMutationOptions<void, Error, { jobId: string; purchaseDate: string }>,
+) => {
+  return useMutation({
+    mutationFn: ({ jobId, purchaseDate }: { jobId: string; purchaseDate: string }) =>
+      postPurchaseDate(jobId, purchaseDate),
     ...options,
   });
 };

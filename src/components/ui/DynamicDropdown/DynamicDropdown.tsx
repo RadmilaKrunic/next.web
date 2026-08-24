@@ -281,7 +281,7 @@ function DynamicDropdown({
   return (
     <div className={`dynamic-dropdown ${className}`}>
       <Dropdown
-        label={`${t(label)} ${required ? "*" : ""}`}
+        label={`${label ? t(label) : ""} ${required ? "*" : ""}`}
         className={`a-dropdown ${className}`}
         name={name}
         disabled={disabled || isLoading}

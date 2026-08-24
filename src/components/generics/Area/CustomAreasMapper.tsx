@@ -8,6 +8,7 @@ import ArchivedSparePartsArea from "modules/JobManagement/JobOverview/ArchivedSp
 import ClaimSparePartsArea from "modules/ClaimManagement/ClaimOverview/ClaimSparePartsArea/ClaimSparePartsArea";
 import ClaimSummaryArea from "modules/ClaimManagement/ClaimOverview/ClaimSummaryArea/ClaimSummaryArea";
 import ClaimArchivedSparePartsArea from "modules/ClaimManagement/ClaimOverview/ClaimArchivedSparePartsArea/ClaimArchivedSparePartsArea";
+import AscReimbursementArea from "../../../modules/AccountManagement/ASC/AscReimbursementArea/AscReimbursementArea";
 
 export const getCustomArea = (area: Area) => {
   if (area.name.includes("accessory")) {
@@ -54,5 +55,10 @@ export const getCustomArea = (area: Area) => {
   if (area.name.includes("archivedSpareParts")) {
     return <ArchivedSparePartsArea area={area} />;
   }
+
+  if (area.name.includes("AscReimbursementArea")) {
+    return <AscReimbursementArea area={area} />;
+  }
+
   return null;
 };

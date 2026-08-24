@@ -8,11 +8,15 @@ import {
   isFieldVisible,
   getVisibleFields,
   mapAreaDependentFields,
+  mapFieldsFromMultipleArea,
   getAllAreasFromSection,
   getAllFieldsFromSection,
   getAllFieldsFromForm,
   setSectionDisabledState,
   toggleSectionFieldsDisabled,
+  setDuplicatedSection,
+  setInitalSectionsAreasFields,
+  setDuplicatedArea,
   mapFieldToFieldMapping,
   getInitialFieldValues,
   mapValuesToAPI,
@@ -615,6 +619,24 @@ describe("isDependedAndVisible", () => {
     const deps = [{ fieldName: "unknown", fieldValue: "REPAIR" }];
     expect(isDependedAndVisible(formValues, formFields, deps, "AND")).toBe(false);
   });
+
+  it("returns false when comparing against a null expectedValue even if the actual value is truthy", () => {
+    const formValues = { type: "REPAIR" };
+    const deps = [{ fieldName: "type", fieldValue: null }];
+    expect(isDependedAndVisible(formValues, formFields, deps, "AND")).toBe(false);
+  });
+
+  it("returns false when comparing object values, even if structurally equal", () => {
+    const formValues = { type: { nested: true } };
+    const deps = [{ fieldName: "type", fieldValue: { nested: true } }];
+    expect(isDependedAndVisible(formValues, formFields, deps, "AND")).toBe(false);
+  });
+
+  it("coerces primitive types when comparing (number vs string)", () => {
+    const formValues = { type: 5 };
+    const deps = [{ fieldName: "type", fieldValue: "5" }];
+    expect(isDependedAndVisible(formValues, formFields, deps, "AND")).toBe(true);
+  });
 });
 
 describe("isFieldVisible", () => {
@@ -648,6 +670,26 @@ describe("isFieldVisible", () => {
       dependFieldCondition: "AND",
     });
     expect(isFieldVisible(sub, [parent, sub], { type: "WARRANTY" })).toBe(false);
+  });
+
+  it("returns false when field.isHidden is true, regardless of subfield status", () => {
+    const field = makeField({ name: "f1", isHidden: true, isSubField: false });
+    expect(isFieldVisible(field, [field], {})).toBe(false);
+  });
+
+  it("defaults to AND condition when dependFieldCondition is not specified", () => {
+    const parent = makeField({ name: "type" });
+    const sub = makeField({
+      name: "sub",
+      isSubField: true,
+      dependentFields: [
+        { fieldName: "type", fieldValue: "REPAIR" },
+        { fieldName: "missing", fieldValue: "X" },
+      ],
+    });
+    // No dependFieldCondition specified -> defaults to "AND" -> "missing" isn't in the
+    // fields list, so the AND condition can never be satisfied.
+    expect(isFieldVisible(sub, [parent, sub], { type: "REPAIR" })).toBe(false);
   });
 });
 
@@ -705,6 +747,49 @@ describe("mapAreaDependentFields", () => {
     expect(result[0].dependentFields).toEqual(deps);
     expect(result[0].dependFieldCondition).toBe("OR");
   });
+
+  it("merges the field's own existing dependentFields with the area's dependentFields", () => {
+    const field = makeField({
+      name: "f1",
+      dependentFields: [{ fieldName: "existing", fieldValue: "X" }],
+    });
+    const area = makeArea([field], {
+      isSubArea: true,
+      dependentFields: [{ fieldName: "type", fieldValue: "REPAIR" }],
+    });
+    const result = mapAreaDependentFields(area);
+    expect(result[0].dependentFields).toEqual([
+      { fieldName: "existing", fieldValue: "X" },
+      { fieldName: "type", fieldValue: "REPAIR" },
+    ]);
+  });
+});
+
+describe("mapFieldsFromMultipleArea", () => {
+  it("returns fields unchanged (same reference) when the area is not multiple", () => {
+    const field = makeField({ name: "f1", attributeMapping: "a.b" });
+    const area = makeArea([field], { isMultiple: false });
+    const result = mapFieldsFromMultipleArea(area);
+    expect(result).toBe(area.fields);
+    expect(result[0].name).toBe("f1");
+  });
+
+  it("prefixes field name and attributeMapping with a default index of 0 when isMultiple is true", () => {
+    const field = makeField({ name: "f1", attributeMapping: "field" });
+    const area = makeArea([field], { name: "myArea", isMultiple: true });
+    const result = mapFieldsFromMultipleArea(area);
+    expect(area.index).toBe(0);
+    expect(result[0].name).toBe("0_f1");
+    expect(result[0].attributeMapping).toBe("myArea_0.field");
+  });
+
+  it("uses the area's existing index when it is already set", () => {
+    const field = makeField({ name: "f1", attributeMapping: "field" });
+    const area = makeArea([field], { name: "myArea", isMultiple: true, index: 3 });
+    const result = mapFieldsFromMultipleArea(area);
+    expect(result[0].name).toBe("3_f1");
+    expect(result[0].attributeMapping).toBe("myArea_3.field");
+  });
 });
 
 describe("getAllAreasFromSection", () => {
@@ -734,6 +819,15 @@ describe("getAllFieldsFromSection", () => {
   it("returns empty array when section has no areas", () => {
     expect(getAllFieldsFromSection(makeSection([]))).toEqual([]);
   });
+
+  it("excludes fields of type 'infoIcon'", () => {
+    const f1 = makeField({ name: "f1", type: "text" });
+    const f2 = makeField({ name: "f2", type: "infoIcon" });
+    const section = makeSection([makeArea([f1, f2], { isSubArea: false })]);
+    const result = getAllFieldsFromSection(section);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("f1");
+  });
 });
 
 describe("getAllFieldsFromForm", () => {
@@ -751,6 +845,14 @@ describe("getAllFieldsFromForm", () => {
       ],
     };
     expect(getAllFieldsFromForm(form)).toHaveLength(2);
+  });
+
+  it("returns empty array when form is undefined", () => {
+    expect(getAllFieldsFromForm(undefined as unknown as GenericForm)).toEqual([]);
+  });
+
+  it("returns empty array when form.sections is undefined", () => {
+    expect(getAllFieldsFromForm({ sections: undefined } as unknown as GenericForm)).toEqual([]);
   });
 });
 
@@ -794,6 +896,15 @@ describe("setSectionDisabledState", () => {
     const result = setSectionDisabledState(section);
     expect(result.isDisabled).toBe(false);
   });
+
+  it("keeps alwaysDisabled fields disabled even when the section is explicitly enabled", () => {
+    const f1 = makeField({ name: "f1", isDisabled: true, alwaysDisabled: true });
+    const f2 = makeField({ name: "f2", isDisabled: true });
+    const section = makeSection([makeArea([f1, f2], { isSubArea: false })]);
+    const result = setSectionDisabledState(section, false);
+    expect(result.areas[0].fields[0].isDisabled).toBe(true);
+    expect(result.areas[0].fields[1].isDisabled).toBe(false);
+  });
 });
 
 describe("toggleSectionFieldsDisabled", () => {
@@ -817,6 +928,147 @@ describe("toggleSectionFieldsDisabled", () => {
     const allFields = [makeField({ name: "f1", isDisabled: true })];
     const result = toggleSectionFieldsDisabled(allFields, section, false);
     expect(result[0].isDisabled).toBe(false);
+  });
+
+  it("keeps alwaysDisabled fields disabled even when toggling the section to enabled", () => {
+    const section = makeSection([
+      makeArea([makeField({ name: "f1", alwaysDisabled: true })], { isSubArea: false }),
+    ]);
+    const allFields = [makeField({ name: "f1", isDisabled: true, alwaysDisabled: true })];
+    const result = toggleSectionFieldsDisabled(allFields, section, false);
+    expect(result[0].isDisabled).toBe(true);
+  });
+});
+
+describe("setDuplicatedSection", () => {
+  it("renames the section, its areas, and fields to use the new index", () => {
+    const field = makeField({ name: "mySection#0_area_field" });
+    const area = makeArea([field], { name: "mySection#0_area" });
+    const section = makeSection([area], { name: "mySection#0" });
+
+    const result = setDuplicatedSection(section, 2);
+
+    expect(result.name).toBe("mySection#2");
+    expect(result.index).toBe(2);
+    expect(result.areas[0].name).toBe("mySection#2_area");
+    expect(result.areas[0].fields[0].name).toBe("mySection#2_area_field");
+  });
+
+  it("updates dependentFields referencing a renamed field in another area of the section", () => {
+    const positionField = makeField({ name: "mySection#0_area_position" });
+    const dependentField = makeField({
+      name: "mySection#0_area_dependent",
+      isSubField: true,
+      dependentFields: [{ fieldName: "mySection#0_area_position", fieldValue: "SP" }],
+    });
+    const area = makeArea([positionField, dependentField], { name: "mySection#0_area" });
+    const section = makeSection([area], { name: "mySection#0" });
+
+    const result = setDuplicatedSection(section, 1);
+
+    expect(result.areas[0].fields[1].dependentFields?.[0].fieldName).toBe(
+      "mySection#1_area_position",
+    );
+  });
+});
+
+describe("setInitalSectionsAreasFields", () => {
+  it("adds a #0 suffix and index to a multiple section on first initialization", () => {
+    const field = makeField({ name: "field1" });
+    const area = makeArea([field], { name: "area1" });
+    const section = makeSection([area], { name: "mySection", isMultiple: true });
+    const form: GenericForm = {
+      name: "form",
+      formGroup: "test",
+      position: 1,
+      actions: null,
+      sections: [section],
+    };
+
+    const result = setInitalSectionsAreasFields(form);
+
+    expect(result[0].name).toBe("mySection#0");
+    expect(result[0].index).toBe(0);
+  });
+
+  it("does not re-append #0 when the section already has an index", () => {
+    const field = makeField({ name: "field1" });
+    const area = makeArea([field], { name: "area1" });
+    const section = makeSection([area], { name: "mySection#0", isMultiple: true, index: 0 });
+    const form: GenericForm = {
+      name: "form",
+      formGroup: "test",
+      position: 1,
+      actions: null,
+      sections: [section],
+    };
+
+    const result = setInitalSectionsAreasFields(form);
+
+    expect(result[0].name).toBe("mySection#0");
+  });
+
+  it("prefixes area names with the section name when the section is multiple", () => {
+    const field = makeField({ name: "field1" });
+    const area = makeArea([field], { name: "area1" });
+    const section = makeSection([area], { name: "mySection", isMultiple: true });
+    const form: GenericForm = {
+      name: "form",
+      formGroup: "test",
+      position: 1,
+      actions: null,
+      sections: [section],
+    };
+
+    const result = setInitalSectionsAreasFields(form);
+
+    expect(result[0].areas[0].name).toBe("mySection#0_area1");
+  });
+
+  it("prefixes field names with the (indexed) area name when the area is multiple", () => {
+    const field = makeField({ name: "field1" });
+    const area = makeArea([field], { name: "area1", isMultiple: true });
+    const section = makeSection([area], { name: "mySection" });
+    const form: GenericForm = {
+      name: "form",
+      formGroup: "test",
+      position: 1,
+      actions: null,
+      sections: [section],
+    };
+
+    const result = setInitalSectionsAreasFields(form);
+
+    expect(result[0].areas[0].fields[0].name).toBe("mySection_area1#0_field1");
+  });
+
+  it("does not re-prefix a field name that already includes the final area name", () => {
+    const field = makeField({ name: "mySection_area1#0_field1" });
+    const area = makeArea([field], { name: "mySection_area1#0", isMultiple: true, index: 0 });
+    const section = makeSection([area], { name: "mySection" });
+    const form: GenericForm = {
+      name: "form",
+      formGroup: "test",
+      position: 1,
+      actions: null,
+      sections: [section],
+    };
+
+    const result = setInitalSectionsAreasFields(form);
+    expect(result[0].areas[0].fields[0].name).toBe("mySection_area1#0_field1");
+  });
+});
+
+describe("setDuplicatedArea", () => {
+  it("renames the area (with a new #index) and its fields, scoped under the section name", () => {
+    const field = makeField({ name: "mySection_myArea#0_field1" });
+    const area = makeArea([field], { name: "mySection_myArea#0" });
+
+    const result = setDuplicatedArea(area, 2, "mySection");
+
+    expect(result.name).toBe("mySection_myArea#2");
+    expect(result.index).toBe(2);
+    expect(result.fields[0].name).toBe("mySection_myArea#2_field1");
   });
 });
 
@@ -917,6 +1169,25 @@ describe("mapValuesToAPI", () => {
     const result = mapValuesToAPI({ active: false }, [makeApiField("active", "job.active")]);
     expect(result.job).toEqual({ active: false });
   });
+
+  it("maps a field with a '#' array segment into the correct array index of the API structure", () => {
+    const field = mapFieldToFieldMapping(
+      makeField({
+        name: "materials#1_position",
+        attributeMapping: "diagnostic.materials#.position",
+      }),
+    );
+    const result = mapValuesToAPI({ "materials#1_position": "SP" }, [field]);
+    expect(result.diagnostic.materials[1].position).toBe("SP");
+  });
+
+  it("falls back to sameDataFieldAs value when the field's own value is empty", () => {
+    const field = mapFieldToFieldMapping(
+      makeField({ name: "jobType", attributeMapping: "job.type", sameDataFieldAs: "otherType" }),
+    );
+    const result = mapValuesToAPI({ jobType: "", otherType: "WARRANTY" }, [field]);
+    expect(result.job.type).toBe("WARRANTY");
+  });
 });
 
 describe("mapValuesFromAPI", () => {
@@ -945,6 +1216,60 @@ describe("mapValuesFromAPI", () => {
   it("returns empty string when field is missing and has no defaultValue", () => {
     const result = mapValuesFromAPI({ job: {} }, [makeApiField("jobType", "job.type")]);
     expect(result.jobType).toBe("");
+  });
+
+  it("reads a value from an array position using the '#' prefix convention", () => {
+    const field = mapFieldToFieldMapping(
+      makeField({
+        name: "materials#1_position",
+        attributeMapping: "diagnostic.materials#.position",
+      }),
+    );
+    const apiData = { diagnostic: { materials: [{ position: "LA" }, { position: "SP" }] } };
+    const result = mapValuesFromAPI(apiData, [field]);
+    expect(result["materials#1_position"]).toBe("SP");
+  });
+
+  it("returns the default value when the array index does not exist in the API data", () => {
+    const field = mapFieldToFieldMapping(
+      makeField({
+        name: "materials#5_position",
+        attributeMapping: "diagnostic.materials#.position",
+        defaultValue: "N/A",
+      }),
+    );
+    const apiData = { diagnostic: { materials: [{ position: "LA" }] } };
+    const result = mapValuesFromAPI(apiData, [field]);
+    expect(result["materials#5_position"]).toBe("N/A");
+  });
+
+  describe("date conversion for datepicker fields", () => {
+    it("converts a plain YYYY-MM-DD string into a full ISO datetime", () => {
+      const field = mapFieldToFieldMapping(
+        makeField({ name: "startDate", attributeMapping: "job.startDate", type: "datepicker" }),
+      );
+      const result = mapValuesFromAPI({ job: { startDate: "2024-05-10" } }, [field]);
+      // Result should be an ISO string containing the date (may be 05-09 or 05-10 depending on timezone)
+      expect(result.startDate).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(result.startDate).toContain("2024-05");
+    });
+
+    it("leaves an already-ISO datetime value untouched", () => {
+      const field = mapFieldToFieldMapping(
+        makeField({ name: "startDate", attributeMapping: "job.startDate", type: "datepicker" }),
+      );
+      const isoValue = "2024-05-10T12:34:56.000Z";
+      const result = mapValuesFromAPI({ job: { startDate: isoValue } }, [field]);
+      expect(result.startDate).toBe(isoValue);
+    });
+
+    it("does not attempt date conversion for non-datepicker fields", () => {
+      const field = mapFieldToFieldMapping(
+        makeField({ name: "startDate", attributeMapping: "job.startDate", type: "text" }),
+      );
+      const result = mapValuesFromAPI({ job: { startDate: "2024-05-10" } }, [field]);
+      expect(result.startDate).toBe("2024-05-10");
+    });
   });
 });
 

@@ -1,10 +1,38 @@
-import Field, { FieldValueType } from "components/generics/Field/GenericField.types";
+import Field, {
+  FieldValueType,
+  WarrantyInfoPayload,
+} from "components/generics/Field/GenericField.types";
 import { createContext } from "react";
 import { ActionMandatoryFields } from "./GenericForm.types";
 
-export type ActionCallback = (...args: unknown[]) => void | boolean | Promise<void>;
-export type RadioButtonOption = { label: string; value: FieldValueType };
+export interface ActionCallbackHelpers {
+  setFieldValue: (field: string, value: unknown) => void | Promise<unknown>;
+  setErrors: (errors: Record<string, unknown>) => void;
+  setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, unknown>>;
+}
+
+export type ActionCallback =
+  | ((
+      formValues?: Record<string, unknown>,
+      helpers?: ActionCallbackHelpers,
+    ) => void | boolean | Promise<void>)
+  | ((...args: unknown[]) => void | boolean | Promise<void>);
+export type RadioButtonOption = {
+  label: string;
+  value: FieldValueType;
+  disabled?: boolean;
+  infoText?: string;
+};
 export type RadioSourceCallback = () => RadioButtonOption[];
+
+export interface WarrantyPanelInfo {
+  supportedWarrantyType: string;
+  isIneligible?: boolean;
+  validityExpirationDate?: string;
+  unavailableMessage?: string;
+  infoPayload?: WarrantyInfoPayload;
+  hasPurchaseDate?: boolean;
+}
 
 export interface GenericFormContextType {
   allFields: Field[];
@@ -17,10 +45,12 @@ export interface GenericFormContextType {
   radioSourceCallbacks?: Record<string, RadioSourceCallback>;
   onDeleteStart?: () => void;
   onDeleteEnd?: () => void;
-  onAreaValueChange?: (areaName: string) => void;
+  onAreaValueChange?: (areaName: string, formValues?: Record<string, unknown>) => void;
   autocompleteValidation?: React.RefObject<Record<string, boolean>>;
-  sparePartBelongsToTool?: React.RefObject<Record<string, boolean>>;
+  sparePartNotBelongsToTool?: React.RefObject<Record<string, boolean>>;
   activeValueChangeFieldRef?: React.RefObject<string | null>;
+  warrantyPanelInfo?: WarrantyPanelInfo;
+  isRepairAnswerLocked?: boolean;
 }
 
 export const GenericFormContext = createContext<GenericFormContextType>({
@@ -33,6 +63,8 @@ export const GenericFormContext = createContext<GenericFormContextType>({
   onDeleteEnd: undefined,
   onAreaValueChange: undefined,
   autocompleteValidation: undefined,
-  sparePartBelongsToTool: undefined,
+  sparePartNotBelongsToTool: undefined,
   activeValueChangeFieldRef: undefined,
+  warrantyPanelInfo: undefined,
+  isRepairAnswerLocked: undefined,
 });

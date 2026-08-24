@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ExplosionDrawingModal from "./ExplosionDrawingModal";
+import { getExplosionDrawing } from "../../../../api/services/spareParts/spareParts";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -16,6 +17,8 @@ vi.mock("hooks/useHasPermission", () => ({
 vi.mock("../../../../api/services/spareParts/spareParts", () => ({
   getExplosionDrawing: vi.fn(),
 }));
+
+const mockGetExplosionDrawing = vi.mocked(getExplosionDrawing);
 
 vi.mock("@bosch/react-frok", async () => {
   const React = await import("react");
@@ -105,14 +108,23 @@ vi.mock("@bosch/react-frok", async () => {
   };
 });
 
-const createTestQueryClient = () =>
-  new QueryClient({
+const createTestQueryClient = () => {
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
         retry: false,
       },
     },
   });
+
+  queryClient.setQueryData(["user"], {
+    countryCode: "ZA",
+    language: "en",
+    locale: "en-US",
+  });
+
+  return queryClient;
+};
 
 const renderWithQueryClient = (component: React.ReactElement) => {
   const queryClient = createTestQueryClient();
@@ -129,18 +141,16 @@ describe("ExplosionDrawingModal", () => {
   beforeEach(() => {
     mockSetIsOpen = vi.fn();
     mockOnSubmitParts = vi.fn();
-    const store: Record<string, string> = { selectedLanguage: "en" };
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => store[key] ?? null,
-      setItem: (key: string, value: string) => {
-        store[key] = value;
-      },
-      removeItem: (key: string) => {
-        delete store[key];
-      },
-      clear: () => {
-        Object.keys(store).forEach((k) => delete store[k]);
-      },
+    mockGetExplosionDrawing.mockResolvedValue({
+      currentIllustrationPath: "https://example.com/image1.gif",
+      currentIllustrationPage: 1,
+      illustrationList: [
+        {
+          page: 1,
+          ImagePath: "https://example.com/image1.gif",
+        },
+      ],
+      list: [],
     });
   });
 

@@ -23,6 +23,7 @@ import {
   getManufacturedDate,
   getOrderReceipt,
   getSparePartsSearch,
+  postWarrantyCheck,
 } from "./orders";
 import { Order } from "./orders.types";
 
@@ -90,30 +91,46 @@ describe("getOrderReceipt", () => {
 });
 
 describe("getSparePartsSearch", () => {
-  it("returns spare parts with belongsToTool flag on success", async () => {
+  it("returns spare parts with notBelongsToTool flag on success", async () => {
     const mockSparePartsData = [
-      { partNumber: "SP001", description: "Part 1", price: 100, belongsToTool: true },
-      { partNumber: "SP002", description: "Part 2", price: 200, belongsToTool: false },
+      { partNumber: "SP001", description: "Part 1", price: 100, notBelongsToTool: false },
+      { partNumber: "SP002", description: "Part 2", price: 200, notBelongsToTool: true },
     ];
     mockGet.mockResolvedValueOnce({ data: mockSparePartsData });
-    const result = await getSparePartsSearch("BT001", "Drill", "ZA", "en");
+    const result = await getSparePartsSearch({
+      bareToolNumber: "BT001",
+      tradeName: "Drill",
+      countryCode: "ZA",
+      languageCode: "en",
+    });
     expect(result).toEqual(mockSparePartsData);
-    expect(result?.[0]?.belongsToTool).toBe(true);
-    expect(result?.[1]?.belongsToTool).toBe(false);
+    expect(result?.[0]?.notBelongsToTool).toBe(false);
+    expect(result?.[1]?.notBelongsToTool).toBe(true);
   });
 
   it("returns spare parts without optional params", async () => {
     const mockSparePartsData = [
-      { partNumber: "SP003", description: "Part 3", price: 150, belongsToTool: true },
+      { partNumber: "SP003", description: "Part 3", price: 150, notBelongsToTool: false },
     ];
     mockGet.mockResolvedValueOnce({ data: mockSparePartsData });
-    const result = await getSparePartsSearch("BT001", "Drill");
+    const result = await getSparePartsSearch({ bareToolNumber: "BT001", tradeName: "Drill" });
     expect(result).toEqual(mockSparePartsData);
   });
 
   it("accepts all optional parameters", async () => {
     mockGet.mockResolvedValueOnce({ data: [] });
-    await getSparePartsSearch("BT001", "Drill", "ZA", "en", "BOSCH", 50, 2, true, "BT123", "SP");
+    await getSparePartsSearch({
+      bareToolNumber: "BT001",
+      tradeName: "Drill",
+      countryCode: "ZA",
+      languageCode: "en",
+      brand: "BOSCH",
+      size: 50,
+      pageNumber: 2,
+      isExchange: true,
+      bareTool: "BT123",
+      position: "SP",
+    });
     expect(mockGet).toHaveBeenCalled();
     const callArgs = mockGet.mock.calls[0];
     const params = callArgs?.[1]?.params;
@@ -127,7 +144,46 @@ describe("getSparePartsSearch", () => {
 
   it("returns null on error", async () => {
     mockGet.mockRejectedValueOnce(new Error("fail"));
-    const result = await getSparePartsSearch("BT001", "Drill");
+    const result = await getSparePartsSearch({ bareToolNumber: "BT001", tradeName: "Drill" });
+    expect(result).toBeNull();
+  });
+});
+
+describe("postWarrantyCheck", () => {
+  it("returns warranty evaluation on success", async () => {
+    const payload = {
+      brand: "BOSCH",
+      country: "DE",
+      bareToolNumber: "1607A350C5",
+      serialNumber: "929030435",
+      purchaseDate: "2026-06-15",
+    };
+
+    const responseBody = {
+      evaluationStatus: "ELIGIBLE",
+      supportedWarrantyType: "STANDARD_WARRANTY",
+      proServiceType: null,
+      reasonKey: null,
+      expirationDate: "2027-06-15",
+      allowedWarrantyRepairCount: 3,
+      usedWarrantyRepairCount: 1,
+    };
+
+    mockPost.mockResolvedValueOnce({ data: responseBody });
+    const result = await postWarrantyCheck(payload);
+    expect(result).toEqual(responseBody);
+    expect(mockPost).toHaveBeenCalledWith(expect.stringContaining("warranty-check"), payload);
+  });
+
+  it("returns null on error", async () => {
+    mockPost.mockRejectedValueOnce(new Error("fail"));
+    const result = await postWarrantyCheck({
+      brand: "BOSCH",
+      country: "DE",
+      bareToolNumber: "1607A350C5",
+      serialNumber: "929030435",
+      purchaseDate: "2026-06-15",
+    });
     expect(result).toBeNull();
   });
 });

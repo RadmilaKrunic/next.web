@@ -22,6 +22,7 @@ describe("fetchUserDataFromCookie", () => {
       permissions: [],
       countryCode: "ZA",
       language: "en",
+      locale: "en-ZA",
     };
     mockGet.mockResolvedValueOnce({ data: user } as never);
     const result = await fetchUserDataFromCookie();
@@ -38,12 +39,14 @@ describe("fetchUserDataFromCookie", () => {
 describe("updateUserLanguagePreference", () => {
   it("posts language preference", async () => {
     mockPost.mockResolvedValueOnce({} as never);
-    await updateUserLanguagePreference("en-US");
-    expect(mockPost).toHaveBeenCalledWith("/v1/profile", { language: "en-US" });
+    await updateUserLanguagePreference({ language: "en", locale: "en-US" });
+    expect(mockPost).toHaveBeenCalledWith("/v1/profile", { language: "en", locale: "en-US" });
   });
 
   it("throws on error", async () => {
     mockPost.mockRejectedValueOnce(new Error("post failed"));
-    await expect(updateUserLanguagePreference("en-US")).rejects.toThrow("post failed");
+    await expect(
+      updateUserLanguagePreference({ language: "en-US", locale: "en-US" }),
+    ).rejects.toThrow("post failed");
   });
 });

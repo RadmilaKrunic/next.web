@@ -53,6 +53,14 @@ export interface DiagnosticsConfiguration {
   rules: DiagnosticsRuleEntry[];
 }
 
+export interface ReimbursementConfiguration {
+  category: string;
+  reimbursementMethods: {
+    REPAIR: string;
+    EXCHANGE: string;
+  };
+}
+
 export interface CountryConfig {
   id: string;
   countryName: string;
@@ -67,6 +75,9 @@ export interface CountryConfig {
   localizationConfiguration: LocalizationConfig[];
   links: Links;
   diagnosticsConfiguration: DiagnosticsConfiguration;
+  reimbursementConfig: ReimbursementConfiguration[];
+  reimbursementCreateOn: string;
+  reimbursementPeriodType: string;
 }
 
 export const getCountryConfig = async (countryCode: string) => {

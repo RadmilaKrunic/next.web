@@ -46,7 +46,6 @@
         padding: 0;
       }
     }
-
     .popover-divider {
       margin: 0.75rem 0;
       border: none;
@@ -71,5 +70,15 @@
         }
       }
     }
+  }
+}
+
+.export-open {
+  display: none !important;
+}
+
+.list-popover-buttons {
+  button:not(:last-child) {
+    margin-bottom: 0.5rem;
   }
 }

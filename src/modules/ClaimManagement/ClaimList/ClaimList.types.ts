@@ -1,6 +1,10 @@
 export interface Claim {
   claimId: string;
   jobId: string;
+  invoiceNumber?: string;
+  internalReferenceNumber?: string;
+  mobileNumber?: string;
+  phoneNumber?: string;
   createdOn: string;
   countryCode: string;
   ascId: string;

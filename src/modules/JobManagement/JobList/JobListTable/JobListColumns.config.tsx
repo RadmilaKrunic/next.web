@@ -19,7 +19,11 @@ export type JobColumnKey =
   | "source"
   | "toolModelName"
   | "serialNumber"
-  | "bareToolNumber";
+  | "bareToolNumber"
+  | "internalReferenceNumber"
+  | "phoneNumber"
+  | "mobileNumber";
+
 export type JobColumnConfig = {
   key: JobColumnKey;
   label: string;
@@ -140,5 +144,23 @@ export const getJobColumns = (
     key: "bareToolNumber",
     label: t("baretoolNumber"),
     getValue: (job) => job.asset?.bareToolNumber ?? "-",
+  },
+
+  internalReferenceNumber: {
+    key: "internalReferenceNumber",
+    label: t("internalReferenceNumber"),
+    getValue: (job) => job.internalReferenceNumber ?? "-",
+  },
+
+  phoneNumber: {
+    key: "phoneNumber",
+    label: t("phoneNumber"),
+    getValue: (job) => job.customer?.phoneNumber ?? "-",
+  },
+
+  mobileNumber: {
+    key: "mobileNumber",
+    label: t("mobileNumber"),
+    getValue: (job) => job.customer?.mobileNumber ?? "-",
   },
 });

@@ -8,6 +8,8 @@ import { useMemo, useState } from "react";
 import { CUSTOMER_TYPE_ICON_NAME } from "utils/customerTypeIcon";
 import { formatDateToDisplay } from "utils/dateFormatter";
 import { flattenJobForSearch } from "modules/JobManagement/JobList/JobList.utils";
+import { useHasPermission } from "@/hooks/useHasPermission";
+import { useNavigate } from "react-router";
 
 const filters = [
   { key: "ALL", label: "All" },
@@ -16,16 +18,24 @@ const filters = [
   { key: "REPAIR_DONE", label: "REPAIR_DONE" },
 ] as const;
 
+const asa_filters = [
+  { key: "ALL", label: "All" },
+  { key: "BOSCH_APPROVAL_PENDING", label: "BOSCH_APPROVAL_PENDING" },
+  { key: "MULTIPLE_APPROVAL_PENDING", label: "MULTIPLE_APPROVAL_PENDING" },
+] as const;
+
 function JobsCard({
   title = "Jobs",
-  onViewMore,
   viewMoreLabel = "ViewMore",
   actionButton,
 }: Readonly<JobsCardProps>) {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
+  const navigate = useNavigate();
   const { data: jobs = [], isLoading: isJobsLoading } = useJobs();
   const [selectedFilter, setSelectedFilter] = useState("ALL");
   const [searchValue, setSearchValue] = useState("");
+  const hasASAPermission = useHasPermission(["A_GA"]);
+  const availableFilters = hasASAPermission ? asa_filters : filters;
 
   const onToggleFilter = (key: string) => {
     setSelectedFilter(key);
@@ -56,17 +66,24 @@ function JobsCard({
     <div className="jobs-card">
       <div className="jobs-card__header">
         <span>{title}</span>
-        {onViewMore && (
-          <button type="button" className="jobs-card__view-more" onClick={onViewMore}>
-            {t(viewMoreLabel)}
-          </button>
-        )}
+        <button
+          type="button"
+          className="jobs-card__view-more"
+          onClick={() => {
+            const navigateResult = navigate(hasASAPermission ? "/approval-list" : "/job-list");
+            if (navigateResult instanceof Promise) {
+              navigateResult.catch(() => undefined);
+            }
+          }}
+        >
+          {t(viewMoreLabel)}
+        </button>
       </div>
 
       <div className="jobs-card__list">
         <div className="jobs-card__filters">
           <div className="left-filters">
-            {filters.map((filter) => (
+            {availableFilters.map((filter) => (
               <Chip
                 key={filter.key}
                 chipLabelId={filter.key}
@@ -104,7 +121,7 @@ function JobsCard({
               }}
               value={searchValue}
             />
-            {actionButton && (
+            {actionButton && !hasASAPermission && (
               <Button
                 icon={actionButton.icon as React.ComponentProps<typeof Button>["icon"]}
                 mode="primary"

@@ -1,4 +1,4 @@
-import { Button, Checkbox, TextField, TextArea, Icon } from "@bosch/react-frok";
+import { Button, Checkbox, TextField, TextArea, Icon, Toggle } from "@bosch/react-frok";
 import "./GenericField.scss";
 import Field, { FieldValueType } from "./GenericField.types";
 import { useTranslation } from "react-i18next";
@@ -10,7 +10,8 @@ import RadioGroup from "components/ui/RadioGroup/RadioGroup";
 import { isFieldVisible } from "../utils";
 import DatePicker from "components/ui/DatePicker/DatePicker";
 import NumberInputFiled from "components/ui/NumberInputField/NumberInputFiled";
-import FileUpload, { Attachments } from "components/ui/FileUpload/FileUpload";
+import FileUpload from "components/ui/FileUpload/FileUpload";
+import { Attachments } from "components/ui/FileUpload/FileUpload.types";
 import AutoComplete from "components/ui/AutoComplete/AutoComplete";
 import DynamicDropdown from "components/ui/DynamicDropdown/DynamicDropdown";
 import {
@@ -19,22 +20,24 @@ import {
   handleFaultCodeSelection,
   resolveIsRequired,
 } from "./GenericField.utils";
-import { useContext, useRef, useState } from "react";
+import { useContext, useState } from "react";
 import useFieldVisibilityReset from "./useFieldVisibilityReset";
 import { GenericFormContext } from "../Form/GenericForm.context";
+import { useDiagnosticsContext } from "modules/JobManagement/JobOverview/DiagnosticsContext";
 import {
   handleAutoCompleteSelect,
   getSparePartCompatibilityMessage,
   handleResetAutoCompleteFields,
 } from "../../ui/AutoComplete/AutoComplete.helper";
 import { AutoCompleteOption } from "../../ui/AutoComplete/OptionItem/OptionItem";
+import type { AllowedPosition } from "api/services/countryConfiguration/countryConfiguration";
 import InfoIconWithTooltip from "../../ui/TooltipContent/InfoIconWithTooltip";
 import { useHasPermission } from "hooks/useHasPermission";
 import StatusIndicator from "components/ui/StatusIndicator/StatusIndicator";
 import { CountryConfig } from "api/services/countryConfiguration/countryConfiguration";
 import { BareToolOption } from "api/services/orders/orders.types";
-
 import FieldError from "./components/FieldError";
+import { INELIGIBLE_JOB_TYPES } from "modules/JobManagement/warranty.utils";
 
 const LOCKED_VALUE_CHANGE_FIELDS_WHILE_EDITING = new Set([
   "onSummaryTotalAmountChange",
@@ -54,13 +57,12 @@ interface FieldRenderCtx {
   restProps: React.HTMLAttributes<HTMLSpanElement>;
   displayLabel: string;
   effectiveIsDisabled: boolean;
-  values: Record<string, unknown>;
+  values: Record<string, any>;
   setFieldValue: (
     field: string,
     value: unknown,
   ) => Promise<void | FormikErrors<Record<string, unknown>>>;
   allFields: Field[];
-  setAllFields: React.Dispatch<React.SetStateAction<Field[]>>;
   formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>;
   t: TFunction<"translation", "app">;
   handleChange: (name: string, newValue: FieldValueType) => Promise<void>;
@@ -75,26 +77,18 @@ interface FieldRenderCtx {
   onDeleteStart?: () => void;
   onDeleteEnd?: () => void;
   autocompleteValidation?: RefObject<Record<string, boolean>>;
-  sparePartBelongsToTool?: RefObject<Record<string, boolean>>;
+  sparePartNotBelongsToTool?: RefObject<Record<string, boolean>>;
   radioSourceCallbacks?: Record<string, () => unknown[]>;
   isInfoIcon?: boolean;
   infoText?: string;
-  /** Stable per-field-instance storage for diagnosticType's preserved sibling values. */
-  preserveOtherFieldValueRef: RefObject<Record<string, unknown>[] | null>;
+  warrantyPanelInfo?: {
+    isIneligible?: boolean;
+    hasPurchaseDate?: boolean;
+  };
+  allowedPositions?: AllowedPosition[];
 }
-const EDITABLE_TYPES = new Set(["COMMERCIAL_GOODWILL", "CHARGEABLE", "SPECIAL_CONTRACT"]);
 
-/** Subtypes whose values are preserved while diagnosticType is set to an EDITABLE_TYPES value. */
-const PRESERVE_FIELDS_SUBTYPE = [
-  "diagnosticDiscountHidden",
-  "diagnosticDiscountNetHidden",
-  "diagnosticTotalAmountHidden",
-  "diagnosticDiscount",
-  "diagnosticNetAmount",
-  "diagnosticTotalAmount",
-];
-
-const handleFieldChangeAsync = async (
+async function handleFieldChangeAsync(
   name: string,
   newValue: FieldValueType,
   setFieldValue: (
@@ -105,7 +99,7 @@ const handleFieldChangeAsync = async (
   field: Field,
   formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>,
   actionCallbacks: Record<string, (...args: unknown[]) => unknown>,
-): Promise<void> => {
+): Promise<void> {
   await setFieldValue(name, newValue);
 
   const sameDataField = allFields.find((f) => f.name === name);
@@ -146,90 +140,24 @@ const handleFieldChangeAsync = async (
       }
     }
   }
-};
+}
 
-/**
- * Preserves the row's hidden price values when diagnosticType switches into an
- * EDITABLE_TYPES value, and restores them when it switches back out.
- *
- * The snapshot is kept in a ref owned by this field's own component instance rather
- * than on the shared `allFields` array/state: allFields is rebuilt and replaced by
- * several unrelated effects (position sync, diagnostics manager rebuilds, etc.), none
- * of which know to carry custom runtime properties forward, so storing it there caused
- * the preserved values to silently disappear before they could be restored.
- */
-const checkPrices = (
-  field: Field,
-  formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>,
-  allFields: Field[],
-  value: FieldValueType,
-  preserveOtherFieldValueRef: RefObject<Record<string, unknown>[] | null>,
-) => {
-  if (field.subtype !== "diagnosticType") {
-    return;
-  }
-
-  if (EDITABLE_TYPES.has(value as string)) {
-    // Already preserved from a prior switch into an editable type — keep the
-    // original snapshot instead of overwriting it with already-edited values.
-    if (preserveOtherFieldValueRef.current) return;
-
-    const preservedValuesForFields: Record<string, unknown>[] = PRESERVE_FIELDS_SUBTYPE.map(
-      (subtype) => {
-        const fieldToPreserve = allFields.find(
-          (f) =>
-            f.subtype === subtype && f.name.startsWith(field.fieldMapping?.nameStartsWith || ""),
-        );
-        if (fieldToPreserve) {
-          return { [fieldToPreserve.name]: formikContext.values[fieldToPreserve.name] };
-        }
-        return undefined;
-      },
-    ).filter((item): item is Record<string, unknown> => item !== undefined);
-
-    preserveOtherFieldValueRef.current = preservedValuesForFields;
-    return;
-  }
-
-  if (preserveOtherFieldValueRef.current) {
-    preserveOtherFieldValueRef.current.forEach((preservedField) => {
-      const [fieldName, preservedValue] = Object.entries(preservedField)[0];
-      void formikContext.setFieldValue(fieldName, preservedValue);
-    });
-    preserveOtherFieldValueRef.current = null;
-  }
-};
-const resolvePriceFieldText = (
+function resolvePriceFieldText(
   rawValue: FieldValueType | null | undefined,
   isPriceFocused: boolean,
   isPriceFocusedZero: boolean,
   effectiveIsDisabled: boolean,
   isPercentageField: boolean,
   isAmountField: boolean,
-): string => {
+): string {
   if (isPriceFocusedZero || rawValue == null || rawValue === "") return "";
   const numericValue = Number(rawValue);
   const shouldFormat = (isPercentageField || isAmountField) && Number.isFinite(numericValue);
   if (!shouldFormat) return String(rawValue);
   return !effectiveIsDisabled && isPriceFocused ? String(rawValue) : numericValue.toFixed(2);
-};
-const shouldSetIsPriceSetManually = (
-  field: Field,
-  values: Record<string, unknown>,
-  allFields: Field[],
-  isPriceManuallyFieldName: string,
-) => {
-  const typeFieldName = `${field?.fieldMapping?.nameStartsWith}jobType`;
+}
 
-  if (allFields?.some((f) => f.name === isPriceManuallyFieldName)) {
-    if (values[typeFieldName] && EDITABLE_TYPES.has(values[typeFieldName] as string)) {
-      return true;
-    }
-    return false;
-  }
-  return false;
-};
-const renderTextPriceField = (ctx: FieldRenderCtx): ReactElement => {
+function renderTextPriceField(ctx: FieldRenderCtx): ReactElement {
   const {
     field,
     fullWidth,
@@ -290,14 +218,6 @@ const renderTextPriceField = (ctx: FieldRenderCtx): ReactElement => {
             e.target.value,
           );
           if (shouldReturn) return;
-          const isPriceManuallyFieldName = `${field?.fieldMapping?.nameStartsWith}isPriceSetManually`;
-          if (
-            type === "price" &&
-            field.fieldMapping?.nameStartsWith &&
-            shouldSetIsPriceSetManually(field, values, allFields, isPriceManuallyFieldName)
-          ) {
-            void setFieldValue(isPriceManuallyFieldName, true);
-          }
           if (isPriceFocusedZero) setIsPriceFocusedZero(false);
           void handleChange(name, e.target.value);
         }}
@@ -335,9 +255,9 @@ const renderTextPriceField = (ctx: FieldRenderCtx): ReactElement => {
       <FieldError name={name} />
     </span>
   );
-};
+}
 
-const renderNumberField = (ctx: FieldRenderCtx): ReactElement => {
+function renderNumberField(ctx: FieldRenderCtx): ReactElement {
   const {
     field,
     fullWidth,
@@ -355,24 +275,25 @@ const renderNumberField = (ctx: FieldRenderCtx): ReactElement => {
         name={name}
         label={displayLabel}
         step={field.step as number}
-        value={(values[name] as string) || ""}
+        value={(values[name] as string) ?? 0}
         disabled={effectiveIsDisabled}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
           const newValue = e.target.value;
-          void setFieldValue(name, newValue === "" ? (field.defaultValue ?? "") : newValue);
+          void setFieldValue(name, newValue === "" ? (field.defaultValue ?? 0) : newValue);
         }}
         minValue={field.minValue || 0}
+        prefix={field?.prefix || ""}
       />
       <FieldError name={name} />
     </span>
   );
-};
+}
 
-const renderButtonField = (): ReactElement => {
+function renderButtonField(): ReactElement {
   return <Button />;
-};
+}
 
-const renderRadiogroupField = (ctx: FieldRenderCtx): ReactElement => {
+function renderRadiogroupField(ctx: FieldRenderCtx): ReactElement {
   const { field, effectiveIsDisabled, handleChange, radioSourceCallbacks } = ctx;
   const { name, radioButtons, defaultValue } = field;
   const resolvedRadioButtons = (
@@ -392,34 +313,26 @@ const renderRadiogroupField = (ctx: FieldRenderCtx): ReactElement => {
       }}
     />
   );
-};
+}
 
-const renderCheckboxField = (ctx: FieldRenderCtx): ReactElement => {
+function renderInfoIconField(ctx: FieldRenderCtx): ReactElement {
+  const { field, fullWidth, className, restProps, t } = ctx;
+  const { infoText } = field;
+  return (
+    <span className={`${fullWidth} ${className || ""}`} {...restProps}>
+      <span className="generic-info-icon">
+        <Icon iconName="info-i-frame" />
+        <p>{t(infoText || "")}</p>
+      </span>
+    </span>
+  );
+}
+
+function renderCheckboxField(ctx: FieldRenderCtx): ReactElement {
   const { field, fullWidth, className, restProps, effectiveIsDisabled, values, t, handleChange } =
     ctx;
-  const { name, label, infoText } = field;
+  const { name, label } = field;
 
-  if (name === "grantAccess") {
-    return (
-      <span className={`${fullWidth} ${className || ""}`} {...restProps}>
-        <span className="grant-access-info">
-          <Icon iconName="info-i-frame" />
-          <p>{infoText}</p>
-        </span>
-        <span className="grant-access-checkbox">
-          <Checkbox
-            id={name}
-            label={`${label ? t(label) : ""} ${field.isRequired ? "*" : ""}`}
-            checked={(values[name] as boolean) || false}
-            disabled={effectiveIsDisabled}
-            onChange={(e) => {
-              void handleChange(name, e.target.checked);
-            }}
-          />
-        </span>
-      </span>
-    );
-  }
   return (
     <span className={`${fullWidth} ${className || ""}`} {...restProps}>
       <Checkbox
@@ -433,9 +346,9 @@ const renderCheckboxField = (ctx: FieldRenderCtx): ReactElement => {
       />
     </span>
   );
-};
+}
 
-const renderDatepickerField = (ctx: FieldRenderCtx): ReactElement => {
+function renderDatepickerField(ctx: FieldRenderCtx): ReactElement {
   const { field, fullWidth, className, restProps, displayLabel, effectiveIsDisabled } = ctx;
   const { name, calendar } = field;
   return (
@@ -449,9 +362,9 @@ const renderDatepickerField = (ctx: FieldRenderCtx): ReactElement => {
       <FieldError name={name} />
     </span>
   );
-};
+}
 
-const renderDropdownField = (ctx: FieldRenderCtx): ReactElement => {
+function renderDropdownField(ctx: FieldRenderCtx): ReactElement {
   const {
     field,
     fullWidth,
@@ -464,12 +377,28 @@ const renderDropdownField = (ctx: FieldRenderCtx): ReactElement => {
     formikContext,
     t,
     handleChange,
+    warrantyPanelInfo,
+    allowedPositions,
   } = ctx;
   const { name, label, subtype, defaultValue } = field;
   const isMulti = field.multiSelect === true;
   const dropdownValue = isMulti
     ? (values[name] as string[]) || []
     : (values[name] as string) || (defaultValue as string) || "";
+
+  // Disable warranty-ineligible job types when tool is warranty-ineligible
+  let dropdownOptions = field.options;
+
+  if (name === "jobType" && field.options) {
+    dropdownOptions = field.options.map((option) => ({
+      ...option,
+      disabled:
+        (warrantyPanelInfo?.isIneligible && INELIGIBLE_JOB_TYPES.has(option.value as string)) ||
+        (!warrantyPanelInfo?.hasPurchaseDate && INELIGIBLE_JOB_TYPES.has(option.value as string)) ||
+        option.disabled,
+    }));
+  }
+
   return (
     <span className={`${fullWidth} ${className || ""}`} {...restProps}>
       <DynamicDropdown
@@ -482,18 +411,23 @@ const renderDropdownField = (ctx: FieldRenderCtx): ReactElement => {
         onChange={(value) => {
           if (typeof value === "string")
             updateDependentFields(field, formikContext, allFields, t, value);
-          checkPrices(field, formikContext, allFields, value, ctx.setAllFields);
           void handleChange(name, value);
         }}
         onRawOptionSelect={
           subtype === "diagnosticFaultCode"
             ? (rawItem) => {
-                handleFaultCodeSelection(rawItem, setFieldValue, allFields, values);
+                handleFaultCodeSelection(
+                  rawItem,
+                  setFieldValue,
+                  allFields,
+                  values,
+                  allowedPositions,
+                );
               }
             : undefined
         }
         optionsEndpoint={field.optionsEndpoint}
-        options={field.options}
+        options={dropdownOptions}
         required={field.isRequired}
         disabled={effectiveIsDisabled}
         isSearchable={!!field.isSearchable}
@@ -501,9 +435,9 @@ const renderDropdownField = (ctx: FieldRenderCtx): ReactElement => {
       <FieldError name={name} />
     </span>
   );
-};
+}
 
-const renderUploadField = (ctx: FieldRenderCtx): ReactElement => {
+function renderUploadField(ctx: FieldRenderCtx): ReactElement {
   const {
     field,
     fullWidth,
@@ -516,7 +450,15 @@ const renderUploadField = (ctx: FieldRenderCtx): ReactElement => {
     onDeleteEnd,
   } = ctx;
   const { name } = field;
-  const currentFiles = (values[name] as Attachments[]) || [];
+  let currentFiles;
+  if (name === "logo" && values[name]?.logoId) {
+    currentFiles = [
+      { attachmentId: values[name].logoId, name: values[name].name, type: values[name].type },
+    ];
+  } else {
+    currentFiles = (values[name] as Attachments[]) || [];
+  }
+
   return (
     <span className={`${fullWidth} ${className || ""}`} {...restProps}>
       <FileUpload
@@ -531,13 +473,15 @@ const renderUploadField = (ctx: FieldRenderCtx): ReactElement => {
         existingFiles={(field.existingFiles as { name: string }[]) || []}
         onDeleteEnd={onDeleteEnd}
         allowedFormats={field?.allowedFormats || []}
+        maxFilesAllowed={field?.maxFilesAllowed}
+        maxFileSizeInMb={field?.maxFileSizeInMb}
       />
       <FieldError name={name} />
     </span>
   );
-};
+}
 
-const renderTextareaField = (ctx: FieldRenderCtx): ReactElement => {
+function renderTextareaField(ctx: FieldRenderCtx): ReactElement {
   const { field, fullWidth, className, restProps, effectiveIsDisabled, values, t, handleChange } =
     ctx;
   const { name, label } = field;
@@ -557,9 +501,9 @@ const renderTextareaField = (ctx: FieldRenderCtx): ReactElement => {
       <FieldError name={name} />
     </span>
   );
-};
+}
 
-const renderAutocompleteField = (ctx: FieldRenderCtx): ReactElement => {
+function renderAutocompleteField(ctx: FieldRenderCtx): ReactElement {
   const {
     field,
     fullWidth,
@@ -573,7 +517,7 @@ const renderAutocompleteField = (ctx: FieldRenderCtx): ReactElement => {
     t,
     handleChange,
     autocompleteValidation,
-    sparePartBelongsToTool,
+    sparePartNotBelongsToTool,
   } = ctx;
   const { name, label } = field;
   const effectiveIsRequired = resolveIsRequired(field, values);
@@ -617,7 +561,7 @@ const renderAutocompleteField = (ctx: FieldRenderCtx): ReactElement => {
     name,
     values,
     allFields,
-    sparePartBelongsToTool?.current,
+    sparePartNotBelongsToTool?.current,
   );
 
   return (
@@ -634,8 +578,8 @@ const renderAutocompleteField = (ctx: FieldRenderCtx): ReactElement => {
         incompatibleSelectionMessage={incompatibleSelectionMessage}
         onChange={(value: string) => {
           const isSparePartNumberField = name?.toLowerCase().includes("sparepartnumber");
-          if (isSparePartNumberField && sparePartBelongsToTool) {
-            sparePartBelongsToTool.current[name] = false;
+          if (isSparePartNumberField && sparePartNotBelongsToTool) {
+            sparePartNotBelongsToTool.current[name] = true;
           }
 
           if (value) {
@@ -648,9 +592,9 @@ const renderAutocompleteField = (ctx: FieldRenderCtx): ReactElement => {
         }}
         onSelect={(option: AutoCompleteOption) => {
           void (async () => {
-            if (name?.toLowerCase().includes("sparepartnumber") && sparePartBelongsToTool) {
-              sparePartBelongsToTool.current[name] =
-                (option as BareToolOption)?.belongsToTool === true;
+            if (name?.toLowerCase().includes("sparepartnumber") && sparePartNotBelongsToTool) {
+              sparePartNotBelongsToTool.current[name] =
+                (option as BareToolOption)?.notBelongsToTool === true;
             }
             await handleAutoCompleteSelect(option, field, setFieldValue, allFields);
             await validateForm();
@@ -682,9 +626,9 @@ const renderAutocompleteField = (ctx: FieldRenderCtx): ReactElement => {
       <FieldError name={name} />
     </span>
   );
-};
+}
 
-const renderBadgeField = (ctx: FieldRenderCtx): ReactElement => {
+function renderBadgeField(ctx: FieldRenderCtx): ReactElement {
   const { field, values, t } = ctx;
   const { name } = field;
   return (
@@ -694,7 +638,38 @@ const renderBadgeField = (ctx: FieldRenderCtx): ReactElement => {
       <input type="text" value={(values[name] as string) ?? ""} onChange={() => {}} hidden={true} />
     </div>
   );
-};
+}
+
+function renderToggleField(ctx: FieldRenderCtx): ReactElement {
+  const {
+    field,
+    fullWidth,
+    className,
+    restProps,
+    t,
+    infoText,
+    values,
+    handleChange,
+    effectiveIsDisabled,
+  } = ctx;
+  const { name, label } = field;
+
+  return (
+    <span className={`${fullWidth} ${className || ""} generic-field-toggle`} {...restProps}>
+      <Toggle
+        name={name}
+        id={name}
+        leftLabel={label ? t(label) : ""}
+        checked={(values[name] as boolean) || false}
+        disabled={effectiveIsDisabled}
+        onChange={(e) => {
+          void handleChange(name, e.target.checked);
+        }}
+      />
+      {infoText && <span>{infoText}</span>}
+    </span>
+  );
+}
 
 type FieldRenderer = (ctx: FieldRenderCtx) => ReactElement;
 
@@ -713,9 +688,11 @@ const FIELD_RENDERERS: Record<string, FieldRenderer> = {
   textarea: renderTextareaField,
   autocomplete: renderAutocompleteField,
   badge: renderBadgeField,
+  infoIcon: renderInfoIconField,
+  toggle: renderToggleField,
 };
 
-const GenericField = ({ field, className, ...restProps }: Readonly<GenericFieldProps>) => {
+function GenericField({ field, className, ...restProps }: Readonly<GenericFieldProps>) {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const queryClient = useQueryClient();
   const {
@@ -742,19 +719,20 @@ const GenericField = ({ field, className, ...restProps }: Readonly<GenericFieldP
   const isAmountField = Boolean(subtype && /amount|price/i.test(subtype));
   const {
     allFields,
-    setAllFields,
     onDeleteStart,
     onDeleteEnd,
     autocompleteValidation,
-    sparePartBelongsToTool,
+    sparePartNotBelongsToTool,
     radioSourceCallbacks,
     actionCallbacks,
     activeValueChangeFieldRef,
+    warrantyPanelInfo,
   } = useContext(GenericFormContext);
+  const { allowedPositions, jobStatus } = useDiagnosticsContext();
   const hasPermission = useHasPermission(field.permissions);
   const isVisible = isFieldVisible(field, allFields || [], formValues);
 
-  const status = formValues["jobStatus"] as string;
+  const status = jobStatus || (formValues["jobStatus"] as string);
   const isStatusDisabled = disabledForStatuses && status && disabledForStatuses.includes(status);
   const effectiveIsDisabled = isDisabled || !!isStatusDisabled;
   const [isPriceFocused, setIsPriceFocused] = useState(false);
@@ -822,11 +800,12 @@ const GenericField = ({ field, className, ...restProps }: Readonly<GenericFieldP
     onDeleteStart,
     onDeleteEnd,
     autocompleteValidation,
-    sparePartBelongsToTool,
+    sparePartNotBelongsToTool,
     radioSourceCallbacks,
     isInfoIcon,
     infoText,
-    setAllFields,
+    warrantyPanelInfo,
+    allowedPositions,
   };
 
   return renderer ? (
@@ -834,6 +813,6 @@ const GenericField = ({ field, className, ...restProps }: Readonly<GenericFieldP
   ) : (
     <div className="generic-field">{type + " FIELD: " + label}</div>
   );
-};
+}
 
 export default GenericField;

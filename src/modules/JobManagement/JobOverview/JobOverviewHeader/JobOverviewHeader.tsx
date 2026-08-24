@@ -1,8 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { formatSubtext } from "components/ui/OverviewHeader/OverviewHeader.helpers";
-import { useQueryClient } from "@tanstack/react-query";
-import { JobOverviewItem } from "modules/JobManagement/JobList/JobList.types";
+import { useJobById } from "api/services/jobs/hooks";
 import { CUSTOMER_TYPE_ICON_NAME } from "../../../../utils/customerTypeIcon";
 import { formatDateToDisplay } from "utils/dateFormatter";
 import { getCustomerDisplayName } from "../../../../utils/customerUtils";
@@ -11,10 +10,9 @@ import { CustomerType } from "modules/JobManagement/JobList/JobListTable/JobList
 
 function JobOverviewHeader() {
   const { jobId } = useParams<{ jobId: string }>();
-  const queryClient = useQueryClient();
   const { t } = useTranslation("translation", { keyPrefix: "app" });
 
-  const jobData = queryClient.getQueryData<JobOverviewItem>(["job", jobId]);
+  const { data: jobData } = useJobById(jobId || "");
 
   if (!jobData) {
     return null;

@@ -60,11 +60,12 @@ describe("filterApprovals", () => {
     it("filters by pendingApprovals quick filter", () => {
       const approvals = [
         makeApproval({ jobId: "j1", jobStatus: "BOSCH_APPROVAL_PENDING" }),
-        makeApproval({ jobId: "j2", jobStatus: "IN_DIAGNOSTICS" }),
+        makeApproval({ jobId: "j2", jobStatus: "MULTIPLE_APPROVAL_PENDING" }),
+        makeApproval({ jobId: "j3", jobStatus: "IN_DIAGNOSTICS" }),
       ];
       const qf: QuickFilter[] = [{ key: "pendingApprovals", label: "Pending", selected: true }];
       const result = filterApprovals(approvals, qf, "", noAdvanced);
-      expect(result).toHaveLength(1);
+      expect(result).toHaveLength(2);
       expect(result[0].jobId).toBe("j1");
     });
 
@@ -79,7 +80,8 @@ describe("filterApprovals", () => {
     it("filters by jobStatus", () => {
       const approvals = [
         makeApproval({ jobId: "j1", jobStatus: "BOSCH_APPROVAL_PENDING" }),
-        makeApproval({ jobId: "j2", jobStatus: "IN_DIAGNOSTICS" }),
+        makeApproval({ jobId: "j2", jobStatus: "MULTIPLE_APPROVAL_PENDING" }),
+        makeApproval({ jobId: "j3", jobStatus: "IN_DIAGNOSTICS" }),
       ];
       const af: Filter[] = [{ name: "jobStatus", value: "BOSCH_APPROVAL_PENDING" }];
       expect(filterApprovals(approvals, noFilters, "", af)).toHaveLength(1);

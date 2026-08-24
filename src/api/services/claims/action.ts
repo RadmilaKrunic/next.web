@@ -5,6 +5,7 @@ import {
   Claim,
   ClaimListResponse,
 } from "../../../modules/ClaimManagement/ClaimList/ClaimList.types";
+import { ClaimColumnConfiguration } from "modules/ClaimManagement/ClaimList/ClaimListTable/ClaimListColumns.config";
 
 export const fetchClaimById = async (claimId: string): Promise<ClaimItem> => {
   try {
@@ -49,9 +50,15 @@ export const fetchClaims = async (): Promise<Claim[]> => {
   }
 };
 
-export const postBulkApproveClaims = async (claimIds: string[]): Promise<void> => {
+export interface BulkApproveClaimsPayload {
+  claimIds: string[];
+  decision: ClaimDecision;
+  message: string;
+}
+
+export const postBulkApproveClaims = async (payload: BulkApproveClaimsPayload): Promise<void> => {
   try {
-    await axiosClient.post("/v1/claims/bulk-approve", { claimIds });
+    await axiosClient.post("/v1/claims/bulk-approve", payload);
   } catch (error) {
     console.error("Error bulk approving claims:", error);
     throw error;
@@ -83,6 +90,16 @@ export const patchClaimStatusPending = async (claimId: string, jobId?: string): 
     );
   } catch (error) {
     console.error(`Error setting claim ${claimId} status to pending:`, error);
+    throw error;
+  }
+};
+
+export const saveClaimListColumns = async (columns: ClaimColumnConfiguration[]): Promise<void> => {
+  try {
+    const selectedColumnKeys = columns.filter((col) => col.isChecked).map((col) => col.key);
+    await axiosClient.post(`/v1/profile/preferences/claim`, selectedColumnKeys);
+  } catch (error) {
+    console.error("Error saving claim list columns:", error);
     throw error;
   }
 };

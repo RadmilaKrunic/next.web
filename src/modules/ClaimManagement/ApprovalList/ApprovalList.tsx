@@ -9,7 +9,11 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Job } from "modules/JobManagement/JobList/JobList.types";
 import GenericForm from "components/generics/Form/GenericForm.types";
-import { filterApprovals, getApprovalNavigationPath } from "./ApprovalList.utils";
+import {
+  filterApprovals,
+  getApprovalNavigationPath,
+  isBulkApprovableJobStatus,
+} from "./ApprovalList.utils";
 import { ActivityIndicator } from "@bosch/react-frok";
 import { useQueryClient } from "@tanstack/react-query";
 import { HeaderUserData } from "api/services/header/action";
@@ -24,6 +28,7 @@ import "./ApprovalList.scss";
 import { MessagesContext } from "contexts/messagescontext";
 import { scrollToTop } from "utils/scrollToError";
 import { useListFilterHandlers } from "../../../hooks/useListFilterHandlers";
+import { useAnalytics, toJobStatus, PreApprovalAction } from "@/analytics";
 
 function ApprovalList() {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
@@ -65,6 +70,7 @@ function ApprovalList() {
   );
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const { setMessages } = useContext(MessagesContext);
+  const analytics = useAnalytics();
 
   const APPROVAL_COLUMNS = useMemo(() => getApprovalListColumns(t), [t]);
   const { handleToggleFilter, applyAdvancedFilters, resetAdvancedFilters } = useListFilterHandlers(
@@ -86,6 +92,7 @@ function ApprovalList() {
 
   const handlePageSizeChange = (option: string) => {
     sessionStorage.setItem("approvalList-pageSize", option);
+    sessionStorage.setItem("approvalList-currentPage", "1");
     setPagination({ page: 1, pageSize: Number(option) });
   };
 
@@ -113,7 +120,7 @@ function ApprovalList() {
     if (selectedRows.length === 0) return false;
     return selectedRows.every((id) => {
       const approval = approvals.find((a) => a.jobId === id);
-      return approval?.jobStatus === "BOSCH_APPROVAL_PENDING";
+      return approval ? isBulkApprovableJobStatus(approval.jobStatus) : false;
     });
   }, [selectedRows, approvals]);
 
@@ -130,6 +137,18 @@ function ApprovalList() {
         },
       ]);
       scrollToTop();
+      // Analytics: one pre_approval_reviewed (approved) per bulk-approved job.
+      selectedRows.forEach((id) => {
+        const jobStatus = toJobStatus(
+          approvals.find((approval) => approval.jobId === id)?.jobStatus,
+        );
+        if (jobStatus) {
+          analytics.trackPreApprovalReviewed({
+            jobStatus,
+            preApprovalAction: PreApprovalAction.APPROVED,
+          });
+        }
+      });
     },
     onError: () => {
       setMessages((prev) => [
@@ -181,9 +200,10 @@ function ApprovalList() {
         onRowClick={handleRowClick}
         renderRowActions={(job) => <ApprovalActionsFlyout jobId={job.jobId} />}
         selectable
-        isRowSelectable={(row) => row.jobStatus === "BOSCH_APPROVAL_PENDING"}
+        isRowSelectable={(row) => isBulkApprovableJobStatus(row.jobStatus)}
         selectedRows={selectedRows}
         onSelectionChange={setSelectedRows}
+        emptyListMessage="noApprovalsFound"
       />
       <Pagination
         page={pagination.page}

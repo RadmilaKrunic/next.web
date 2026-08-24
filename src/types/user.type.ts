@@ -20,11 +20,12 @@ export interface AscUser {
   boschId: string;
   language: string | null;
   isActive: boolean;
-  accountRoles: string[];
+  accountRoles: { id: string; name: string }[];
   permissions: string[];
   jobListColumnPreference: string[];
   accountableCountries: string | null;
   accountableRegions: string | null;
   employeeCode: string | null;
   serviceId: string | null;
+  createdOn: string;
 }

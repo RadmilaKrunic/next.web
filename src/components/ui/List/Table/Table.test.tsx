@@ -103,6 +103,7 @@ describe("Table", () => {
         visibleColumns: ["name"],
         getRowKey: (row) => row.id,
         renderRowActions: () => null,
+        emptyListMessage: "noJobsFoundMessage",
       }),
     );
     expect(screen.getByText("noJobsFoundMessage")).toBeInTheDocument();

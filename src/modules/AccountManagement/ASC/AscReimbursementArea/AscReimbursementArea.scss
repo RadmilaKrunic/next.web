@@ -1,0 +1,29 @@
+.asc-reimbursement-area {
+  .a-notification--banner {
+    position: relative;
+    margin-top: 24px;
+  }
+
+  .a-notification > .a-icon {
+    align-self: center;
+  }
+
+  .asc-reimbursement-table {
+    background-color: white;
+    margin-top: 24px;
+    margin-bottom: 1rem;
+  }
+
+  td {
+    padding: 0;
+    select {
+      background: white;
+    }
+  }
+
+  .a-dropdown select {
+    border-bottom: none !important;
+    padding-bottom: 0;
+    padding-top: 0;
+  }
+}

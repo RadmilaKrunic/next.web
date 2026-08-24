@@ -7,11 +7,11 @@ import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
 import { MaterialItem } from "../../../../hooks/useDiagnosticsManager";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { User } from "../../../../types/user.type";
 import { getExplosionDrawing } from "../../../../api/services/spareParts/spareParts";
 import { DEFAULT_GC_TIME_MS, DEFAULT_STALE_TIME_MS } from "../../../../utils/queryConstants";
 import { MessagesContext } from "../../../../contexts/messagescontext";
 import { scrollToTop } from "../../../../utils/scrollToError";
+import { HeaderUserData } from "@/api/services/header/action";
 
 function arePointListsEqual(a?: SparePartListItem[], b?: SparePartListItem[]): boolean {
   if (a === b) return true;
@@ -65,10 +65,11 @@ const ExplosionDrawing = ({
 }: ExplosionDrawingProps) => {
   const [illustrationPage, setIllustrationPage] = useState<number>(1);
   const queryClient = useQueryClient();
-  const countryCode = queryClient.getQueryData<User>(["user"])?.countryCode || "en";
+  const user = queryClient.getQueryData<HeaderUserData>(["user"]);
+  const countryCode = user?.countryCode || "ZA";
   const partNumber = formValues["baretoolNumber"] as string;
   const brand = formValues["brand"] as string;
-  const languageCode = localStorage.getItem("selectedLanguage") || "en";
+  const languageCode = user?.language || "en";
   const {
     data: illustrationData,
     isLoading,

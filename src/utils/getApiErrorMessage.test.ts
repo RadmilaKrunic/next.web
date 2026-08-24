@@ -8,6 +8,10 @@ const t = vi.fn((key: string) => {
 });
 
 describe("getApiErrorMessage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("returns fallback when no response data", () => {
     const result = getApiErrorMessage(new Error("fail"), t as never, "genericError");
     expect(result).toBe("Generic Error");
@@ -41,5 +45,23 @@ describe("getApiErrorMessage", () => {
     const error = { response: { data: { detail: "errorDetail", params: { items: ["a", "b"] } } } };
     getApiErrorMessage(error, t as never, "genericError");
     expect(t).toHaveBeenCalledWith("errorDetail", { items: "a, b" });
+  });
+
+  it("parses JSON array string params", () => {
+    const error = {
+      response: {
+        data: { detail: "errorDetail", params: { violatedPartNumbers: '["06010000","06010001"]' } },
+      },
+    };
+    getApiErrorMessage(error, t as never, "genericError");
+    expect(t).toHaveBeenCalledWith("errorDetail", { violatedPartNumbers: "06010000, 06010001" });
+  });
+
+  it("parses simple JSON array string with single element", () => {
+    const error = {
+      response: { data: { detail: "errorDetail", params: { violatedPartNumbers: "[06010000]" } } },
+    };
+    getApiErrorMessage(error, t as never, "genericError");
+    expect(t).toHaveBeenCalledWith("errorDetail", { violatedPartNumbers: "06010000" });
   });
 });

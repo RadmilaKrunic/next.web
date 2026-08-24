@@ -3,7 +3,8 @@ import "./RadioGroup.scss";
 import { useTranslation } from "react-i18next";
 import { useFormikContext } from "formik";
 import { useEffect } from "react";
-import { FieldValueType } from "components/generics/Field/GenericField.types";
+import { FieldValueType, RadioButtonOption } from "components/generics/Field/GenericField.types";
+import InfoIconWithTooltip from "../TooltipContent/InfoIconWithTooltip";
 
 interface RadioGroupProps {
   name: string;
@@ -12,11 +13,6 @@ interface RadioGroupProps {
   defaultValue?: FieldValueType;
   disabled?: boolean;
   onChange?: (value: FieldValueType) => void;
-}
-
-interface RadioButtonOption {
-  value: FieldValueType;
-  label: string;
 }
 
 export default function RadioGroup({
@@ -46,18 +42,30 @@ export default function RadioGroup({
       data-testid={`radio-group-${name}`}
     >
       {radioButtons.map((radioBtn: RadioButtonOption) => (
-        <RadioButton
-          name={name}
+        <div
+          className="radio-group-option"
           key={`${name}-${String(radioBtn.value)}-${String(currentValue)}`}
-          id={`${name}-${String(radioBtn.value)}`}
-          label={t(radioBtn.label)}
-          value={radioBtn.value as string | number}
-          onChange={() => {
-            onChange?.(radioBtn.value);
-            void setFieldValue(name, radioBtn.value);
-          }}
-          checked={currentValue === radioBtn.value}
-        />
+        >
+          <RadioButton
+            name={name}
+            id={`${name}-${String(radioBtn.value)}`}
+            label={t(radioBtn.label)}
+            value={radioBtn.value as string | number}
+            disabled={radioBtn.disabled}
+            onChange={() => {
+              onChange?.(radioBtn.value);
+              void setFieldValue(name, radioBtn.value);
+            }}
+            checked={currentValue === radioBtn.value}
+          />
+          {radioBtn.infoText || radioBtn.infoPayload ? (
+            <InfoIconWithTooltip
+              name={`${name}-${String(radioBtn.value)}`}
+              infoText={radioBtn.infoText}
+              infoPayload={radioBtn.infoPayload}
+            />
+          ) : null}
+        </div>
       ))}
     </fieldset>
   );

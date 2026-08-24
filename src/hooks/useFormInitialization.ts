@@ -11,6 +11,8 @@ import {
   getAreasByName,
 } from "components/generics/utils";
 import { getMandatoryFields } from "components/generics/Form/formValidation";
+import { User } from "../types/user.type";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const useFormInitialization = (formConfig: GenericForm | null) => {
   const [isInitialized, setIsInitialized] = useState(false);
@@ -23,6 +25,8 @@ export const useFormInitialization = (formConfig: GenericForm | null) => {
     ActionMandatoryFields
   > | null>(null);
   const [patternDiagnosticArea, setPatternDiagnosticArea] = useState<Area | null>(null);
+  const queryClient = useQueryClient();
+  const user = queryClient.getQueryData<User>(["user"]);
 
   useEffect(() => {
     if (!formConfig) {
@@ -40,15 +44,22 @@ export const useFormInitialization = (formConfig: GenericForm | null) => {
     processedFields = processedFields.map((field) => mapFieldToFieldMapping(field));
 
     const initialValues = getInitialFieldValues(processedFields);
-    const mandatory = getMandatoryFields(formConfig);
+    const mandatory = getMandatoryFields(formConfig, user?.permissions || []);
 
     setAllFields(processedFields);
     setInitialFormValues(initialValues);
     setMandatoryFields(mandatory);
-    setTabs(sections.filter((section) => section.isTab));
+    setTabs(
+      sections.filter((section) => {
+        const hasPermission = section?.permissions?.length
+          ? section.permissions.some((p) => user?.permissions.includes(p))
+          : true;
+        return section.isTab && hasPermission && !section.isHidden;
+      }),
+    );
     setPatternDiagnosticArea(getAreasByName(sections, "diagnosticData")?.[0] || null);
     setIsInitialized(true);
-  }, [isInitialized, sections, formConfig]);
+  }, [isInitialized, sections, formConfig, user?.permissions]);
 
   const reset = useCallback(() => {
     if (formConfig) {

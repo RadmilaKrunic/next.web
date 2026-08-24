@@ -129,7 +129,7 @@ describe("priceCalculator", () => {
   });
 
   describe("grossAmount changes", () => {
-    it("should calculate dependent fienetAmountross price changes", () => {
+    it("should calculate dependent fields when gross price changes", () => {
       const inputs = { ...baseInputs, suggestedNetPrice: 1000 };
       const result = calculatePrices(inputs, "grossAmount", 1300);
 
@@ -137,6 +137,13 @@ describe("priceCalculator", () => {
       expect(result.taxAmount).toBe(300);
       expect(result.discountAmount).toBe(130);
       expect(result.totalAmount).toBe(1170);
+    });
+
+    it("should leave taxPercent unchanged when grossAmount changes", () => {
+      const inputs = { ...baseInputs, suggestedNetPrice: 1000 };
+      const result = calculatePrices(inputs, "grossAmount", 1300);
+
+      expect(result.taxPercent).toBe(20); // unchanged from input, not back-derived
     });
 
     it("should handle negative gross price by converting to 0", () => {

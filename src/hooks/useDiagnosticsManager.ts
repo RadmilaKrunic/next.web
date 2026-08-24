@@ -15,7 +15,7 @@ import {
   mapFieldToFieldMapping,
   syncFieldsToTabs,
 } from "components/generics/utils";
-import { calculatePrices, roundToTwo } from "utils/priceCalculator";
+import { calculatePrices } from "utils/priceCalculator";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useBareSalesRelation } from "api/services/bareSalesRelation/hooks";
@@ -48,7 +48,9 @@ export interface MaterialItem {
   /** True for rows added manually by the user (not loaded from API) */
   isNew?: boolean;
   order?: number;
+  notBelongsToTool?: boolean;
   isPriceSetManually?: boolean;
+  reimbursementPaymentMethod?: string | null;
 }
 
 // ── Diagnostic field helpers ───────────────────────────────────────────────
@@ -60,6 +62,17 @@ export function computeIsChargeable(
   const typeFields = allFields.filter((f) => f.subtype === "diagnosticType");
   if (typeFields.length === 0) return null;
   return typeFields.some((f) => (values[f.name] as string) === "CHARGEABLE");
+}
+
+export function hasWarrantyOrProServiceItems(
+  allFields: Field[],
+  values: Record<string, unknown>,
+): boolean {
+  const typeFields = allFields.filter((f) => f.subtype === "diagnosticType");
+  return typeFields.some((f) => {
+    const type = (values[f.name] as string) ?? "";
+    return type === "WARRANTY" || type === "SERVICE_OFFERING";
+  });
 }
 
 export function getChargeablePendingInfo(
@@ -123,7 +136,11 @@ const POSITION_ORDER: Record<string, number> = {
   FR: 4,
   PC: 5,
 };
-const POSITION_PERMISSIONS = {
+const POSITION_VIEW_PERMISSIONS = {
+  FR: PERMISSIONS.DIAGNOSTICS.CAN_VIEW_FREIGHT_ITEMS,
+} as const;
+
+const POSITION_INSERT_PERMISSIONS = {
   FR: PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_FREIGHT_ITEMS,
 } as const;
 
@@ -187,50 +204,6 @@ const computePricesForItem = (item: MaterialItem, mode?: discountBase): Material
     taxAmount: result.taxAmount,
     grossAmount: result.grossAmount,
     discount: result.discountPercent,
-    discountAmount: result.discountAmount,
-    totalAmount: result.totalAmount,
-  };
-};
-
-const recalculateMissingPrices = (item: MaterialItem, mode: discountBase): MaterialItem => {
-  const hasMissingPrices =
-    item.unitPrice > 0 &&
-    (item.suggestedNetPrice === 0 ||
-      item.netAmount === 0 ||
-      item.grossAmount === 0 ||
-      item.totalAmount === 0);
-
-  // Backend may update only unitPrice/tax while leaving downstream prices stale from a
-  // previous validation. Detect this by comparing suggestedNetPrice vs. quantity × unitPrice.
-  const hasstalePrices =
-    !hasMissingPrices &&
-    item.unitPrice > 0 &&
-    item.quantity > 0 &&
-    roundToTwo(item.quantity * item.unitPrice) !== roundToTwo(item.suggestedNetPrice ?? 0);
-
-  if (!hasMissingPrices && !hasstalePrices) return item;
-  const result = calculatePrices(
-    {
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      taxPercent: item.tax,
-      discountPercent: item.discount,
-      grossAmount: 0,
-      netAmount: 0,
-      suggestedNetPrice: 0,
-      totalAmount: 0,
-      taxAmount: 0,
-    },
-    "unitPrice",
-    item.unitPrice,
-    mode,
-  );
-  return {
-    ...item,
-    suggestedNetPrice: result.suggestedNetPrice,
-    netAmount: result.netAmount,
-    taxAmount: result.taxAmount,
-    grossAmount: result.grossAmount,
     discountAmount: result.discountAmount,
     totalAmount: result.totalAmount,
   };
@@ -302,6 +275,7 @@ export const buildRowValues = (
     diagnosticMaterialStatus: item.status ?? "PENDING",
     archivedMaterialStatus: item.status ?? "ARCHIVED",
     diagnosticMaterialId: item.materialId ?? "",
+    notBelongsToTool: item.notBelongsToTool ?? "",
   };
   return areaFields.reduce(
     (acc, field) => {
@@ -347,7 +321,7 @@ function shouldReuseExistingRowValues(params: {
   return !rowHasNoPrices;
 }
 
-function buildMaterialsRowValues(params: {
+export function buildMaterialsRowValues(params: {
   materials: MaterialItem[];
   areas: Area[];
   fields: Field[];
@@ -399,6 +373,22 @@ function buildMaterialsRowValues(params: {
         item,
         formValues.faultCodeDropdown,
       );
+      const descriptionField = areaFields.find((f) => f.subtype === "diagnosticDescription");
+      if (descriptionField) {
+        const currentDescription = existingValues[descriptionField.name];
+        if (
+          (typeof currentDescription !== "string" || !currentDescription.trim()) &&
+          item.description
+        ) {
+          existingValues[descriptionField.name] = item.description;
+        }
+      }
+      if (item.position === "LA") {
+        const qtyField = areaFields.find((f) => f.subtype === "diagnosticQuantity");
+        if (qtyField) {
+          existingValues[qtyField.name] = item.quantity;
+        }
+      }
       rowValues = { ...rowValues, ...existingValues };
       return;
     }
@@ -466,6 +456,7 @@ function removeArchivedArea(tab: Section, areaName: string): Section {
 }
 
 const SPARE_PARTS_PREFIX = "diagnosticData_diagnosticsSpareParts#";
+const RESETTABLE_MATERIAL_STATUSES = new Set(["REVISED", "REJECTED"]);
 
 /**
  * Returns the shifted key after deleting row `deletedIndex`.
@@ -585,7 +576,7 @@ export interface UseDiagnosticsManagerReturn {
     faultCodeValue?: string,
     faultCodeLabourQuantity?: number,
   ) => number | undefined;
-  onAddRow: (formValues: Record<string, unknown>) => void;
+  onAddRow: (formValues?: Record<string, unknown>) => void;
   onDeleteRow: (areaName: string) => void;
   onRestoreRow: (areaName: string) => void;
   onAddMaterials: (
@@ -597,7 +588,7 @@ export interface UseDiagnosticsManagerReturn {
   markRowDirty: (areaIndex: number) => void;
   enableValidate: () => boolean;
   resyncMaterialsFromAPI: (markValidated?: boolean) => void;
-  setRevisedRowPending: (areaName: string) => void;
+  setRevisedRejectedRowPending: (areaName: string) => void;
   canArchiveOnDelete: boolean;
 }
 
@@ -655,7 +646,7 @@ export const useDiagnosticsManager = ({
 
   const allowedPositions: AllowedPosition[] = (matchedRule?.allowedPositions ?? []).filter((p) => {
     const requiredPermission =
-      POSITION_PERMISSIONS[p.position as keyof typeof POSITION_PERMISSIONS];
+      POSITION_VIEW_PERMISSIONS[p.position as keyof typeof POSITION_VIEW_PERMISSIONS];
     if (!requiredPermission) return true;
     return hasPermission(requiredPermission);
   });
@@ -684,6 +675,34 @@ export const useDiagnosticsManager = ({
     [allowedPositions],
   );
 
+  const resolveFaultCodesQuantity = useCallback(
+    (
+      position: string,
+      quantitySource: string,
+      faultCodeValue: string | undefined,
+      faultCodeLabourQuantity: number | undefined,
+      defaultQuantity: number,
+    ): number => {
+      if (quantitySource === (QuantitySource.DEFAULT as string)) {
+        return defaultQuantity;
+      }
+      if (
+        position === "LA" &&
+        faultCodeLabourQuantity !== undefined &&
+        faultCodeLabourQuantity !== 0
+      )
+        return faultCodeLabourQuantity;
+      if (!faultCodeValue) return defaultQuantity;
+      const parts = faultCodeValue.split(":");
+      if (parts.length > 1) {
+        const parsed = Number(parts[1]);
+        return Number.isNaN(parsed) ? defaultQuantity : parsed;
+      }
+      return defaultQuantity;
+    },
+    [],
+  );
+
   const getQuantityForPosition = useCallback(
     (
       position: string,
@@ -696,23 +715,17 @@ export const useDiagnosticsManager = ({
       if (source === (QuantitySource.USER as string)) return undefined;
       if (source === (QuantitySource.DEFAULT as string)) return posConfig.quantity.defaultQuantity;
       if (source === (QuantitySource.FAULT_CODES as string)) {
-        if (
-          position === "LA" &&
-          faultCodeLabourQuantity !== undefined &&
-          faultCodeLabourQuantity !== 0
-        )
-          return faultCodeLabourQuantity;
-        if (!faultCodeValue) return posConfig.quantity.defaultQuantity;
-        const parts = faultCodeValue.split(":");
-        if (parts.length > 1) {
-          const parsed = Number(parts[1]);
-          return Number.isNaN(parsed) ? posConfig.quantity.defaultQuantity : parsed;
-        }
-        return posConfig.quantity.defaultQuantity;
+        return resolveFaultCodesQuantity(
+          position,
+          source,
+          faultCodeValue,
+          faultCodeLabourQuantity,
+          posConfig.quantity.defaultQuantity,
+        );
       }
       return posConfig.quantity.defaultQuantity;
     },
-    [allowedPositions],
+    [allowedPositions, resolveFaultCodesQuantity],
   );
 
   // ── Source-of-truth list ─────────────────────────────────────────────────
@@ -767,7 +780,7 @@ export const useDiagnosticsManager = ({
     : undefined;
   // ── Bare-sales-relation query (PN row autofill) ───────────────────────────
   const countryCode = userData?.countryCode ?? "";
-  const language = localStorage.getItem("selectedLanguage")?.toUpperCase() || "EN";
+  const language = userData?.language?.toUpperCase() || "EN";
   const { data: bareSalesData } = useBareSalesRelation(
     { bareTool: baretoolNumber ?? "", countryCode, language },
     {
@@ -780,6 +793,58 @@ export const useDiagnosticsManager = ({
   const bareSalesDataRef = useRef(bareSalesData);
   bareSalesDataRef.current = bareSalesData;
 
+  const mapPrice = (
+    m: Record<string, unknown>,
+    position: string,
+    description: string,
+    price: Record<string, unknown>,
+    mode: discountBase,
+  ) => {
+    const quantity = Number(m.quantity) || 1;
+    const unitPrice = Number(price.unitPrice) || 0;
+    const taxPercent = Number(price.tax) || 0;
+    const discountPercent = Number(price.discount) || 0;
+
+    const calculated = calculatePrices(
+      {
+        quantity,
+        unitPrice,
+        taxPercent,
+        discountPercent,
+        suggestedNetPrice: 0,
+        netAmount: 0,
+        grossAmount: 0,
+        totalAmount: 0,
+        taxAmount: 0,
+      },
+      "unitPrice",
+      unitPrice,
+      mode,
+    );
+
+    return {
+      position,
+      partNumber: (m.partNumber as string) ?? "",
+      description,
+      type: (m.jobType as string) ?? "",
+      quantity,
+      unitPrice,
+      netAmount: calculated.netAmount,
+      tax: taxPercent,
+      taxAmount: calculated.taxAmount,
+      grossAmount: calculated.grossAmount,
+      discount: calculated.discountPercent,
+      discountAmount: calculated.discountAmount,
+      totalAmount: calculated.totalAmount,
+      suggestedNetPrice: calculated.suggestedNetPrice,
+      status: (m.status as string) ?? undefined,
+      materialId: (m.id as string) ?? undefined,
+      isValidated: shouldMarkValidatedRef.current,
+      order: Number(m.order) || 0,
+      notBelongsToTool: (m.notBelongsToTool as boolean) ?? undefined,
+      isPriceSetManually: false,
+    };
+  };
   // Reset on new job
   useEffect(() => {
     hasSyncedFromAPIRef.current = false;
@@ -811,29 +876,7 @@ export const useDiagnosticsManager = ({
       const position = (m.position as string) ?? "";
       const price = (m.price as Record<string, unknown>) ?? {};
       const description = autofill[position]?.description ?? (m.description as string) ?? "";
-      return {
-        position,
-        partNumber: (m.partNumber as string) ?? "",
-        description,
-        type: (m.jobType as string) ?? "",
-        quantity: Number(m.quantity) || 1,
-        unitPrice: Number(price.unitPrice) || 0,
-        netAmount: Number(price.netAmount) || 0,
-        tax: Number(price.tax) || 10,
-        taxAmount:
-          Number(price.taxAmount) ||
-          roundToTwo((Number(price.netAmount) || 0) * ((Number(price.tax) || 10) / 100)),
-        grossAmount: Number(price.grossAmount) || 0,
-        discount: Number(price.discount) || 0,
-        discountAmount: Number(price.discountAmount) || 0,
-        totalAmount: Number(price.totalAmount) || 0,
-        suggestedNetPrice: Number(price.suggestedNetPrice) || 0,
-        status: (m.status as string) ?? undefined,
-        materialId: (m.id as string) ?? undefined,
-        isValidated: shouldMarkValidatedRef.current,
-        order: Number(m.order) || 0,
-        isPriceSetManually: Boolean(m.isPriceSetManually) || false,
-      };
+      return mapPrice(m, position, description, price, discountBaseRef.current);
     });
     shouldMarkValidatedRef.current = false;
 
@@ -853,13 +896,22 @@ export const useDiagnosticsManager = ({
       }
     }
 
-    const recalculatedItems = items.map((item) =>
-      recalculateMissingPrices(item, discountBaseRef.current),
-    );
+    // Bug 6 fix: preserve tax for in-progress rows not yet returned by the API
+    const mergedItems = items.map((item) => {
+      if (item.materialId) return item; // API-sourced, use API tax
+      const existing = materialsRef.current.find(
+        (m) => m.position === item.position && !m.materialId,
+      );
+      if (existing && existing.tax > 0 && item.tax === 0) {
+        return { ...item, tax: existing.tax };
+      }
+      return item;
+    });
+
     // Signal Effect 3 to force a full rebuild so field components always
     // re-render with fresh API data, even when the row count hasn't changed.
     forceRebuildRef.current = true;
-    setMaterials(sortMaterialsByOrder(recalculatedItems));
+    setMaterials(sortMaterialsByOrder(mergedItems));
   }, [diagnosticData, isResyncingRef, setArePricesValidated]);
 
   // ── Effect 1b: API archived data → archivedMaterials list ─────────────────
@@ -872,26 +924,10 @@ export const useDiagnosticsManager = ({
     hasSyncedArchivedRef.current = true;
 
     const items: MaterialItem[] = apiArchived.map((m) => {
+      const position = (m.position as string) ?? "";
       const price = (m.price as Record<string, unknown>) ?? {};
-      return {
-        position: (m.position as string) ?? "",
-        partNumber: (m.partNumber as string) ?? "",
-        description: (m.description as string) ?? "",
-        type: (m.type as string) ?? (m.jobType as string) ?? "",
-        quantity: Number(m.quantity) || 1,
-        unitPrice: Number(price.unitPrice) || 0,
-        netAmount: Number(price.netAmount) || 0,
-        tax: Number(price.tax) || 10,
-        taxAmount:
-          Number(price.taxAmount) ||
-          roundToTwo((Number(price.netAmount) || 0) * ((Number(price.tax) || 10) / 100)),
-        grossAmount: Number(price.grossAmount) || 0,
-        discount: Number(price.discount) || 0,
-        discountAmount: Number(price.discountAmount) || 0,
-        totalAmount: Number(price.totalAmount) || 0,
-        status: (m.status as string) ?? undefined,
-        order: Number(m.order) || 0,
-      };
+      const description = (m.description as string) ?? "";
+      return mapPrice(m, position, description, price, discountBaseRef.current);
     });
 
     archivedForceRebuildRef.current = true;
@@ -904,6 +940,7 @@ export const useDiagnosticsManager = ({
     if (!currentActionType || !currentJobType) return;
     const ruleKey = `${currentActionType}__${currentJobType}`;
     const isFirstApplication = prevRuleKeyRef.current === "";
+    const isSparePartsExchange = currentActionType === "SPARE_PARTS_EXCHANGE";
 
     // If country config hasn't loaded yet AND no API data has arrived, defer.
     // We do NOT commit prevRuleKeyRef so that when hasDiagnosticsConfig flips to
@@ -960,7 +997,21 @@ export const useDiagnosticsManager = ({
         return false;
       });
 
-      return normalizeMaterialOrders([...automaticItems, ...preservedSpRows]);
+      const rebuiltItems = [...automaticItems, ...preservedSpRows];
+
+      if (isSparePartsExchange) {
+        let seenSpRow = false;
+        return normalizeMaterialOrders(
+          rebuiltItems.filter((item) => {
+            if (item.position !== "SP") return true;
+            if (seenSpRow) return false;
+            seenSpRow = true;
+            return true;
+          }),
+        );
+      }
+
+      return normalizeMaterialOrders(rebuiltItems);
     });
   }, [
     readOnly,
@@ -1235,10 +1286,12 @@ export const useDiagnosticsManager = ({
 
   // ── Public callbacks ──────────────────────────────────────────────────────
 
-  const onAddRow = useCallback((formValues: Record<string, unknown>) => {
+  const onAddRow = useCallback((formValues?: Record<string, unknown>) => {
+    if (!formValues) return;
     const perms = userPermissionsRef.current;
     const hasPositionPermission = (position: string): boolean => {
-      const required = POSITION_PERMISSIONS[position as keyof typeof POSITION_PERMISSIONS];
+      const required =
+        POSITION_INSERT_PERMISSIONS[position as keyof typeof POSITION_INSERT_PERMISSIONS];
       if (!required) return true;
       return perms.includes(required);
     };
@@ -1283,13 +1336,12 @@ export const useDiagnosticsManager = ({
         ) ?? 1)
       : 1;
 
-    const newItem = buildEmptyMaterial(
-      nextPosition,
-      "",
-      qty,
-      tRef.current,
-      discountBaseRef.current,
-    );
+    // Bug 6 fix: use tax from existing validated rows as default for new rows
+    const defaultTax = materialsRef.current.find((m) => m.tax > 0)?.tax ?? 0;
+    const newItem = {
+      ...buildEmptyMaterial(nextPosition, "", qty, tRef.current, discountBaseRef.current),
+      tax: defaultTax,
+    };
 
     setMaterials((prev) => {
       const syncedMaterials = syncMaterialsWithForm(prev, formValues);
@@ -1409,7 +1461,7 @@ export const useDiagnosticsManager = ({
             totalAmount: 0,
             origin: m.origin,
           };
-          return computePricesForItem(base);
+          return computePricesForItem(base, discountBaseRef.current);
         });
 
       if (toAdd.length === 0) return;
@@ -1460,6 +1512,7 @@ export const useDiagnosticsManager = ({
               position: materialToRestore.position,
               maxCount: maxCountForPosition,
             }),
+            duration: 5000,
           },
         ]);
         scrollToTop();
@@ -1542,13 +1595,13 @@ export const useDiagnosticsManager = ({
     return sparePartsAreas.findIndex((a) => a.name === areaName);
   }, []);
 
-  const setRevisedRowPending = useCallback(
+  const setRevisedRejectedRowPending = useCallback(
     (areaName: string) => {
       const positionalIndex = getAreaPositionalIndex(areaName);
       if (positionalIndex === -1) return;
       setMaterials((prev) => {
         const item = prev[positionalIndex];
-        if (item?.status !== "REVISED") return prev;
+        if (!item?.status || !RESETTABLE_MATERIAL_STATUSES.has(item.status)) return prev;
         return prev.map((m, i) => (i === positionalIndex ? { ...m, status: "PENDING" } : m));
       });
     },
@@ -1588,7 +1641,7 @@ export const useDiagnosticsManager = ({
     markRowDirty,
     enableValidate,
     resyncMaterialsFromAPI,
-    setRevisedRowPending,
+    setRevisedRejectedRowPending,
     canArchiveOnDelete: !STATUSES_WITH_PERMANENT_DELETE.includes(jobStatus),
   };
 };

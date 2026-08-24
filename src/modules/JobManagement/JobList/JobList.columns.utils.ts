@@ -25,6 +25,9 @@ export const DEFAULT_COLUMN_CONFIGURATION: JobColumnConfiguration[] = [
   { key: "paymentType", isFixed: false, isChecked: false, order: 11 },
   { key: "source", isFixed: false, isChecked: false, order: 12 },
   { key: "createdAt", isFixed: true, isChecked: true, order: 3 },
+  { key: "internalReferenceNumber", isFixed: false, isChecked: false, order: 13 },
+  { key: "phoneNumber", isFixed: false, isChecked: false, order: 14 },
+  { key: "mobileNumber", isFixed: false, isChecked: false, order: 15 },
 ];
 
 const COLUMN_DISPLAY_ORDER: JobColumnKey[] = [
@@ -41,6 +44,9 @@ const COLUMN_DISPLAY_ORDER: JobColumnKey[] = [
   "source",
   "bareToolNumber",
   "jobStatus",
+  "internalReferenceNumber",
+  "phoneNumber",
+  "mobileNumber",
 ];
 
 export function getVisibleColumns(config: JobColumnConfiguration[]): JobColumnKey[] {

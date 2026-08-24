@@ -91,6 +91,7 @@ const claimMaterialToMaterialItem = (m: Material, mode: discountBase): MaterialI
     status: m.status,
     isValidated: m.isValidated,
     order: Number(m.order) || 0,
+    reimbursementPaymentMethod: m.reimbursementPaymentMethod,
   };
 };
 
@@ -118,6 +119,7 @@ const materialItemToMaterial = (item: MaterialItem): Material => ({
   quantity: item.quantity,
   isValidated: item.isValidated ?? false,
   isPriceManuallySet: true,
+  reimbursementPaymentMethod: item.reimbursementPaymentMethod,
   price: {
     unitPrice: item.unitPrice,
     suggestedNetPrice: item.suggestedNetPrice ?? 0,
@@ -591,10 +593,9 @@ export const useClaimMaterialsManager = ({
       );
       const autoPosition = availablePositions.length === 1 ? availablePositions[0].position : "";
 
-      const newItem = buildEmptyClaimMaterial(
-        autoPosition,
-        (formValues.jobType as string) ?? currentJobType ?? "",
-      );
+      // New rows added via "add row" default to WARRANTY regardless of the
+      // claim's overall jobType (per PTBASS product requirement).
+      const newItem = buildEmptyClaimMaterial(autoPosition, "WARRANTY");
 
       setMaterials((prev) => {
         // Sync current form values back into existing rows before appending
@@ -619,7 +620,7 @@ export const useClaimMaterialsManager = ({
       });
       setArePricesValidated(false);
     },
-    [readOnly, allowedPositions, currentJobType, setArePricesValidated],
+    [readOnly, allowedPositions, setArePricesValidated],
   );
 
   // ── onDeleteRow ────────────────────────────────────────────────────────
@@ -694,7 +695,9 @@ export const useClaimMaterialsManager = ({
           position: m.position ?? "SP",
           partNumber: m.partNumber,
           description: m.description ?? "",
-          type: m.type ?? currentJobType ?? "",
+          // Rows added from product details default to WARRANTY (per PTBASS
+          // product requirement), unless the imported item explicitly sets a type.
+          type: m.type ?? "WARRANTY",
           quantity: m.quantity ?? 1,
           unitPrice: m.unitPrice ?? 0,
           netAmount: 0,
@@ -712,7 +715,7 @@ export const useClaimMaterialsManager = ({
       setMaterials((prev) => normalizeMaterialOrders([...prev, ...toAdd]));
       setArePricesValidated(false);
     },
-    [readOnly, currentJobType, formValuesRef, setArePricesValidated],
+    [readOnly, formValuesRef, setArePricesValidated],
   );
 
   // ── getExistingPartNumbers ─────────────────────────────────────────────

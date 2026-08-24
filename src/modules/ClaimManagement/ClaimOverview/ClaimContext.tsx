@@ -60,6 +60,8 @@ export interface ClaimContextValue {
   /** True when the archived materials section is expanded */
   isArchivedExpanded: boolean;
   setIsArchivedExpanded: Dispatch<SetStateAction<boolean>>;
+  /** True when claim status is PENDING and material-level inputs must stay locked */
+  isClaimPending: boolean;
 }
 
 const DEFAULT_SUMMARY_TYPE_OPTIONS = [{ value: "totalSummary", label: "totalSummary" }];
@@ -95,6 +97,7 @@ const defaultClaimContextValue: ClaimContextValue = {
   archivedMaterials: [],
   isArchivedExpanded: false,
   setIsArchivedExpanded: () => {},
+  isClaimPending: false,
 };
 
 export const ClaimContext = createContext<ClaimContextValue>(defaultClaimContextValue);

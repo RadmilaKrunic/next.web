@@ -69,6 +69,11 @@
         color: var(--bosch-gray-40);
       }
 
+      img.item-icon {
+        overflow: hidden;
+        font-size: 12px;
+      }
+
       .item-icon.a-icon {
         font-size: 32px;
       }

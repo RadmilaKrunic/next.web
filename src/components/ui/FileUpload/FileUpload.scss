@@ -52,6 +52,11 @@
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
+
+  &.disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
 }
 
 .upload-content {

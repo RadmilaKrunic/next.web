@@ -2,7 +2,7 @@ import { ActivityIndicator, Button, Dropdown } from "@bosch/react-frok";
 import { useState } from "react";
 import "./FilePreview.scss";
 import { useTranslation } from "react-i18next";
-import { FileProps } from "../FileUpload";
+import { FileProps } from "../FileUpload.types";
 import DocumentFile from "components/ui/DocumentFile/DocumentFile";
 import { GenericOptionProps } from "components/generics/Field/GenericField.types";
 
@@ -74,13 +74,15 @@ export default function FilePreview({
                 dataTestid={idx.toString()}
               />
 
-              <Dropdown
-                label={t("fileType")}
-                value={item.fileType}
-                options={fileTypeOptionsTranslated}
-                onChange={(event) => updateFileType(idx, event.target.value ?? "")}
-                className="file-type-section"
-              />
+              {!!fileTypeOptions.length && (
+                <Dropdown
+                  label={t("fileType")}
+                  value={item.fileType}
+                  options={fileTypeOptionsTranslated}
+                  onChange={(event) => updateFileType(idx, event.target.value ?? "")}
+                  className="file-type-section"
+                />
+              )}
             </div>
           ))}
       </div>

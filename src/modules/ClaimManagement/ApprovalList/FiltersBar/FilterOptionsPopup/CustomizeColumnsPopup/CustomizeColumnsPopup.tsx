@@ -77,7 +77,7 @@ function CustomizeColumnsPopup({
       }
     >
       <div>
-        <div className="header-text">{t("customizeColumnsPopupHeader")}</div>
+        <div className="header-text">{t("customizeColumnsClaimPopupHeader")}</div>
         <div className="customize-columns-popup-content">
           {pendingConfig
             .toSorted((a, b) => a.order - b.order)

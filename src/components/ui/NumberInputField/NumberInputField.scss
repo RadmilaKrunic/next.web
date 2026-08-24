@@ -20,9 +20,11 @@
 
     &:disabled {
       background-color: var(--bosch-gray-95);
+      color: var(--neutral__disabled__front__default);
+      border-bottom: 0.0625rem solid var(--neutral__disabled__front__default);
     }
 
-    &:hover {
+    &:hover:not(:disabled) {
       background-color: var(--neutral__enabled__fill__hovered);
       border-bottom: 1px solid var(--neutral__enabled__front__default);
       color: var(--neutral__enabled__front__hovered);
@@ -32,5 +34,30 @@
   input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
+  }
+
+  .number-input-prefix {
+    display: flex;
+    align-items: flex-end;
+    padding-left: 0.5rem;
+    padding-bottom: 0.3125rem;
+    background-color: var(--neutral__enabled__fill__default);
+    border: none;
+    border-bottom: 0.0625rem solid var(--neutral__enabled__front__default);
+    color: var(--neutral__enabled__front__default);
+  }
+
+  &:has(.text-field:hover):not(:has(input:disabled)) {
+    .number-input-prefix {
+      background-color: var(--neutral__enabled__fill__hovered);
+    }
+  }
+
+  &:has(input:disabled) {
+    .number-input-prefix {
+      background-color: var(--bosch-gray-95);
+      color: var(--neutral__disabled__front__default);
+      border-bottom: 0.0625rem solid var(--neutral__disabled__front__default);
+    }
   }
 }

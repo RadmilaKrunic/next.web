@@ -57,44 +57,48 @@ function FiltersPopup({
               />
             }
           >
-            {filters?.areas
-              .toSorted((a, b) => (a.position ?? 0) - (b.position ?? 0))
-              .map((area: Area) => (
-                <GenericArea key={area.name} area={area} />
-              ))}
+            {isPopupOpen && (
+              <>
+                {filters?.areas
+                  .toSorted((a, b) => (a.position ?? 0) - (b.position ?? 0))
+                  .map((area: Area) => (
+                    <GenericArea key={area.name} area={area} />
+                  ))}
 
-            <FiltersChips filters={filters} type={type} />
+                <FiltersChips filters={filters} type={type} />
 
-            <div className="filters-buttons">
-              <Button
-                icon="reset"
-                mode="integrated"
-                label={t("resetAllFilters")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  resetForm();
-                  resetAdvancedFilters?.();
-                  sessionStorage.removeItem(`${filtersName}-${type}-advancedFilters`);
-                }}
-              />
-              <Button
-                mode="secondary"
-                label={t("save")}
-                onClick={() => {
-                  const filters: Filter[] = Object.entries(values)
-                    .map(([name, value]) => ({ name, value }))
-                    .filter(hasFilterValue);
-                  if (filtersName) {
-                    sessionStorage.setItem(
-                      `${filtersName}-${type}-advancedFilters`,
-                      JSON.stringify(filters),
-                    );
-                  }
-                  applyAdvancedFilters?.(filters);
-                  setIsPopupOpen(false);
-                }}
-              />
-            </div>
+                <div className="filters-buttons">
+                  <Button
+                    icon="reset"
+                    mode="integrated"
+                    label={t("resetAllFilters")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetForm();
+                      resetAdvancedFilters?.();
+                      sessionStorage.removeItem(`${filtersName}-${type}-advancedFilters`);
+                    }}
+                  />
+                  <Button
+                    mode="secondary"
+                    label={t("save")}
+                    onClick={() => {
+                      const filters: Filter[] = Object.entries(values)
+                        .map(([name, value]) => ({ name, value }))
+                        .filter(hasFilterValue);
+                      if (filtersName) {
+                        sessionStorage.setItem(
+                          `${filtersName}-${type}-advancedFilters`,
+                          JSON.stringify(filters),
+                        );
+                      }
+                      applyAdvancedFilters?.(filters);
+                      setIsPopupOpen(false);
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </Popover>
         </div>
       )}

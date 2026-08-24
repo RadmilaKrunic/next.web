@@ -7,6 +7,7 @@ export type TableProps<T> = {
   visibleColumns: string[];
   getRowKey: (row: T) => string;
   onRowClick?: (row: T) => void;
+  emptyListMessage?: string;
   renderRowActions: (row: T) => ReactNode;
   selectable?: boolean;
   selectedRows?: string[];

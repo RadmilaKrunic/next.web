@@ -3,6 +3,28 @@ import { CalendarConfig } from "../../ui/DatePicker/DatePicker.types";
 
 export type FieldValueType = string | number | boolean | string[];
 
+export type WarrantyReasonKey =
+  | "UNKNOWN_SERIAL_NUMBER"
+  | "WARRANTY_EXPIRED"
+  | "ALLOWED_REPAIR_COUNT_EXCEEDED";
+
+export interface WarrantyInfoPayload {
+  reasonKey?: WarrantyReasonKey;
+  fallbackMessage?: string;
+  validityExpirationDate?: string;
+  usedWarrantyRepairCount?: number;
+  allowedWarrantyRepairCount?: number;
+  recommendation?: string;
+}
+
+export interface RadioButtonOption {
+  label: string;
+  value: FieldValueType;
+  disabled?: boolean;
+  infoText?: string;
+  infoPayload?: WarrantyInfoPayload;
+}
+
 export interface DependentField {
   fieldName: string;
   fieldValue: FieldValueType;
@@ -58,8 +80,9 @@ interface Field {
   [key: string]: unknown;
   isInfoIcon?: boolean;
   infoText?: string;
+  infoPayload?: WarrantyInfoPayload;
   size?: string;
-  radioButtons?: { label: string; value: FieldValueType }[];
+  radioButtons?: RadioButtonOption[];
   isSubField?: boolean;
   dependFieldCondition?: string | null;
   dependentFields?: DependentField[];
@@ -85,9 +108,8 @@ interface Field {
   maxFilesAllowed?: number;
   maxFileSizeInMb?: number;
   requiredDocuments?: RequiredDocument[];
+  prefix?: string;
   //not from uiConfiguration, added only for validation and mapping
   fieldMapping?: FieldMapping;
-  //preserve value of diferent fields that depends on it
-  preserveOtherFieldValue?: Record<string, undefined>[];
 }
 export default Field;

@@ -2,7 +2,7 @@ import { useContext, useMemo, useState } from "react";
 import { useListFilterHandlers } from "hooks/useListFilterHandlers";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { ActivityIndicator } from "@bosch/react-frok";
+import { ActivityIndicator, Button } from "@bosch/react-frok";
 import { useQueryClient } from "@tanstack/react-query";
 import Filters from "components/ui/List/Filters/Filters";
 import Table from "components/ui/List/Table/Table";
@@ -16,11 +16,21 @@ import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
 import DocumentsModal from "components/ui/DocumentsModal/DocumentsModal";
 import MessagesModal from "components/ui/MessagesModal/MessagesModal";
+import CustomizeColumnsPopup from "components/ui/List/Filters/FiltersOptionsPopup/CustomizeColumnsPopup/CustomizeColumnsPopup";
 import ClaimActionsFlyout from "./ClaimListTable/ClaimActionsFlyout/ClaimActionsFlyout";
+import { getClaimColumns } from "./ClaimListTable/ClaimListColumns.config";
 import { Claim } from "./ClaimList.types";
 import { filterClaims, getClaimNavigationPath } from "./ClaimList.utils";
-import { getClaimListColumns } from "./ClaimList.columns.utils";
+import {
+  getClaimListColumns,
+  getDefaultFixedColumns,
+  getVisibleColumns,
+  isColumnDisabled,
+  saveVisibleColumns,
+  ClaimColumnConfiguration,
+} from "./ClaimList.columns.utils";
 import "./ClaimList.scss";
+import ClaimListExportDialog from "./ClaimListExportDialog/ClaimListExportDialog";
 
 function ClaimList() {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
@@ -58,10 +68,15 @@ function ClaimList() {
     page: Number(sessionStorage.getItem("claimList-currentPage")) || 1,
     pageSize: Number(sessionStorage.getItem("claimList-pageSize")) || 10,
   });
+  const [columnConfig, setColumnConfig] = useState<ClaimColumnConfiguration[]>(
+    user?.preferences?.claimColumnView ?? getDefaultFixedColumns(),
+  );
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const canPerformClaimDecision = useHasPermission([
     PERMISSIONS.APPROVAL.CAN_PERFORM_CLAIM_DECISION,
   ]);
+  const canDownloadClaimList = useHasPermission([PERMISSIONS.CLAIM.CAN_DOWNLOAD_CLAIM_LIST]);
 
   const selectedClaim = claims.find((c) => c.claimId === selectedClaimId);
 
@@ -71,7 +86,10 @@ function ClaimList() {
 
   const CLAIM_COLUMNS = useMemo(() => getClaimListColumns(t), [t]);
 
-  const visibleColumns = useMemo(() => CLAIM_COLUMNS.map((col) => col.key), [CLAIM_COLUMNS]);
+  const visibleColumns = useMemo(
+    () => getVisibleColumns(columnConfig).map((key) => key as string),
+    [columnConfig],
+  );
 
   const { handleToggleFilter, applyAdvancedFilters, resetAdvancedFilters } = useListFilterHandlers(
     setQuickFilters,
@@ -97,11 +115,12 @@ function ClaimList() {
 
   const handlePageSizeChange = (option: string) => {
     sessionStorage.setItem("claimList-pageSize", option);
+    sessionStorage.setItem("claimList-currentPage", "1");
     setPagination({ page: 1, pageSize: Number(option) });
   };
 
   const handleRowClick = (row: Claim) => {
-    const navigateResult = navigate(getClaimNavigationPath(row));
+    const navigateResult = navigate(getClaimNavigationPath(row.claimId));
     if (navigateResult instanceof Promise) {
       navigateResult.catch(() => undefined);
     }
@@ -126,7 +145,11 @@ function ClaimList() {
   });
 
   const handleBulkApprove = () => {
-    bulkApproveClaimsMutation.mutate({ claimIds: selectedRows });
+    bulkApproveClaimsMutation.mutate({
+      claimIds: selectedRows,
+      decision: "APPROVED",
+      message: "Approved after bulk review",
+    });
   };
 
   const approveActionButton = canPerformClaimDecision
@@ -158,6 +181,36 @@ function ClaimList() {
         onSearchChange={setSearchValue}
         onSearchReset={() => setSearchValue("")}
         actionButton={approveActionButton}
+        optionsContent={
+          <>
+            <CustomizeColumnsPopup
+              columnConfig={columnConfig}
+              setColumnConfig={setColumnConfig}
+              getColumnOptions={getClaimColumns}
+              isColumnDisabled={isColumnDisabled}
+              getDefaultFixedColumns={getDefaultFixedColumns}
+              saveVisibleColumns={saveVisibleColumns}
+              saveErrorMessage={t("failedToSaveClaimColumnPreferences")}
+              type="claims"
+              isExportOpen={isExportOpen}
+              setIsExportOpen={setIsExportOpen}
+            />
+            {canDownloadClaimList && (
+              <>
+                <div className="popover-divider"></div>
+                <Button
+                  icon="export"
+                  mode="integrated"
+                  as="button"
+                  className="popover-button-primary"
+                  onClick={() => setIsExportOpen?.(!isExportOpen)}
+                >
+                  {t("exportClaimList")}
+                </Button>
+              </>
+            )}
+          </>
+        }
         type={"claim"}
       />
       <Table<Claim>
@@ -178,6 +231,7 @@ function ClaimList() {
         selectedRows={selectedRows}
         onSelectionChange={setSelectedRows}
         isRowSelectable={(claim) => claim.status === "PENDING"}
+        emptyListMessage="noClaimsFound"
       />
       <Pagination
         page={pagination.page}
@@ -204,6 +258,7 @@ function ClaimList() {
           hideDelete={true}
         />
       )}
+      {isExportOpen && <ClaimListExportDialog setIsExportOpen={setIsExportOpen} />}
     </div>
   );
 }
