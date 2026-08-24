@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { calculatePrices, aggregateRowPrices, PriceInputs } from "utils/priceCalculator";
 import Field from "components/generics/Field/GenericField.types";
 import { simulatePriceValidate, simulateClaimPricesResponse } from "./priceEngineSimulator";
-import { PriceValidateRequest } from "./itemRules.types";
+import { PriceValidateRequest } from "./itemPolicy.types";
 import { PutClaimPricesRequest } from "../claims/claims.types";
 
 const emptyInputs: PriceInputs = {

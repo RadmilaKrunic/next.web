@@ -9,26 +9,22 @@ All new endpoints follow this codebase's existing conventions:
 
 ---
 
-## API-1: `GET /v1/countries/{countryCode}/item-rules`
+## API-1: `GET /v1/countries/{countryCode}/item-policy`
 
-**Purpose**: Serve a consolidated item/position/pricing rule set that replaces the frontend's hardcoded position-permission table and price-field-editability logic, and folds in today's diagnostics rule configuration. Supports FE Phase 2 of the items/prices refactor.
+**Revision note**: this was originally specified as `GET /v1/countries/{countryCode}/item-rules`, re-serving `automaticRows`/`allowedPositions`/`discountBase`/`addSpecialMaterialsAllowed` alongside the FE-policy fields. Reviewing real TR/ZA `GET /v1/countries/{cc}/country-configuration` payloads showed that data **already exists** as `diagnosticsConfiguration` on that endpoint — a new endpoint re-serving it would be pure duplication, and the originally-assumed shape (position rules as one flat, global list) doesn't match reality: `minCount`/`maxCount`/`quantitySource`/`unitPriceSource` genuinely vary per `(actionType, jobType)`, and PN/SP/FR/AC are only valid under specific action types, not everywhere. **Renamed and narrowed to `item-policy`**, covering only what has no backend representation today.
+
+**Purpose**: Serve the frontend-policy overlay — position permissions/protection, editability-by-context rules, warranty gating, and claim-surface overrides — that today lives hardcoded in `SparePartsRow.tsx`'s `POSITION_PERMISSIONS` table and `materialPriceEditability.ts`. Supports FE Phase 2 of the items/prices refactor. **Does not include `automaticRows`, `allowedPositions`, `discountBase`, `addSpecialMaterialsAllowed`, or `enforceSparepartExists`** — the frontend already has that data from the existing `country-configuration` endpoint's `diagnosticsConfiguration` field.
 
 **Request**: `GET`, path param `countryCode` (e.g. `TR`, `ZA`). No body, no query params.
 
 **Response `200`**:
 ```ts
-interface ItemRulesConfigResponse {
+interface ItemPolicyConfigResponse {
   version: string;                 // monotonic (ISO date or semver) — FE no-ops re-render if unchanged
   countryCode: string;
-  discountBase: "GROSS_PRICE" | "NET_PRICE";
-  addSpecialMaterialsAllowed: boolean;
   positions: {
-    position: string;              // "LA" | "FR" | "PN" | "SP" | "PC" | "AC" | ...
+    position: string;              // "LA" | "FR" | "PN" | "SP" | "AC" | "PC"? — see note below
     isProtected: boolean;
-    minCount: number;
-    maxCount: number;
-    quantitySource: string;        // "MANUAL" | "SYSTEM"
-    unitPriceSource: string;       // "MANUAL" | "SYSTEM" — SYSTEM disables manual price edit
     permissions: {
       canView: string;             // permission key string, e.g. "DL_V"
       canDelete: string;
@@ -45,12 +41,11 @@ interface ItemRulesConfigResponse {
     fields: { discount: boolean; totalAmount: boolean; netAmount: boolean };
     controlledBySummary: boolean;
   }[];
-  automaticRows: { actionType: string; jobType: string; automaticPositions: string[] }[];
   warrantyGating: { gatedTypes: string[]; disableTypeOptionsWhenInvalidSparePart: boolean };
   surfaceOverrides: {
-    jobDiagnostics?: Partial<ItemRulesConfigResponse>;
-    claimDiagnosticsReadOnly?: Partial<ItemRulesConfigResponse>;
-    claimSpareParts?: Partial<ItemRulesConfigResponse>;
+    jobDiagnostics?: Partial<ItemPolicyConfigResponse>;
+    claimDiagnosticsReadOnly?: Partial<ItemPolicyConfigResponse>;
+    claimSpareParts?: Partial<ItemPolicyConfigResponse>;
   };
 }
 ```
@@ -63,6 +58,10 @@ interface ItemRulesConfigResponse {
 | FR | `DF_V` | `DF_I` | `DFUE` | `DFPE` | `DFDE` | `DFTE` |
 | PN | `DT_V` | `DT_I` | `DTEU` | `DTEP` | `DTDE` | `DTTE` |
 | SP | `DS_V` | `DS_I` | `DSUE` | `DSPE` | `DSDE` | `DSTE` |
+
+`PC` maps to the same `DS_*` keys as `SP` in current FE code but was never observed as a `position` value in either TR's or ZA's real `diagnosticsConfiguration.rules` — confirm with backend/product whether it's a live value for some other country/flow, or dead, before committing to it in this endpoint's `positions[]`.
+
+**Real `AllowedPosition`/`Quantity` enum values observed** (for reference when building/consuming the *existing* `country-configuration` endpoint's `diagnosticsConfiguration.rules[].rule.allowedPositions[]` — not part of this new endpoint, but frequently confused with it): `unitPriceSource` ∈ `{ "SAP", "ASC", null }`; `quantitySource` ∈ `{ "FAULT_CODES", "DEFAULT", "SPO", null }` (`"SPO"` seen only on ZA's `SP` position under `WARRANTY`/`SERVICE_OFFERING`/`CHARGEABLE`); `actionType` ∈ `{ "REPAIR", "NEW_TOOL_EXCHANGE", "SPARE_PARTS_EXCHANGE", "ACCESSORIES_EXCHANGE" }` (no generic `"EXCHANGE"`); `jobType` additionally includes `"SPECIAL_CONTRACT"` (ZA-only in the samples reviewed, absent from TR).
 | PC | `DS_V` | `DS_I` | `DSUE` | `DSPE` | `DSDE` | `DSTE` |
 
 `isProtected: true` for `LA`, `FR`, `PC` (backend-driven/automatic rows); `false` for `PN`, `SP`, `AC` (the "distributable" positions eligible for summary-level discount distribution). Price-field editability today (`materialPriceEditability.ts`): a row's discount/total/net fields are editable only when `jobType === "COMMERCIAL_GOODWILL"`, or when `jobType === "CHARGEABLE"` **and** the position is protected; `totalAmount` is only meaningful in `GROSS_PRICE` mode, `netAmount` only in `NET_PRICE` mode.
@@ -72,10 +71,10 @@ interface ItemRulesConfigResponse {
 **Non-functional**: fetched once per country per session (`staleTime: Infinity` client-side); payload expected small (<20KB); no pagination needed.
 
 **Acceptance criteria**:
-- [ ] Returns the full rule set currently expressed by the diagnostics configuration (`discountBase`, automatic-row rules) for every supported country.
-- [ ] `positions[]` covers at minimum LA, FR, PN, SP, PC, AC with the permission-key values in the table above.
+- [ ] `positions[]` covers at minimum LA, FR, PN, SP, AC with the permission-key values in the table above; confirm with backend/product whether PC is a live value before including it.
 - [ ] `surfaceOverrides.claimSpareParts` encodes the claim-side "editable only for new rows, only while not pending" rule as `editability[]` entries.
-- [ ] `version` changes whenever any rule value changes.
+- [ ] `version` changes whenever any policy value changes.
+- [ ] Response contains no `automaticRows`/`allowedPositions`/`discountBase`/`addSpecialMaterialsAllowed` fields — that data stays on the existing `country-configuration` endpoint; this endpoint does not duplicate it.
 
 ---
 
@@ -239,7 +238,7 @@ interface PutClaimPricesResponse {
 
 ## Suggested Jira ticket breakdown
 
-1. **[BE] Item Rules Config endpoint** — API-1. Independent, low risk. Supports FE Phase 2.
+1. **[BE] Item Policy Config endpoint** — API-1 (`GET /v1/countries/{cc}/item-policy`, policy overlay only — no rule-data duplication). Independent, low risk. Supports FE Phase 2.
 2. **[BE] Diagnostic price validate endpoint** — API-2. Net-new endpoint, no dependencies. Supports FE Phase 3; FE work can proceed against a local simulator until this lands.
 3. **[BE] Confirm/type PUT claim prices response** — API-3, acceptance criterion 1 only (contract confirmation, no code change expected). Already unblocked the frontend typing work.
 4. **[BE] Upgrade PUT claim prices to return confirmed row prices** — API-3's proposed response upgrade, follow-up to #3.

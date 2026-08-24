@@ -1,6 +1,15 @@
+import type { discountBase } from "api/services/countryConfiguration/countryConfiguration";
 import type { FieldName, PriceInputs, PriceResults } from "utils/priceCalculator";
 
-export type DiscountBase = "GROSS_PRICE" | "NET_PRICE";
+// NOTE: automaticRows/allowedPositions/discountBase/addSpecialMaterialsAllowed/
+// enforceSparepartExists are NOT modeled here — that data already exists as
+// CountryConfig.diagnosticsConfiguration (countryConfiguration.ts) and is served by
+// GET /v1/countries/{countryCode}/country-configuration. Resolve those via
+// itemRulesResolver.ts's resolveAllowedPositions/resolveAutomaticRows/
+// resolveEnforceSparepartExists, which operate on DiagnosticsRuleEntry[] directly.
+// ItemPolicyConfig below covers only what has no backend representation today:
+// per-position permissions/protection, editability-by-context, warranty gating,
+// and per-surface (job/claim) overrides.
 
 export interface PositionPermissions {
   canView: string;
@@ -11,13 +20,9 @@ export interface PositionPermissions {
   canEditTotal: string;
 }
 
-export interface PositionRule {
+export interface PositionPolicy {
   position: string;
   isProtected: boolean;
-  minCount: number;
-  maxCount: number;
-  quantitySource: string;
-  unitPriceSource: string;
   permissions: PositionPermissions;
 }
 
@@ -33,30 +38,21 @@ export interface EditabilityRule {
   controlledBySummary: boolean;
 }
 
-export interface AutomaticRowRule {
-  actionType: string;
-  jobType: string;
-  automaticPositions: string[];
-}
-
 export interface WarrantyGatingRule {
   gatedTypes: string[];
   disableTypeOptionsWhenInvalidSparePart: boolean;
 }
 
-export interface ItemRulesConfig {
+export interface ItemPolicyConfig {
   version: string;
   countryCode: string;
-  discountBase: DiscountBase;
-  addSpecialMaterialsAllowed: boolean;
-  positions: PositionRule[];
+  positions: PositionPolicy[];
   editability: EditabilityRule[];
-  automaticRows: AutomaticRowRule[];
   warrantyGating: WarrantyGatingRule;
   surfaceOverrides: {
-    jobDiagnostics?: Partial<ItemRulesConfig>;
-    claimDiagnosticsReadOnly?: Partial<ItemRulesConfig>;
-    claimSpareParts?: Partial<ItemRulesConfig>;
+    jobDiagnostics?: Partial<ItemPolicyConfig>;
+    claimDiagnosticsReadOnly?: Partial<ItemPolicyConfig>;
+    claimSpareParts?: Partial<ItemPolicyConfig>;
   };
 }
 
@@ -122,3 +118,5 @@ export interface PutClaimPricesResponseUpgraded {
   summary: PriceValidateSummary;
   summaryMaterial: PriceValidateSummaryMaterial;
 }
+
+export type { discountBase as DiscountBase };

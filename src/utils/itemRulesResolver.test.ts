@@ -3,25 +3,23 @@ import {
   selectConfigForSurface,
   resolvePositionRule,
   isPositionProtected,
+  resolvePositionPermissions,
   resolveEditability,
   isSummaryControlledRow,
   resolveAutomaticRows,
+  resolveAllowedPositions,
+  resolveEnforceSparepartExists,
 } from "./itemRulesResolver";
-import { ItemRulesConfig } from "api/services/itemRules/itemRules.types";
+import { ItemPolicyConfig } from "api/services/itemPolicy/itemPolicy.types";
+import { DiagnosticsRuleEntry } from "api/services/countryConfiguration/countryConfiguration";
 
-const baseConfig: ItemRulesConfig = {
+const baseConfig: ItemPolicyConfig = {
   version: "1",
   countryCode: "TR",
-  discountBase: "GROSS_PRICE",
-  addSpecialMaterialsAllowed: true,
   positions: [
     {
       position: "LA",
       isProtected: true,
-      minCount: 0,
-      maxCount: 1,
-      quantitySource: "SYSTEM",
-      unitPriceSource: "SYSTEM",
       permissions: {
         canView: "DL_V",
         canDelete: "DL_I",
@@ -34,10 +32,6 @@ const baseConfig: ItemRulesConfig = {
     {
       position: "SP",
       isProtected: false,
-      minCount: 0,
-      maxCount: 10,
-      quantitySource: "MANUAL",
-      unitPriceSource: "SYSTEM",
       permissions: {
         canView: "DS_V",
         canDelete: "DS_I",
@@ -71,7 +65,6 @@ const baseConfig: ItemRulesConfig = {
       controlledBySummary: true,
     },
   ],
-  automaticRows: [{ actionType: "REPAIR", jobType: "CHARGEABLE", automaticPositions: ["LA"] }],
   warrantyGating: { gatedTypes: ["WARRANTY"], disableTypeOptionsWhenInvalidSparePart: true },
   surfaceOverrides: {
     claimSpareParts: {
@@ -105,7 +98,7 @@ describe("selectConfigForSurface", () => {
   });
 });
 
-describe("resolvePositionRule / isPositionProtected", () => {
+describe("resolvePositionRule / isPositionProtected / resolvePositionPermissions", () => {
   it("finds a position rule case-insensitively", () => {
     expect(resolvePositionRule(baseConfig, "la")?.position).toBe("LA");
   });
@@ -121,6 +114,11 @@ describe("resolvePositionRule / isPositionProtected", () => {
 
   it("treats an unknown position as not protected", () => {
     expect(isPositionProtected(baseConfig, "ZZ")).toBe(false);
+  });
+
+  it("resolves permissions for a known position and null for an unknown one", () => {
+    expect(resolvePositionPermissions(baseConfig, "SP")?.canDelete).toBe("DS_I");
+    expect(resolvePositionPermissions(baseConfig, "ZZ")).toBeNull();
   });
 });
 
@@ -198,12 +196,118 @@ describe("isSummaryControlledRow", () => {
   });
 });
 
+// Fixtures below mirror the real shape/values observed in TR's
+// CountryConfig.diagnosticsConfiguration.rules — position eligibility and
+// quantity/unitPrice sources genuinely vary per (actionType, jobType), not globally.
+const diagnosticsRules: DiagnosticsRuleEntry[] = [
+  {
+    actionType: "REPAIR",
+    jobType: "WARRANTY",
+    rule: {
+      automaticRows: ["LA"],
+      allowedPositions: [
+        {
+          position: "LA",
+          minCount: 1,
+          maxCount: 1,
+          quantity: { quantitySource: "FAULT_CODES", defaultQuantity: null },
+          unitPriceSource: "SAP",
+        },
+        {
+          position: "SP",
+          minCount: 0,
+          maxCount: 2147483647,
+          quantity: { quantitySource: null, defaultQuantity: null },
+          unitPriceSource: "SAP",
+        },
+        {
+          position: "FR",
+          minCount: 0,
+          maxCount: 1,
+          quantity: { quantitySource: "DEFAULT", defaultQuantity: 1 },
+          unitPriceSource: "ASC",
+        },
+      ],
+      enforceSparepartExists: true,
+    },
+  },
+  {
+    actionType: "NEW_TOOL_EXCHANGE",
+    jobType: "WARRANTY",
+    rule: {
+      automaticRows: ["PN", "LA"],
+      allowedPositions: [
+        {
+          position: "LA",
+          minCount: 1,
+          maxCount: 1,
+          quantity: { quantitySource: "DEFAULT", defaultQuantity: 2 },
+          unitPriceSource: "SAP",
+        },
+        {
+          position: "PN",
+          minCount: 1,
+          maxCount: 1,
+          quantity: { quantitySource: null, defaultQuantity: 1 },
+          unitPriceSource: "SAP",
+        },
+      ],
+      enforceSparepartExists: false,
+    },
+  },
+];
+
 describe("resolveAutomaticRows", () => {
   it("returns the automatic positions for a matching actionType/jobType", () => {
-    expect(resolveAutomaticRows(baseConfig, "REPAIR", "CHARGEABLE")).toEqual(["LA"]);
+    expect(resolveAutomaticRows(diagnosticsRules, "REPAIR", "WARRANTY")).toEqual(["LA"]);
+    expect(resolveAutomaticRows(diagnosticsRules, "NEW_TOOL_EXCHANGE", "WARRANTY")).toEqual([
+      "PN",
+      "LA",
+    ]);
   });
 
   it("returns an empty array when no rule matches", () => {
-    expect(resolveAutomaticRows(baseConfig, "EXCHANGE", "WARRANTY")).toEqual([]);
+    expect(resolveAutomaticRows(diagnosticsRules, "ACCESSORIES_EXCHANGE", "WARRANTY")).toEqual([]);
+  });
+});
+
+describe("resolveAllowedPositions", () => {
+  it("scopes allowed positions to the matching rule only", () => {
+    const repairPositions = resolveAllowedPositions(diagnosticsRules, "REPAIR", "WARRANTY").map(
+      (p) => p.position,
+    );
+    expect(repairPositions).toEqual(["LA", "SP", "FR"]);
+
+    // PN is only eligible under NEW_TOOL_EXCHANGE, never REPAIR.
+    expect(repairPositions).not.toContain("PN");
+
+    const exchangePositions = resolveAllowedPositions(
+      diagnosticsRules,
+      "NEW_TOOL_EXCHANGE",
+      "WARRANTY",
+    ).map((p) => p.position);
+    expect(exchangePositions).toEqual(["LA", "PN"]);
+    expect(exchangePositions).not.toContain("SP");
+  });
+
+  it("returns an empty array when no rule matches", () => {
+    expect(resolveAllowedPositions(diagnosticsRules, "SPARE_PARTS_EXCHANGE", "CHARGEABLE")).toEqual(
+      [],
+    );
+  });
+});
+
+describe("resolveEnforceSparepartExists", () => {
+  it("reads the flag from the matching rule", () => {
+    expect(resolveEnforceSparepartExists(diagnosticsRules, "REPAIR", "WARRANTY")).toBe(true);
+    expect(resolveEnforceSparepartExists(diagnosticsRules, "NEW_TOOL_EXCHANGE", "WARRANTY")).toBe(
+      false,
+    );
+  });
+
+  it("defaults to false when no rule matches", () => {
+    expect(resolveEnforceSparepartExists(diagnosticsRules, "ACCESSORIES_EXCHANGE", "WARRANTY")).toBe(
+      false,
+    );
   });
 });

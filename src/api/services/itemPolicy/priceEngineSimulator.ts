@@ -5,7 +5,7 @@ import {
   SUMMARY_TYPE_FILTER,
 } from "utils/priceCalculator";
 import type { PriceResults } from "utils/priceCalculator";
-import type { DiscountBase } from "./itemRules.types";
+import type { discountBase as DiscountBase } from "api/services/countryConfiguration/countryConfiguration";
 import {
   ChangedRow,
   PriceValidateRequest,
@@ -14,7 +14,7 @@ import {
   PriceValidateSummaryMaterial,
   PutClaimPricesResponseUpgraded,
   RowPriceResult,
-} from "./itemRules.types";
+} from "./itemPolicy.types";
 import { PutClaimPricesRequest } from "../claims/claims.types";
 
 function toRowPriceResult(row: ChangedRow, discountBase: DiscountBase): RowPriceResult {

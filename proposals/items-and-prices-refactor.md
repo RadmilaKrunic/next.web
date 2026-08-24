@@ -31,28 +31,39 @@ Item (spare-part/material) rendering and price computation for the diagnostics t
 
 ## 4. New item/price configuration model
 
-**Recommendation: consolidate the three existing rule locations into one new typed model, `ItemRulesConfig`.** Leave `UIConfiguration` doing what it already does well — generic field layout/visibility/labels, shared infrastructure for the whole app, not just items. Do not extend it with more item-specific `subtype`/`permissions` semantics; that is what produced the current three-way split.
+**Revision note**: the original version of this section proposed one new `ItemRulesConfig` that reinvented `automaticRows`/`allowedPositions`/`discountBase` as a flat, position-global list. Reviewing the *real* `CountryConfig.diagnosticsConfiguration` payloads for TR and ZA (not available when this section was first drafted) showed that was both **inaccurate** and **redundant**:
+
+- **Inaccurate**: `minCount`/`maxCount`/`quantitySource`/`unitPriceSource` are not global per-position constants — they vary per `(actionType, jobType)` rule. `PN` never appears under `REPAIR` rules, only `NEW_TOOL_EXCHANGE`; `SP`/`FR` only appear under `SPARE_PARTS_EXCHANGE`; `AC` only under `ACCESSORIES_EXCHANGE`. A flat global list silently allowed positions the real config forbids for a given action/job type. `quantitySource`/`unitPriceSource` enum values are also real strings observed in the data (`FAULT_CODES`, `DEFAULT`, `SPO`, `SAP`, `ASC`, or `null`) — not the placeholder `MANUAL`/`SYSTEM` originally guessed.
+- **Redundant**: this rule data (`automaticRows`, `allowedPositions`, `discountBase`, `addSpecialMaterialsAllowed`, `enforceSparepartExists`) **already exists** as `CountryConfig.diagnosticsConfiguration`, served today by `GET /v1/countries/{countryCode}/country-configuration`. Proposing a whole new `GET /v1/countries/{cc}/item-rules` endpoint to re-serve the same data would be pure duplication.
+
+**Revised recommendation: split into two configs, not one.**
+
+- **A. Reuse `CountryConfig.diagnosticsConfiguration`/`DiagnosticsRuleEntry[]` as-is** (`api/services/countryConfiguration/countryConfiguration.ts`) for all rule-scoped data. No new backend endpoint needed — this data already exists. (`countryConfiguration.ts`'s `DiagnosticsRule` type was missing `enforceSparepartExists`, and `Quantity`/`AllowedPosition` incorrectly declared `quantitySource`/`defaultQuantity`/`unitPriceSource` as non-nullable when real payloads send `null` for many rows — both fixed as part of this session's corrections.)
+- **B. A new, much smaller `ItemPolicyConfig`** — only the FE-policy overlay that has **no** backend representation today: per-position permissions, the protected-position flag, editability-by-context rules, warranty gating, and per-surface (job/claim) overrides. `UIConfiguration` is left doing what it already does well (generic field layout/visibility/labels) and gets no new item-specific semantics either.
 
 ### 4.1 Shape
 
 ```ts
-export type DiscountBase = "GROSS_PRICE" | "NET_PRICE";
+// A — unchanged, already exists in countryConfiguration.ts:
+//   DiagnosticsConfiguration { addSpecialMaterialsAllowed, discountBase, rules: DiagnosticsRuleEntry[] }
+//   DiagnosticsRuleEntry { actionType, jobType, rule: DiagnosticsRule }
+//   DiagnosticsRule { automaticRows: string[], allowedPositions: AllowedPosition[], enforceSparepartExists: boolean }
+//   AllowedPosition { position, minCount, maxCount, quantity: { quantitySource: string|null, defaultQuantity: number|null }, unitPriceSource: string|null }
 
-export interface PositionRule {
-  position: string;                 // "LA" | "FR" | "PN" | "SP" | "PC" | "AC" ...
+// B — new:
+export interface PositionPermissions {
+  canView: string;                // permission key, e.g. PERMISSIONS.DIAGNOSTICS.CAN_VIEW_LABOUR_ITEMS
+  canDelete: string;
+  canEditUnits: string;
+  canEditUnitPrice: string;
+  canEditDiscount: string;
+  canEditTotal: string;
+}
+
+export interface PositionPolicy {
+  position: string;                 // "LA" | "FR" | "PN" | "SP" | "PC"? | "AC" ...
   isProtected: boolean;             // replaces the hardcoded PROTECTED_POSITIONS Set
-  minCount: number;
-  maxCount: number;
-  quantitySource: string;
-  unitPriceSource: string;          // "SYSTEM" disables manual edit (existing rule, unchanged)
-  permissions: {
-    canView: string;                // permission key, e.g. PERMISSIONS.DIAGNOSTICS.CAN_VIEW_LABOUR_ITEMS
-    canDelete: string;
-    canEditUnits: string;
-    canEditUnitPrice: string;
-    canEditDiscount: string;
-    canEditTotal: string;
-  };
+  permissions: PositionPermissions;
 }
 
 export interface EditabilityRule {
@@ -63,53 +74,50 @@ export interface EditabilityRule {
   controlledBySummary: boolean;     // replaces isSummaryControlledRow
 }
 
-export interface AutomaticRowRule {
-  actionType: string;
-  jobType: string;
-  automaticPositions: string[];     // replaces DiagnosticsRule.automaticRows
-}
-
 export interface WarrantyGatingRule {
   gatedTypes: string[];
   disableTypeOptionsWhenInvalidSparePart: boolean;
 }
 
-export interface ItemRulesConfig {
+export interface ItemPolicyConfig {
   version: string;
   countryCode: string;
-  discountBase: DiscountBase;
-  addSpecialMaterialsAllowed: boolean;
-  positions: PositionRule[];
+  positions: PositionPolicy[];
   editability: EditabilityRule[];
-  automaticRows: AutomaticRowRule[];
   warrantyGating: WarrantyGatingRule;
   surfaceOverrides: {
-    jobDiagnostics?: Partial<ItemRulesConfig>;
-    claimDiagnosticsReadOnly?: Partial<ItemRulesConfig>;
-    claimSpareParts?: Partial<ItemRulesConfig>;
+    jobDiagnostics?: Partial<ItemPolicyConfig>;
+    claimDiagnosticsReadOnly?: Partial<ItemPolicyConfig>;
+    claimSpareParts?: Partial<ItemPolicyConfig>;
   };
 }
 ```
 
-This single object subsumes `CountryConfig.diagnosticsConfiguration`, `POSITION_PERMISSIONS` (`SparePartsRow.tsx`), and `materialPriceEditability.ts`'s `getPriceFieldEditability`/`isSummaryControlledRow`/`isProtectedPosition`.
+`ItemPolicyConfig` subsumes `POSITION_PERMISSIONS` (`SparePartsRow.tsx`) and `materialPriceEditability.ts`'s `getPriceFieldEditability`/`isSummaryControlledRow`/`isProtectedPosition`. Note: `PC` (one of the three positions the FE currently treats as protected, alongside `LA`/`FR`) was never observed in either TR's or ZA's `diagnosticsConfiguration.rules` — kept in the policy config since it's a real value the permission system already handles, but flagged as unconfirmed against live rule data; worth a direct question to backend/product rather than an assumption.
 
 ### 4.2 Fetching/caching
 
-`GET /v1/countries/{countryCode}/item-rules` (see the companion API spec doc, API-1), a separate endpoint rather than folding into `country-configuration` so it can version/iterate independently and unrelated country-config changes don't force a refetch. React Query key `["itemRulesConfig", countryCode]`, `staleTime: Infinity` — same lifecycle as `["countryConfiguration", cc]`/`["UIConfiguration", cc]` today. Hook: `useItemRulesConfig(countryCode)`.
+- **A** (rule data): existing `getCountryConfig`/`["countryConfiguration", cc]` — no change to the contract. This session also closed a gap where `getCountryConfig` had no dev-local-mock branch (unlike `getUIConfiguration`); it now loads `data/countryConfigurationTR.json`/`ZA.json` in DEV, sourced from real exported configs.
+- **B** (policy overlay): `GET /v1/countries/{countryCode}/item-policy` (renamed from the earlier `item-rules` naming to avoid confusion with A's real rules), React Query key `["itemPolicyConfig", countryCode]`, `staleTime: Infinity`. Hook: `useItemPolicyConfig(countryCode)`.
 
-### 4.3 A pure resolver replaces the three scattered functions
+### 4.3 Pure resolvers replace the scattered functions
 
 ```ts
-export function resolvePositionRule(config: ItemRulesConfig, position: string): PositionRule | null;
-export function resolveEditability(
-  config: ItemRulesConfig,
-  args: { position: string; context: "jobType" | "claimStatus"; contextValue: string },
-): PriceFieldEditability;
-export function resolveAutomaticRows(config: ItemRulesConfig, actionType: string, jobType: string): string[];
-export function isPositionProtected(config: ItemRulesConfig, position: string): boolean;
+// Over ItemPolicyConfig (B):
+export function resolvePositionRule(config: ItemPolicyConfig, position: string): PositionPolicy | null;
+export function resolvePositionPermissions(config: ItemPolicyConfig, position: string): PositionPermissions | null;
+export function isPositionProtected(config: ItemPolicyConfig, position: string): boolean;
+export function resolveEditability(config: ItemPolicyConfig, args: { position: string; context: "jobType" | "claimStatus"; contextValue: string }): PriceFieldEditability;
+export function isSummaryControlledRow(config: ItemPolicyConfig, args: {...}): boolean;
+export function selectConfigForSurface(config: ItemPolicyConfig, surface?: ItemSurface): ItemPolicyConfig;
+
+// Over DiagnosticsRuleEntry[] (A, already-existing data — no new fetch):
+export function resolveAutomaticRows(rules: DiagnosticsRuleEntry[], actionType: string, jobType: string): string[];
+export function resolveAllowedPositions(rules: DiagnosticsRuleEntry[], actionType: string, jobType: string): AllowedPosition[];
+export function resolveEnforceSparepartExists(rules: DiagnosticsRuleEntry[], actionType: string, jobType: string): boolean;
 ```
 
-Job's `SparePartsRow`, Claim's `ClaimSparePartsRow`, and the read-only `diagnosticData` mirror in `ClaimOverview` all call the **same** resolver with a different `context`/`contextValue`/`surfaceOverrides` slice — this is what enables the §7 unification (shared row component, pluggable policy).
+Job's `SparePartsRow`, Claim's `ClaimSparePartsRow`, and the read-only `diagnosticData` mirror in `ClaimOverview` all call the **same** resolvers with a different `context`/`contextValue`/`surfaceOverrides` slice (policy) and the same `actionType`/`jobType` lookup (rules) — this is what enables the §7 unification (shared row component, pluggable policy).
 
 ## 5. Backend-as-source-of-truth API design
 
@@ -225,6 +233,7 @@ This session implements, with no behavior change and no dependency on new backen
 
 - The shared `Price` type (`src/types/price.types.ts`) reconciling the job/claim field drift, reused by `JobList.types.ts` and `Claims.types.ts`.
 - A fully typed `putClaimPrices` contract (`src/api/services/claims/claims.types.ts`, `PutClaimPricesRequest`/`PutClaimPricesResponse`), replacing the untyped `Record<string, unknown>` on both request and response.
-- The local BE-mocking infrastructure from §11 (`data/itemRulesTR.json`/`itemRulesZA.json`, `src/api/services/itemRules/*`, `src/utils/itemRulesResolver.ts`), built and tested but **not yet wired into any existing component** — ready for Phase 2/3 to adopt.
+- The local BE-mocking infrastructure from §11: `data/itemPolicyTR.json`/`itemPolicyZA.json` + `src/api/services/itemPolicy/*` (renamed from `itemRules` once it became clear the module only covers the FE-policy overlay, not real rule data) and `src/utils/itemRulesResolver.ts` — built and tested but **not yet wired into any existing component** — ready for Phase 2/3 to adopt.
+- Corrections made after reviewing real TR/ZA `country-configuration` exports (see §4's revision note): fixed `DiagnosticsRule`/`Quantity`/`AllowedPosition` types in `countryConfiguration.ts` (`enforceSparepartExists` was missing entirely; `quantitySource`/`defaultQuantity`/`unitPriceSource` were incorrectly typed as non-nullable), added a dev-local-mock branch to `getCountryConfig` (previously always hit the real API even in DEV, unlike `getUIConfiguration`) backed by `data/countryConfigurationTR.json`/`ZA.json` (the real exported configs), and split the originally-proposed single `ItemRulesConfig` into the leaner `ItemPolicyConfig` described in §4 to avoid duplicating backend data.
 
 Everything else in this document (Phases 2–6) is a proposal for the team to review and schedule; see the companion `items-and-prices-backend-api-spec.md` for the backend-ticket-ready contract details.

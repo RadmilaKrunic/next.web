@@ -1,16 +1,10 @@
 {
-  "version": "2026-08-24.1",
+  "version": "2026-08-24.2",
   "countryCode": "ZA",
-  "discountBase": "NET_PRICE",
-  "addSpecialMaterialsAllowed": false,
   "positions": [
     {
       "position": "LA",
       "isProtected": true,
-      "minCount": 0,
-      "maxCount": 1,
-      "quantitySource": "SYSTEM",
-      "unitPriceSource": "SYSTEM",
       "permissions": {
         "canView": "DL_V",
         "canDelete": "DL_I",
@@ -23,10 +17,6 @@
     {
       "position": "FR",
       "isProtected": true,
-      "minCount": 0,
-      "maxCount": 1,
-      "quantitySource": "SYSTEM",
-      "unitPriceSource": "SYSTEM",
       "permissions": {
         "canView": "DF_V",
         "canDelete": "DF_I",
@@ -39,10 +29,6 @@
     {
       "position": "PN",
       "isProtected": false,
-      "minCount": 0,
-      "maxCount": 1,
-      "quantitySource": "MANUAL",
-      "unitPriceSource": "SYSTEM",
       "permissions": {
         "canView": "DT_V",
         "canDelete": "DT_I",
@@ -55,26 +41,6 @@
     {
       "position": "SP",
       "isProtected": false,
-      "minCount": 0,
-      "maxCount": 10,
-      "quantitySource": "MANUAL",
-      "unitPriceSource": "SYSTEM",
-      "permissions": {
-        "canView": "DS_V",
-        "canDelete": "DS_I",
-        "canEditUnits": "DSUE",
-        "canEditUnitPrice": "DSPE",
-        "canEditDiscount": "DSDE",
-        "canEditTotal": "DSTE"
-      }
-    },
-    {
-      "position": "PC",
-      "isProtected": true,
-      "minCount": 0,
-      "maxCount": 1,
-      "quantitySource": "SYSTEM",
-      "unitPriceSource": "SYSTEM",
       "permissions": {
         "canView": "DS_V",
         "canDelete": "DS_I",
@@ -87,10 +53,18 @@
     {
       "position": "AC",
       "isProtected": false,
-      "minCount": 0,
-      "maxCount": 10,
-      "quantitySource": "MANUAL",
-      "unitPriceSource": "SYSTEM",
+      "permissions": {
+        "canView": "DS_V",
+        "canDelete": "DS_I",
+        "canEditUnits": "DSUE",
+        "canEditUnitPrice": "DSPE",
+        "canEditDiscount": "DSDE",
+        "canEditTotal": "DSTE"
+      }
+    },
+    {
+      "position": "PC",
+      "isProtected": true,
       "permissions": {
         "canView": "DS_V",
         "canDelete": "DS_I",
@@ -106,14 +80,14 @@
       "contextType": "jobType",
       "contextValue": "COMMERCIAL_GOODWILL",
       "appliesToProtectedPositionsOnly": false,
-      "fields": { "discount": true, "totalAmount": false, "netAmount": true },
+      "fields": { "discount": true, "totalAmount": true, "netAmount": false },
       "controlledBySummary": false
     },
     {
       "contextType": "jobType",
       "contextValue": "CHARGEABLE",
       "appliesToProtectedPositionsOnly": true,
-      "fields": { "discount": true, "totalAmount": false, "netAmount": true },
+      "fields": { "discount": true, "totalAmount": true, "netAmount": false },
       "controlledBySummary": false
     },
     {
@@ -123,13 +97,6 @@
       "fields": { "discount": false, "totalAmount": false, "netAmount": false },
       "controlledBySummary": true
     }
-  ],
-  "automaticRows": [
-    { "actionType": "REPAIR", "jobType": "CHARGEABLE", "automaticPositions": ["LA"] },
-    { "actionType": "REPAIR", "jobType": "WARRANTY", "automaticPositions": ["LA"] },
-    { "actionType": "REPAIR", "jobType": "COMMERCIAL_GOODWILL", "automaticPositions": ["LA"] },
-    { "actionType": "EXCHANGE", "jobType": "CHARGEABLE", "automaticPositions": ["LA", "FR"] },
-    { "actionType": "EXCHANGE", "jobType": "WARRANTY", "automaticPositions": ["FR"] }
   ],
   "warrantyGating": {
     "gatedTypes": ["WARRANTY", "SERVICE_OFFERING"],
@@ -145,7 +112,7 @@
           "contextType": "claimStatus",
           "contextValue": "REVISED",
           "appliesToProtectedPositionsOnly": false,
-          "fields": { "discount": true, "totalAmount": false, "netAmount": true },
+          "fields": { "discount": true, "totalAmount": true, "netAmount": false },
           "controlledBySummary": false
         },
         {
