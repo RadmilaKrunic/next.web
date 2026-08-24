@@ -70,7 +70,8 @@ export interface EditabilityRule {
   contextType: "jobType" | "claimStatus";
   contextValue: string;             // "COMMERCIAL_GOODWILL" | "CHARGEABLE" | "REVISED" | "PENDING" ...
   appliesToProtectedPositionsOnly: boolean;
-  fields: { discount: boolean; totalAmount: boolean; netAmount: boolean };
+  isEditable: boolean;              // which of totalAmount/netAmount is exposed is derived
+                                     // from discountBase at resolve time, not stored here
   controlledBySummary: boolean;     // replaces isSummaryControlledRow
 }
 
@@ -210,7 +211,7 @@ Reuse the two patterns already strong in this codebase:
 | Phase | Scope | Risk | Effort | Buildable without a real backend? |
 |---|---|---|---|---|
 | **1** | Type `putClaimPrices` contract + reconcile `Price` shape drift | Low | Small | Yes — pure typing, existing endpoint |
-| **2** | `ItemRulesConfig` + resolver, wired into existing components, Formik untouched | Low-Medium | Medium | Mostly — resolver fully testable; config can be served from a local dev fixture (see §11) until BE ships it |
+| **2** | `ItemPolicyConfig` + resolver, wired into existing components, Formik untouched | Low-Medium | Medium | Mostly — resolver fully testable; config can be served from a local dev fixture (see §11) until BE ships it — **wired for `SparePartsRow.tsx` this session, see §12** |
 | **3** | New `/prices/validate` endpoint behind a feature flag; stop client re-derivation once trusted | Medium-High | Large | FE work yes (against a local simulator, §11); authoritative production behavior needs the real endpoint |
 | **4** | Extract item rows out of Formik into the reducer/store | High (touches `useDiagnosticsManager.ts`) | Large | Yes, in parallel with Phase 3, against the agreed contract |
 | **5** | Unify Job/Claim shared hook + context + row + archived-row | Medium | Large | Yes — FE-only structural consolidation |
@@ -236,4 +237,8 @@ This session implements, with no behavior change and no dependency on new backen
 - The local BE-mocking infrastructure from §11: `data/itemPolicyTR.json`/`itemPolicyZA.json` + `src/api/services/itemPolicy/*` (renamed from `itemRules` once it became clear the module only covers the FE-policy overlay, not real rule data) and `src/utils/itemRulesResolver.ts` — built and tested but **not yet wired into any existing component** — ready for Phase 2/3 to adopt.
 - Corrections made after reviewing real TR/ZA `country-configuration` exports (see §4's revision note): fixed `DiagnosticsRule`/`Quantity`/`AllowedPosition` types in `countryConfiguration.ts` (`enforceSparepartExists` was missing entirely; `quantitySource`/`defaultQuantity`/`unitPriceSource` were incorrectly typed as non-nullable), added a dev-local-mock branch to `getCountryConfig` (previously always hit the real API even in DEV, unlike `getUIConfiguration`) backed by `data/countryConfigurationTR.json`/`ZA.json` (the real exported configs), and split the originally-proposed single `ItemRulesConfig` into the leaner `ItemPolicyConfig` described in §4 to avoid duplicating backend data.
 
-Everything else in this document (Phases 2–6) is a proposal for the team to review and schedule; see the companion `items-and-prices-backend-api-spec.md` for the backend-ticket-ready contract details.
+**Phase 2 (partial)**: `SparePartsRow.tsx` now consumes `useItemPolicyConfig` (fetched in `JobOverview.tsx`, resolved for the `jobDiagnostics` surface via `selectConfigForSurface`, exposed through `DiagnosticsContext.itemPolicy`) for position permissions and price-field editability, via `resolvePositionPermissions`/`resolveEditability`. This is a **strangler-fig migration**, not a rip-and-replace: every call site prefers the config-driven resolver when `itemPolicy` is loaded and falls back to the pre-existing hardcoded `POSITION_PERMISSIONS`/`materialPriceEditability.ts` logic otherwise — which is the only path exercised today, since the real `GET /v1/countries/{cc}/item-policy` endpoint doesn't exist yet (the query uses `retry: false` and fails silently, leaving `itemPolicy` undefined). This was deliberately scoped to be provably behavior-preserving without being able to run the existing 1800+ line `SparePartsRow.test.tsx` suite in this sandbox (see repo-wide caveat below): `itemPolicy` is an optional field the existing tests' typed context fixtures don't set, so every pre-existing test exercises the unchanged fallback path by construction. New tests were added (not modified) proving the config-driven path activates and takes precedence once `itemPolicy` is supplied. `materialPriceEditability.ts`, `POSITION_PERMISSIONS`, and their own test file are intentionally left in place as that fallback/default — not dead code. `jobTypeDiscountRepopulation.ts`'s own use of position/editability logic was left untouched (out of scope for this pass).
+
+Everything else in this document (the rest of Phase 2, and Phases 3–6) is a proposal for the team to review and schedule; see the companion `items-and-prices-backend-api-spec.md` for the backend-ticket-ready contract details.
+
+**Repo-wide caveat**: this sandbox cannot fully `npm install` (the private Bosch/Azure package registry needs credentials not present here), so none of this session's work — including this wiring — could be verified with the project's real `typecheck`/`lint`/`test` commands. Verification here relied on careful manual type-matching, a syntax-only TypeScript transpile check (catches parse errors, not type errors), and behavior-preservation-by-construction arguments as described above. Confirm with a real `npm run typecheck && npm run test` before merging.

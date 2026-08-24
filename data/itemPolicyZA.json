@@ -80,21 +80,21 @@
       "contextType": "jobType",
       "contextValue": "COMMERCIAL_GOODWILL",
       "appliesToProtectedPositionsOnly": false,
-      "fields": { "discount": true, "totalAmount": true, "netAmount": false },
+      "isEditable": true,
       "controlledBySummary": false
     },
     {
       "contextType": "jobType",
       "contextValue": "CHARGEABLE",
       "appliesToProtectedPositionsOnly": true,
-      "fields": { "discount": true, "totalAmount": true, "netAmount": false },
+      "isEditable": true,
       "controlledBySummary": false
     },
     {
       "contextType": "jobType",
       "contextValue": "CHARGEABLE",
       "appliesToProtectedPositionsOnly": false,
-      "fields": { "discount": false, "totalAmount": false, "netAmount": false },
+      "isEditable": false,
       "controlledBySummary": true
     }
   ],
@@ -112,14 +112,14 @@
           "contextType": "claimStatus",
           "contextValue": "REVISED",
           "appliesToProtectedPositionsOnly": false,
-          "fields": { "discount": true, "totalAmount": true, "netAmount": false },
+          "isEditable": true,
           "controlledBySummary": false
         },
         {
           "contextType": "claimStatus",
           "contextValue": "PENDING",
           "appliesToProtectedPositionsOnly": false,
-          "fields": { "discount": false, "totalAmount": false, "netAmount": false },
+          "isEditable": false,
           "controlledBySummary": false
         }
       ]

@@ -47,21 +47,21 @@ const baseConfig: ItemPolicyConfig = {
       contextType: "jobType",
       contextValue: "COMMERCIAL_GOODWILL",
       appliesToProtectedPositionsOnly: false,
-      fields: { discount: true, totalAmount: true, netAmount: false },
+      isEditable: true,
       controlledBySummary: false,
     },
     {
       contextType: "jobType",
       contextValue: "CHARGEABLE",
       appliesToProtectedPositionsOnly: true,
-      fields: { discount: true, totalAmount: true, netAmount: false },
+      isEditable: true,
       controlledBySummary: false,
     },
     {
       contextType: "jobType",
       contextValue: "CHARGEABLE",
       appliesToProtectedPositionsOnly: false,
-      fields: { discount: false, totalAmount: false, netAmount: false },
+      isEditable: false,
       controlledBySummary: true,
     },
   ],
@@ -73,7 +73,7 @@ const baseConfig: ItemPolicyConfig = {
           contextType: "claimStatus",
           contextValue: "REVISED",
           appliesToProtectedPositionsOnly: false,
-          fields: { discount: true, totalAmount: true, netAmount: false },
+          isEditable: true,
           controlledBySummary: false,
         },
       ],
@@ -160,6 +160,26 @@ describe("resolveEditability", () => {
         context: "jobType",
         contextValue: "WARRANTY",
       }),
+    ).toEqual({ discount: false, totalAmount: false, netAmount: false });
+  });
+
+  it("exposes netAmount instead of totalAmount in NET_PRICE mode", () => {
+    expect(
+      resolveEditability(
+        baseConfig,
+        { position: "LA", context: "jobType", contextValue: "CHARGEABLE" },
+        "NET_PRICE",
+      ),
+    ).toEqual({ discount: true, totalAmount: false, netAmount: true });
+  });
+
+  it("stays all-false in NET_PRICE mode when not editable", () => {
+    expect(
+      resolveEditability(
+        baseConfig,
+        { position: "SP", context: "jobType", contextValue: "CHARGEABLE" },
+        "NET_PRICE",
+      ),
     ).toEqual({ discount: false, totalAmount: false, netAmount: false });
   });
 });
