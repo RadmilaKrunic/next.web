@@ -101,6 +101,8 @@ import {
 } from "hooks/useActionWithValidation";
 import { usePositionDropdownSync } from "hooks/usePositionDropdownSync";
 import { useSectionEditing } from "hooks/useSectionEditing";
+import { useItemPolicyConfig } from "api/services/itemPolicy/hooks";
+import { selectConfigForSurface } from "utils/itemRulesResolver";
 import { DiagnosticsContext } from "./DiagnosticsContext";
 import {
   SUMMARY_TYPE_FILTER,
@@ -238,6 +240,18 @@ export default function JobOverview() {
   ]);
   const jobOverviewForm =
     uiConfigurationForms?.forms.find((form) => form.name === "JobOverview") ?? null;
+  // Frontend-policy overlay (see proposals/items-and-prices-refactor.md §4). The backing
+  // endpoint doesn't exist in production yet, so this is intentionally resilient to
+  // failure: `retry: false` avoids hammering a 404, and consumers (SparePartsRow) fall
+  // back to their prior hardcoded defaults whenever `itemPolicy` is undefined.
+  const itemPolicyQuery = useItemPolicyConfig(userData?.countryCode ?? "", { retry: false });
+  const itemPolicy = useMemo(
+    () =>
+      itemPolicyQuery.data
+        ? selectConfigForSurface(itemPolicyQuery.data, "jobDiagnostics")
+        : undefined,
+    [itemPolicyQuery.data],
+  );
   const { jobId } = useParams<{ jobId: string }>();
   // Invalidate on every open so stale cache does not serve outdated job/diagnostic data.
   useEffect(() => {
@@ -2360,6 +2374,7 @@ export default function JobOverview() {
       discountBase,
       automaticRows,
       isValidating: validateAndSaveMutation.isPending,
+      itemPolicy,
     }),
     [
       materials,
@@ -2391,6 +2406,7 @@ export default function JobOverview() {
       discountBase,
       automaticRows,
       validateAndSaveMutation.isPending,
+      itemPolicy,
     ],
   );
 

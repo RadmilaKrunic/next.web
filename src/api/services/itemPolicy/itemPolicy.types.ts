@@ -30,11 +30,10 @@ export interface EditabilityRule {
   contextType: "jobType" | "claimStatus";
   contextValue: string;
   appliesToProtectedPositionsOnly: boolean;
-  fields: {
-    discount: boolean;
-    totalAmount: boolean;
-    netAmount: boolean;
-  };
+  /** Whether price fields are editable at all in this context. Which specific field
+   *  (totalAmount vs netAmount) is exposed is derived from discountBase at resolve time —
+   *  that's universal GROSS/NET math, not a per-country policy difference. */
+  isEditable: boolean;
   controlledBySummary: boolean;
 }
 

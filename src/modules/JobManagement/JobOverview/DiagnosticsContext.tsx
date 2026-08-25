@@ -6,6 +6,7 @@ import type {
 } from "api/services/countryConfiguration/countryConfiguration";
 import type { GenericOptionProps } from "components/generics/Field/GenericField.types";
 import type { MaterialItem, ImportedMaterial } from "hooks/useDiagnosticsManager";
+import type { ItemPolicyConfig } from "api/services/itemPolicy/itemPolicy.types";
 
 export interface DiagnosticsContextValue {
   /** Source-of-truth list of spare-part rows */
@@ -66,6 +67,11 @@ export interface DiagnosticsContextValue {
   automaticRows?: string[];
   /** True while validateAndSave mutation is pending — all row inputs locked */
   isValidating: boolean;
+  /** Frontend-policy overlay (permissions, editability, protected positions) for the
+   *  "jobDiagnostics" surface — see itemRulesResolver.ts. Undefined while loading or if
+   *  the backing endpoint isn't available yet; consumers must fall back to their prior
+   *  hardcoded defaults in that case (see SparePartsRow.tsx). */
+  itemPolicy?: ItemPolicyConfig;
 }
 
 const DEFAULT_SUMMARY_TYPE_OPTIONS = [{ value: "totalSummary", label: "totalSummary" }];

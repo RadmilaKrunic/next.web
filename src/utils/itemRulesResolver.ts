@@ -6,6 +6,7 @@ import {
 import type {
   AllowedPosition,
   DiagnosticsRuleEntry,
+  discountBase as DiscountBase,
 } from "api/services/countryConfiguration/countryConfiguration";
 
 export type ItemSurface = "jobDiagnostics" | "claimDiagnosticsReadOnly" | "claimSpareParts";
@@ -52,32 +53,44 @@ const NOT_EDITABLE: PriceFieldEditability = {
   netAmount: false,
 };
 
-export function resolveEditability(
+function findEditabilityRule(
   config: ItemPolicyConfig,
   args: { position: string; context: "jobType" | "claimStatus"; contextValue: string },
-): PriceFieldEditability {
+) {
   const isProtected = isPositionProtected(config, args.position);
-  const rule = config.editability.find(
+  return config.editability.find(
     (r) =>
       r.contextType === args.context &&
       r.contextValue === args.contextValue &&
       (!r.appliesToProtectedPositionsOnly || isProtected),
   );
-  return rule ? rule.fields : NOT_EDITABLE;
+}
+
+/**
+ * Resolves whether price fields are editable for a row. `discountBase` decides which
+ * single field (totalAmount vs netAmount) is exposed when editable — that's universal
+ * GROSS/NET math (see priceCalculator.ts), not a per-country policy difference, so it's
+ * a parameter here rather than stored per EditabilityRule.
+ */
+export function resolveEditability(
+  config: ItemPolicyConfig,
+  args: { position: string; context: "jobType" | "claimStatus"; contextValue: string },
+  discountBase: DiscountBase = "GROSS_PRICE",
+): PriceFieldEditability {
+  const isEditable = findEditabilityRule(config, args)?.isEditable ?? false;
+  if (!isEditable) return NOT_EDITABLE;
+  return {
+    discount: true,
+    totalAmount: discountBase !== "NET_PRICE",
+    netAmount: discountBase === "NET_PRICE",
+  };
 }
 
 export function isSummaryControlledRow(
   config: ItemPolicyConfig,
   args: { position: string; context: "jobType" | "claimStatus"; contextValue: string },
 ): boolean {
-  const isProtected = isPositionProtected(config, args.position);
-  const rule = config.editability.find(
-    (r) =>
-      r.contextType === args.context &&
-      r.contextValue === args.contextValue &&
-      (!r.appliesToProtectedPositionsOnly || isProtected),
-  );
-  return rule?.controlledBySummary ?? false;
+  return findEditabilityRule(config, args)?.controlledBySummary ?? false;
 }
 
 // ── Resolvers over the real, already-existing DiagnosticsRuleEntry[] shape

@@ -569,6 +569,43 @@ describe("SparePartsRow price field editability", () => {
     });
     expect(screen.getByTestId("field-row0_totalAmount")).toBeDisabled();
   });
+
+  // itemPolicy is undefined above (default context), exercising the hardcoded
+  // materialPriceEditability fallback unchanged. This proves the config-driven
+  // resolveEditability path (utils/itemRulesResolver.ts) governs once a policy config
+  // is present: WARRANTY on LA is locked by the hardcoded table (see the first test in
+  // this block) but unlocked here purely because itemPolicy says so.
+  it("unlocks a jobType the hardcoded table would lock, when itemPolicy says it's editable", () => {
+    renderRow(
+      { row0_position: "LA", row0_type: "WARRANTY" },
+      [],
+      "GROSS_PRICE",
+      {},
+      ELIGIBLE_WARRANTY_PANEL_INFO,
+      {},
+      {
+        itemPolicy: {
+          version: "test",
+          countryCode: "TR",
+          positions: [],
+          editability: [
+            {
+              contextType: "jobType",
+              contextValue: "WARRANTY",
+              appliesToProtectedPositionsOnly: false,
+              isEditable: true,
+              controlledBySummary: false,
+            },
+          ],
+          warrantyGating: { gatedTypes: [], disableTypeOptionsWhenInvalidSparePart: false },
+          surfaceOverrides: {},
+        },
+      },
+    );
+
+    expect(screen.getByTestId("field-row0_discount")).toBeEnabled();
+    expect(screen.getByTestId("field-row0_totalAmount")).toBeEnabled();
+  });
 });
 
 describe("SparePartsRow type transitions", () => {
@@ -1374,6 +1411,71 @@ describe("SparePartsRow delete icon visibility", () => {
     );
 
     expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
+  });
+
+  // itemPolicy is undefined in every test above (DiagnosticsContextValue's default —
+  // no test constructs one), so all of them exercise the hardcoded POSITION_PERMISSIONS
+  // fallback unchanged. These two prove the config-driven resolver path (see
+  // utils/itemRulesResolver.ts) actually takes over, in either direction, once a
+  // policy config is supplied via context.
+  const fakeItemPolicy = (canDelete: string): DiagnosticsContextValue["itemPolicy"] => ({
+    version: "test",
+    countryCode: "TR",
+    positions: [
+      {
+        position: "SP",
+        isProtected: false,
+        permissions: {
+          canView: "DS_V",
+          canDelete,
+          canEditUnits: "DSUE",
+          canEditUnitPrice: "DSPE",
+          canEditDiscount: "DSDE",
+          canEditTotal: "DSTE",
+        },
+      },
+    ],
+    editability: [],
+    warrantyGating: { gatedTypes: [], disableTypeOptionsWhenInvalidSparePart: false },
+    surfaceOverrides: {},
+  });
+
+  it("uses itemPolicy's permission over the hardcoded table when itemPolicy is present", () => {
+    denyApproveCommercialGoodwill();
+    renderRow(
+      { row0_position: "SP", row0_type: "WARRANTY" },
+      [],
+      "GROSS_PRICE",
+      {},
+      ELIGIBLE_WARRANTY_PANEL_INFO,
+      {
+        // Real hardcoded permission the user does have — would show the icon via fallback.
+        userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
+      },
+      // itemPolicy requires a different permission the user doesn't have — icon must hide.
+      { itemPolicy: fakeItemPolicy("SOME_OTHER_PERMISSION") },
+    );
+
+    expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
+  });
+
+  it("grants delete access from itemPolicy's permission even without the hardcoded one", () => {
+    denyApproveCommercialGoodwill();
+    renderRow(
+      { row0_position: "SP", row0_type: "WARRANTY" },
+      [],
+      "GROSS_PRICE",
+      {},
+      ELIGIBLE_WARRANTY_PANEL_INFO,
+      {
+        // User does NOT have the real hardcoded delete permission.
+        userPermissions: ["SOME_UNRELATED_PERMISSION"],
+      },
+      // ...but itemPolicy grants delete via a permission the user does have.
+      { itemPolicy: fakeItemPolicy("SOME_UNRELATED_PERMISSION") },
+    );
+
+    expect(screen.getByTestId("icon-delete")).toBeInTheDocument();
   });
 });
 

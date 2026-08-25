@@ -18,6 +18,11 @@ import { getPriceFieldEditability } from "./materialPriceEditability";
 import { resolveDiscountOnJobTypeChange } from "./jobTypeDiscountRepopulation";
 import { resolvePartNumberChangeAction } from "./partNumberUtils";
 import { PERMISSIONS } from "utils/Permissions";
+import {
+  resolveEditability,
+  resolvePositionPermissions,
+} from "utils/itemRulesResolver";
+import type { ItemPolicyConfig } from "api/services/itemPolicy/itemPolicy.types";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import type { User } from "types/user.type";
@@ -113,8 +118,13 @@ function computePositionOption(
   positionCounts: Record<string, number>,
   allowedPositions: { position: string; maxCount: number }[],
   userPermissions: string[],
+  itemPolicy?: ItemPolicyConfig,
 ): GenericOptionProps {
-  const optPerms = POSITION_PERMISSIONS[opt.value as keyof typeof POSITION_PERMISSIONS] ?? null;
+  // Prefer the config-driven policy once loaded; fall back to the hardcoded table
+  // otherwise (today's behavior — the backing endpoint doesn't exist in production yet).
+  const optPerms =
+    (itemPolicy ? resolvePositionPermissions(itemPolicy, opt.value as string) : null) ??
+    (POSITION_PERMISSIONS[opt.value as keyof typeof POSITION_PERMISSIONS] ?? null);
   if (optPerms && !userPermissions.includes(optPerms.canDelete)) {
     return { ...opt, disabled: true };
   }
@@ -156,6 +166,7 @@ function SparePartsRow({
     discountBase,
     automaticRows,
     isValidating,
+    itemPolicy,
   } = useDiagnosticsContext();
   const [isRowCollapsed, setIsRowCollapsed] = useState(arePricesValidated);
 
@@ -187,7 +198,8 @@ function SparePartsRow({
   const hasHardcodedAutofill = !!getPositionAutofill(t)[positionValue];
   const isJobOnHold = values["isOnHold"] === true;
   const positionPerms =
-    POSITION_PERMISSIONS[positionValue as keyof typeof POSITION_PERMISSIONS] ?? null;
+    (itemPolicy ? resolvePositionPermissions(itemPolicy, positionValue) : null) ??
+    (POSITION_PERMISSIONS[positionValue as keyof typeof POSITION_PERMISSIONS] ?? null);
   const canDeleteRow = positionPerms ? hasPermission(positionPerms.canDelete) : true;
   const canEditQuantity = positionPerms ? hasPermission(positionPerms.canEditUnits) : true;
 
@@ -214,11 +226,13 @@ function SparePartsRow({
     positionValue.toUpperCase() === "SP" &&
     (partNumberValue.trim().length === 0 ||
       sparePartNotBelongsToTool?.current[partNumberFieldName] === true);
-  const priceFieldEditability = getPriceFieldEditability(
-    positionValue,
-    rowTypeValue,
-    discountBase ?? "GROSS_PRICE",
-  );
+  const priceFieldEditability = itemPolicy
+    ? resolveEditability(
+        itemPolicy,
+        { position: positionValue, context: "jobType", contextValue: rowTypeValue },
+        discountBase ?? "GROSS_PRICE",
+      )
+    : getPriceFieldEditability(positionValue, rowTypeValue, discountBase ?? "GROSS_PRICE");
 
   const mappedPositionOptions: Record<string, boolean> = {
     diagnosticPosition: Boolean((values[partNumberFieldName] as string) !== ""),
@@ -615,11 +629,18 @@ function SparePartsRow({
       if (field.subtype !== "diagnosticPosition" || !field.options?.length) return field;
       const positionCounts = buildPositionCounts(allFormFields, field.name, values);
       const updatedOptions = field.options.map((opt) =>
-        computePositionOption(opt, positionCounts, allowedPositions, userPermissions),
+        computePositionOption(opt, positionCounts, allowedPositions, userPermissions, itemPolicy),
       );
       return { ...field, options: updatedOptions };
     });
-  }, [fieldsWithTypeOptionsDisabled, allFormFields, values, allowedPositions, userPermissions]);
+  }, [
+    fieldsWithTypeOptionsDisabled,
+    allFormFields,
+    values,
+    allowedPositions,
+    userPermissions,
+    itemPolicy,
+  ]);
 
   const isDeletionBlocked = jobStatus ? STATUSES_BLOCKING_DELETION.has(jobStatus) : false;
   const actionType = (values["actionType"] as string) ?? "";

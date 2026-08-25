@@ -38,7 +38,8 @@ interface ItemPolicyConfigResponse {
     contextType: "jobType" | "claimStatus";
     contextValue: string;          // e.g. "COMMERCIAL_GOODWILL" | "CHARGEABLE" | "REVISED" | "PENDING"
     appliesToProtectedPositionsOnly: boolean;
-    fields: { discount: boolean; totalAmount: boolean; netAmount: boolean };
+    isEditable: boolean;             // which of totalAmount/netAmount is exposed is derived
+                                      // from discountBase client-side, not stored here
     controlledBySummary: boolean;
   }[];
   warrantyGating: { gatedTypes: string[]; disableTypeOptionsWhenInvalidSparePart: boolean };
