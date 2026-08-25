@@ -157,6 +157,7 @@ function SparePartsRow({
   const {
     arePricesValidated,
     markRowDirty,
+    setMaterials,
     allowedPositions,
     isResyncingRef,
     setRevisedRejectedRowPending,
@@ -364,6 +365,32 @@ function SparePartsRow({
     void Promise.all(fieldNames.map((name) => setFieldValue(name, null))).finally(() => {
       isResyncingRef.current = false;
     });
+
+    const currentStatusValue = statusField ? values[statusField.name] : undefined;
+    const wasRevisedOrRejected =
+      typeof currentStatusValue === "string" && RESETTABLE_ROW_STATUSES.has(currentStatusValue);
+
+    setMaterials((prev) =>
+      prev.map((m, i) =>
+        i === areaIndex
+          ? {
+              ...m,
+              partNumber: partNumberValue,
+              unitPrice: 0,
+              tax: 0,
+              netAmount: 0,
+              grossAmount: 0,
+              totalAmount: 0,
+              taxAmount: 0,
+              suggestedNetPrice: 0,
+              discount: 0,
+              discountAmount: 0,
+              materialId: undefined,
+              ...(wasRevisedOrRejected ? { status: "PENDING" } : {}),
+            }
+          : m,
+      ),
+    );
   }, [
     getFieldBySubtype,
     setFieldValue,
@@ -373,6 +400,11 @@ function SparePartsRow({
     discountHiddenFieldName,
     discountAmountHiddenFieldName,
     materialIdField,
+    setMaterials,
+    areaIndex,
+    partNumberValue,
+    statusField,
+    values,
   ]);
 
   // Holds the latest resetPartNumberDependentFields without putting it in the effect's
@@ -496,9 +528,20 @@ function SparePartsRow({
       buildSiblingChargeableDiscounts(),
     );
 
-    // null = no rule applies for this transition (e.g. WARRANTY -> SERVICE_OFFERING) —
-    // leave the discount field untouched, matching prior behavior for these cases.
-    if (discountPercent === null) return;
+    const currentStatusValue = statusField ? values[statusField.name] : undefined;
+    const wasRevisedOrRejected =
+      typeof currentStatusValue === "string" && RESETTABLE_ROW_STATUSES.has(currentStatusValue);
+
+    if (discountPercent === null) {
+      if (wasRevisedOrRejected) {
+        setMaterials((prev) =>
+          prev.map((m, i) =>
+            i === areaIndex ? { ...m, type: currentType, status: "PENDING" } : m,
+          ),
+        );
+      }
+      return;
+    }
 
     const grossAmountFieldName = getFieldBySubtype("diagnosticGrossAmount");
     const grossAmount = grossAmountFieldName ? Number(values[grossAmountFieldName]) || 0 : 0;
@@ -511,6 +554,19 @@ function SparePartsRow({
     if (discountHiddenFieldName) void setFieldValue(discountHiddenFieldName, discountPercent);
     if (discountAmountHiddenFieldName)
       void setFieldValue(discountAmountHiddenFieldName, discountAmount);
+
+    setMaterials((prev) =>
+      prev.map((m, i) =>
+        i === areaIndex
+          ? {
+              ...m,
+              discount: discountPercent,
+              type: currentType,
+              ...(wasRevisedOrRejected ? { status: "PENDING" } : {}),
+            }
+          : m,
+      ),
+    );
   }, [
     rowTypeValue,
     isResyncingRef,
@@ -524,6 +580,9 @@ function SparePartsRow({
     positionValue,
     areaNamePrefix,
     getFieldBySubtype,
+    setMaterials,
+    areaIndex,
+    statusField,
   ]);
 
   const nonPriceInputKey = useSparePartsRowCommon({
@@ -689,7 +748,10 @@ function SparePartsRow({
   return (
     <div
       className="spare-parts-row-wrapper"
-      onChange={() => {
+      onChange={(e: React.FormEvent<HTMLDivElement>) => {
+        const target = e.target as HTMLElement & { name?: string };
+        if (target?.name === typeField?.name || target?.name === partNumberFieldName) return;
+
         const rowStatus = statusField ? values[statusField.name] : undefined;
         if (typeof rowStatus === "string" && RESETTABLE_ROW_STATUSES.has(rowStatus)) {
           setRevisedRejectedRowPending(areaName);
