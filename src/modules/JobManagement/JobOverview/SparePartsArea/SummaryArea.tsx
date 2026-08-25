@@ -41,12 +41,10 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     setSummaryTypeOptions,
     discountBase,
     isValidating,
-    jobStatus,
   } = useDiagnosticsContext();
   const hasPriceViewPermission = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES]);
   const canEditdiscount = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_DISCOUNT]);
   const canEditTotalAmount = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_AMOUNT]);
-  const isWaitingForApproval = jobStatus === "WAITING_FOR_APPROVAL";
   const types = new Set(["chargeable"]);
   // Determine which row area name to scope aggregation to.
   // claimDiagnosticsSummary  → aggregate only claims_claimSpareParts#N rows
@@ -89,11 +87,7 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
       return {
         ...field,
         isDisabled:
-          !isWaitingForApproval ||
-          !hasChargeablePending ||
-          !canEditdiscount ||
-          !isEditableSummaryType ||
-          isValidating,
+          !hasChargeablePending || !canEditdiscount || !isEditableSummaryType || isValidating,
       };
     }
 
@@ -101,7 +95,6 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
       return {
         ...field,
         isDisabled:
-          !isWaitingForApproval ||
           !hasChargeablePending ||
           isNet ||
           !canEditTotalAmount ||
