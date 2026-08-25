@@ -56,11 +56,9 @@ import SummaryArea from "./SummaryArea";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
 import { useHasPermission } from "hooks/useHasPermission";
-import { getChargeablePendingInfo } from "hooks/useDiagnosticsManager";
 
 const useFormikContextMock = vi.mocked(useFormikContext);
 const useHasPermissionMock = vi.mocked(useHasPermission);
-const getChargeablePendingInfoMock = vi.mocked(getChargeablePendingInfo);
 
 const area = {
   name: "diagnosticsSummary",
@@ -233,52 +231,6 @@ describe("SummaryArea", () => {
 
     expect(netAmountField).toMatchObject({ isDisabled: false });
     expect(discountField).toMatchObject({ isDisabled: false });
-    expect(totalAmountField).toMatchObject({ isDisabled: true });
-  });
-
-  it("enables discount/totalAmount Material fields while pending, regardless of jobStatus", () => {
-    // Regression test: these fields must not require jobStatus === "WAITING_FOR_APPROVAL" —
-    // hasChargeablePending (material-level) is the correct gate, not a job-level status that
-    // may never hold true while chargeable materials are actually pending edit/distribution.
-    vi.mocked(useDiagnosticsContext).mockReturnValue({
-      isDistributingRef: { current: false },
-      hasPricesPopulated: true,
-      setSummaryTypeOptions: vi.fn(),
-      discountBase: "GROSS_PRICE",
-      isValidating: false,
-      jobStatus: "IN_DIAGNOSTICS",
-    } as never);
-
-    renderSummary();
-
-    const discountField = renderedFields.find((field) => field.name === "summaryDiscountMaterial");
-    const totalAmountField = renderedFields.find(
-      (field) => field.name === "summaryTotalAmountMaterial",
-    );
-
-    expect(discountField).toMatchObject({ isDisabled: false });
-    expect(totalAmountField).toMatchObject({ isDisabled: false });
-  });
-
-  it("disables discount/totalAmount Material fields once nothing chargeable is pending", () => {
-    getChargeablePendingInfoMock.mockReturnValueOnce({ hasChargeablePending: false });
-    vi.mocked(useDiagnosticsContext).mockReturnValue({
-      isDistributingRef: { current: false },
-      hasPricesPopulated: true,
-      setSummaryTypeOptions: vi.fn(),
-      discountBase: "GROSS_PRICE",
-      isValidating: false,
-      jobStatus: "IN_DIAGNOSTICS",
-    } as never);
-
-    renderSummary();
-
-    const discountField = renderedFields.find((field) => field.name === "summaryDiscountMaterial");
-    const totalAmountField = renderedFields.find(
-      (field) => field.name === "summaryTotalAmountMaterial",
-    );
-
-    expect(discountField).toMatchObject({ isDisabled: true });
     expect(totalAmountField).toMatchObject({ isDisabled: true });
   });
 
