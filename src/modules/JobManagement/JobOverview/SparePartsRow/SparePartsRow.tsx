@@ -19,6 +19,7 @@ import { resolveDiscountOnJobTypeChange } from "./jobTypeDiscountRepopulation";
 import { resolvePartNumberChangeAction } from "./partNumberUtils";
 import { PERMISSIONS } from "utils/Permissions";
 import {
+  ENABLE_ITEM_RULES_RESOLVER,
   resolveEditability,
   resolvePositionPermissions,
 } from "utils/itemRulesResolver";
@@ -167,8 +168,11 @@ function SparePartsRow({
     discountBase,
     automaticRows,
     isValidating,
-    itemPolicy,
+    itemPolicy: rawItemPolicy,
   } = useDiagnosticsContext();
+  // Single gate for every resolver-driven code path in this component — see
+  // ENABLE_ITEM_RULES_RESOLVER in itemRulesResolver.ts.
+  const itemPolicy = ENABLE_ITEM_RULES_RESOLVER ? rawItemPolicy : undefined;
   const [isRowCollapsed, setIsRowCollapsed] = useState(arePricesValidated);
 
   const queryClient = useQueryClient();

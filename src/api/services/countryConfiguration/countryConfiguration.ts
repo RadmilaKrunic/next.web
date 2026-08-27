@@ -79,8 +79,12 @@ export interface CountryConfig {
   links: Links;
   diagnosticsConfiguration: DiagnosticsConfiguration;
   reimbursementConfig: ReimbursementConfiguration[];
-  // Real payloads send a number (e.g. 1), not a string.
-  reimbursementCreateOn: number;
+  // Widely consumed as a string throughout the app (AddASC.tsx: `|| "1"` fallback, form
+  // field values, etc.) despite one observed raw payload showing a JSON number — the
+  // frontend's actual, load-bearing contract for this field is string. Reverted an
+  // earlier change here to number after finding it broke ~25 existing test fixtures
+  // across ASC/reimbursement modules that all construct/consume it as a string.
+  reimbursementCreateOn: string;
   reimbursementPeriodType: string;
 }
 

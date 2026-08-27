@@ -6,6 +6,11 @@ import type {
   discountBase,
 } from "api/services/countryConfiguration/countryConfiguration";
 import type { GenericOptionProps } from "components/generics/Field/GenericField.types";
+import {
+  ENABLE_ITEM_RULES_RESOLVER,
+  resolveAllowedPositions,
+  resolveAutomaticRows,
+} from "utils/itemRulesResolver";
 import Field from "components/generics/Field/GenericField.types";
 import Section from "components/generics/Section/GenericSection.types";
 import Area from "components/generics/Area/GenericArea.types";
@@ -644,13 +649,29 @@ export const useDiagnosticsManager = ({
   const userPermissions = userData?.permissions ?? [];
   const hasPermission = (permission: string): boolean => userPermissions.includes(permission);
 
-  const allowedPositions: AllowedPosition[] = (matchedRule?.allowedPositions ?? []).filter((p) => {
+  // resolveAllowedPositions/resolveAutomaticRows are a pure extraction of the same
+  // actionType+jobType rule lookup performed inline above — behaviorally identical today,
+  // gated by ENABLE_ITEM_RULES_RESOLVER as a single rollback lever (see itemRulesResolver.ts).
+  const rawAllowedPositions: AllowedPosition[] = ENABLE_ITEM_RULES_RESOLVER
+    ? resolveAllowedPositions(
+        diagnosticsConfiguration?.rules ?? [],
+        currentActionType,
+        currentJobType,
+      )
+    : (matchedRule?.allowedPositions ?? []);
+  const allowedPositions: AllowedPosition[] = rawAllowedPositions.filter((p) => {
     const requiredPermission =
       POSITION_VIEW_PERMISSIONS[p.position as keyof typeof POSITION_VIEW_PERMISSIONS];
     if (!requiredPermission) return true;
     return hasPermission(requiredPermission);
   });
-  const automaticRows: string[] = matchedRule?.automaticRows ?? [];
+  const automaticRows: string[] = ENABLE_ITEM_RULES_RESOLVER
+    ? resolveAutomaticRows(
+        diagnosticsConfiguration?.rules ?? [],
+        currentActionType,
+        currentJobType,
+      )
+    : (matchedRule?.automaticRows ?? []);
   const addSpecialMaterialsAllowed =
     (diagnosticsConfiguration?.addSpecialMaterialsAllowed &&
       formValuesRef.current["actionType"] !== "NEW_TOOL_EXCHANGE" &&

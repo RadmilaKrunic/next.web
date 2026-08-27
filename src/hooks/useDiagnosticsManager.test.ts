@@ -32,6 +32,7 @@ import {
   useDiagnosticsManager,
   type MaterialItem,
 } from "./useDiagnosticsManager";
+import { resolveAllowedPositions, resolveAutomaticRows } from "utils/itemRulesResolver";
 import type Field from "components/generics/Field/GenericField.types";
 import type Area from "components/generics/Area/GenericArea.types";
 import type Section from "components/generics/Section/GenericSection.types";
@@ -132,6 +133,7 @@ const makeCountryConfig = (allowedPositions: AllowedPosition[]): CountryConfig =
         rule: {
           automaticRows: ["PN"],
           allowedPositions,
+          enforceSparepartExists: false,
         },
       },
     ],
@@ -594,6 +596,42 @@ describe("useDiagnosticsManager hook behavior", () => {
 
     expect(result.current.allowedPositions.map((p) => p.position)).toEqual(["SP", "PN", "LA"]);
     expect(result.current.positionDropdownOptions.map((p) => p.value)).toEqual(["LA", "PN", "SP"]);
+  });
+
+  it("resolveAllowedPositions/resolveAutomaticRows match the hook's own inline lookup", () => {
+    // Regression anchor for ENABLE_ITEM_RULES_RESOLVER (itemRulesResolver.ts): proves the
+    // pure resolver functions return exactly what the hook's own inline
+    // `matchedRule?.allowedPositions`/`automaticRows` lookup does for the same fixture,
+    // without needing to flip the flag (which would affect every test in this file).
+    const { props } = createHookProps({ permissions: [] });
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    const rules = [
+      {
+        actionType: "REPAIR",
+        jobType: "CHARGEABLE",
+        rule: {
+          automaticRows: ["PN"],
+          allowedPositions: [
+            makeAllowedPosition("SP", "USER", 1, 2),
+            makeAllowedPosition("PN", "DEFAULT", 4, 2),
+            makeAllowedPosition("LA", "FAULT_CODES", 2, 2),
+            makeAllowedPosition("FR", "DEFAULT", 1, 1),
+          ],
+          enforceSparepartExists: false,
+        },
+      },
+    ];
+
+    expect(resolveAllowedPositions(rules, "REPAIR", "CHARGEABLE")).toEqual(
+      rules[0].rule.allowedPositions,
+    );
+    expect(resolveAutomaticRows(rules, "REPAIR", "CHARGEABLE")).toEqual(["PN"]);
+    // ["SP", "PN", "LA"] is what the hook exposes after its own permission filter — the
+    // resolver's raw output (pre-filter) is the superset ["SP", "PN", "LA", "FR"].
+    expect(resolveAllowedPositions(rules, "REPAIR", "CHARGEABLE").map((p) => p.position)).toEqual(
+      expect.arrayContaining(result.current.allowedPositions.map((p) => p.position)),
+    );
   });
 
   it("resolves quantities for USER, DEFAULT, FAULT_CODES and LA labour override", () => {

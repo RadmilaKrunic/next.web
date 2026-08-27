@@ -11,6 +11,15 @@ import type {
 
 export type ItemSurface = "jobDiagnostics" | "claimDiagnosticsReadOnly" | "claimSpareParts";
 
+/**
+ * Single kill-switch for all item-rules-resolver-driven code paths (see
+ * proposals/items-and-prices-refactor.md §4). Defaults to false: every gated call site
+ * falls back to its pre-existing hardcoded/inline logic. Flip to true (or wire to an env
+ * var / remote config later) once the resolver-driven paths are trusted, so a single
+ * change can roll the whole Phase 2 migration back if something looks wrong.
+ */
+export const ENABLE_ITEM_RULES_RESOLVER = false;
+
 /** Merges a surface's override on top of the base policy config (shallow, per top-level key). */
 export function selectConfigForSurface(
   config: ItemPolicyConfig,
