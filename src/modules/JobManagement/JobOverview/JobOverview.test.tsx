@@ -141,6 +141,12 @@ vi.mock("hooks/useActionWithValidation", () => ({
     vi.fn(async (_a: string, _b: unknown, _c: unknown, onValid: () => void) => onValid()),
 }));
 vi.mock("hooks/usePositionDropdownSync", () => ({ usePositionDropdownSync: vi.fn() }));
+// JobOverview.tsx calls useItemPolicyConfig directly (React Query's useQuery under the
+// hood), which the blanket @tanstack/react-query mock below doesn't provide — mock at the
+// hook level instead, consistent with every other domain hook in this file.
+vi.mock("api/services/itemPolicy/hooks", () => ({
+  useItemPolicyConfig: () => ({ data: undefined, isLoading: false, isError: false }),
+}));
 vi.mock("hooks/useSectionEditing", () => ({
   useSectionEditing: () => ({
     editingSections: editingSectionsMock.value,
