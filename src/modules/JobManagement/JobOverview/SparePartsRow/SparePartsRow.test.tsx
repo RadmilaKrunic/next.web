@@ -9,6 +9,15 @@ import type Field from "components/generics/Field/GenericField.types";
 import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
 
+// The resolver's own ENABLE_ITEM_RULES_RESOLVER flag defaults to false (see
+// itemRulesResolver.ts) — the "itemPolicy governs" tests near the bottom of this file
+// need it on to exercise that path; forcing it here doesn't affect any other test since
+// no other test in this file sets DiagnosticsContextValue.itemPolicy at all.
+vi.mock("utils/itemRulesResolver", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("utils/itemRulesResolver")>();
+  return { ...actual, ENABLE_ITEM_RULES_RESOLVER: true };
+});
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
