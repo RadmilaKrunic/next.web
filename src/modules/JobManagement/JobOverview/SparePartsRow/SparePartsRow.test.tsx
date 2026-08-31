@@ -8,6 +8,7 @@ import SparePartsRow from "./SparePartsRow";
 import type Field from "components/generics/Field/GenericField.types";
 import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
+import type { MaterialItem } from "hooks/useDiagnosticsManager";
 
 // The resolver's own ENABLE_ITEM_RULES_RESOLVER flag defaults to false (see
 // itemRulesResolver.ts) — the "itemPolicy governs" tests near the bottom of this file
@@ -1920,5 +1921,117 @@ describe("SparePartsRow field-permission fallback", () => {
     );
 
     expect(screen.getByTestId("field-row0_notes")).toBeDisabled();
+  });
+});
+
+describe("SparePartsRow position sync into materials state", () => {
+  // Regression test: the position-change effect previously only ran the position-autofill
+  // side effect and never wrote the new position back into DiagnosticsContext's `materials`
+  // state. Everything downstream that reads `materials[i].position` (summary aggregation,
+  // position-based rules) kept seeing a stale/empty position for a row after the user picked
+  // one, which showed up as the first material row rendering incorrectly.
+  it("writes the changed position back into materials state via setMaterials", async () => {
+    const setMaterialsMock = vi.fn();
+
+    renderRow(
+      { row0_position: "SP", row0_type: "CHARGEABLE" },
+      [],
+      "GROSS_PRICE",
+      {},
+      ELIGIBLE_WARRANTY_PANEL_INFO,
+      {},
+      { setMaterials: setMaterialsMock },
+    );
+
+    fireEvent.change(screen.getByTestId("field-row0_position"), { target: { value: "PN" } });
+
+    await waitFor(() => expect(setMaterialsMock).toHaveBeenCalled());
+
+    const lastUpdater = setMaterialsMock.mock.calls[setMaterialsMock.mock.calls.length - 1][0] as (
+      prev: MaterialItem[],
+    ) => MaterialItem[];
+    const prevMaterials: MaterialItem[] = [
+      {
+        position: "SP",
+        partNumber: "",
+        description: "",
+        type: "CHARGEABLE",
+        quantity: 0,
+        unitPrice: 0,
+        netAmount: 0,
+        tax: 0,
+        grossAmount: 0,
+        discount: 0,
+        taxAmount: 0,
+        totalAmount: 0,
+      },
+    ];
+
+    expect(lastUpdater(prevMaterials)[0].position).toBe("PN");
+  });
+
+  // Regression test: isResyncingRef is a single ref shared across every row via
+  // DiagnosticsContext. When a newly added second row (areaIndex 1) gets its position set
+  // for the first time, that row must flip the shared ref so dirty-tracking/reset effects in
+  // sibling rows (like the first material row, areaIndex 0) don't spuriously fire in the same
+  // render cycle as a side effect of the new row's own setup.
+  it("flips the shared isResyncingRef when the second row's position is set for the first time", async () => {
+    const row1Fields: Field[] = [
+      createField({
+        name: "row1_position",
+        subtype: "diagnosticPosition",
+        type: "dropdown",
+        options: [
+          { value: "SP", name: "SP" },
+          { value: "PN", name: "PN" },
+        ],
+        fieldMapping: {
+          originalName: "position",
+          map: "position",
+          parentMap: [],
+          prefixes: [],
+          nameStartsWith: "diagnosticsSpareParts#1_",
+        },
+      }),
+      createField({
+        name: "row1_partNumber",
+        subtype: "diagnosticPartNumber",
+        type: "autocomplete",
+        fieldMapping: {
+          originalName: "partNumber",
+          map: "partNumber",
+          parentMap: [],
+          prefixes: [],
+          nameStartsWith: "diagnosticsSpareParts#1_",
+        },
+      }),
+      createField({
+        name: "row1_type",
+        subtype: "diagnosticType",
+        type: "dropdown",
+        fieldMapping: {
+          originalName: "type",
+          map: "type",
+          parentMap: [],
+          prefixes: [],
+          nameStartsWith: "diagnosticsSpareParts#1_",
+        },
+      }),
+    ];
+    const sharedResyncRef = { current: false };
+
+    renderRow(
+      { row1_position: "SP" },
+      [],
+      "GROSS_PRICE",
+      {},
+      ELIGIBLE_WARRANTY_PANEL_INFO,
+      { fields: row1Fields },
+      { isResyncingRef: sharedResyncRef },
+    );
+
+    fireEvent.change(screen.getByTestId("field-row1_position"), { target: { value: "PN" } });
+
+    await waitFor(() => expect(sharedResyncRef.current).toBe(true));
   });
 });

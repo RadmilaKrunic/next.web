@@ -333,11 +333,31 @@ function SparePartsRow({
     if (prevPositionRef.current === positionValue) return;
     prevPositionRef.current = positionValue;
     const autofill = getPositionAutofill(t)[positionValue];
-    if (!autofill) return;
-    const descriptionFieldName = getFieldBySubtype("diagnosticDescription");
-    if (partNumberFieldName) void setFieldValue(partNumberFieldName, autofill.partNumber);
-    if (descriptionFieldName) void setFieldValue(descriptionFieldName, autofill.description);
-  }, [positionValue, setFieldValue, t, getFieldBySubtype, partNumberFieldName]);
+    if (autofill) {
+      const descriptionFieldName = getFieldBySubtype("diagnosticDescription");
+      if (partNumberFieldName) void setFieldValue(partNumberFieldName, autofill.partNumber);
+      if (descriptionFieldName) void setFieldValue(descriptionFieldName, autofill.description);
+    }
+    // isResyncingRef is shared across every row via DiagnosticsContext. When a newly added
+    // second row (areaIndex 1) gets its position auto-populated for the first time, suppress
+    // dirty-tracking/reset effects across all rows for this render cycle so the first material
+    // row (areaIndex 0) isn't spuriously affected by the new row's own setup.
+    if (areaIndex === 1 && !isResyncingRef.current && !prevPartNumberRef.current) {
+      isResyncingRef.current = true;
+    }
+    setMaterials((prev) =>
+      prev.map((m, i) => (i === areaIndex ? { ...m, position: positionValue } : m)),
+    );
+  }, [
+    positionValue,
+    setFieldValue,
+    t,
+    getFieldBySubtype,
+    partNumberFieldName,
+    setMaterials,
+    areaIndex,
+    isResyncingRef,
+  ]);
 
   // Clear price fields when part number changes in a validated row
   const prevPartNumberRef = useRef<string | null>(null);
@@ -350,6 +370,10 @@ function SparePartsRow({
   // "not yet priced, please calculate" — see buildDiagnosticPayload's
   // `price?.unitPrice === null` check in JobOverview.tsx.
   const resetPartNumberDependentFields = useCallback(() => {
+    // See the position-change effect above for why areaIndex === 1 is special-cased here.
+    if (areaIndex === 1 && !isResyncingRef.current && !prevPartNumberRef.current) {
+      isResyncingRef.current = true;
+    }
     const fieldNames = [
       getFieldBySubtype("diagnosticUnitPrice"),
       getFieldBySubtype("diagnosticTax"),
@@ -535,6 +559,11 @@ function SparePartsRow({
     const currentStatusValue = statusField ? values[statusField.name] : undefined;
     const wasRevisedOrRejected =
       typeof currentStatusValue === "string" && RESETTABLE_ROW_STATUSES.has(currentStatusValue);
+
+    // See the position-change effect above for why areaIndex === 1 is special-cased here.
+    if (areaIndex === 1 && !isResyncingRef.current && !prevPartNumberRef.current) {
+      isResyncingRef.current = true;
+    }
 
     if (discountPercent === null) {
       if (wasRevisedOrRejected) {
@@ -754,7 +783,12 @@ function SparePartsRow({
       className="spare-parts-row-wrapper"
       onChange={(e: React.FormEvent<HTMLDivElement>) => {
         const target = e.target as HTMLElement & { name?: string };
-        if (target?.name === typeField?.name || target?.name === partNumberFieldName) return;
+        if (
+          target?.name === typeField?.name ||
+          target?.name === partNumberFieldName ||
+          target?.name === positionField?.name
+        )
+          return;
 
         const rowStatus = statusField ? values[statusField.name] : undefined;
         if (typeof rowStatus === "string" && RESETTABLE_ROW_STATUSES.has(rowStatus)) {
