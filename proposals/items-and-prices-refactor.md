@@ -138,7 +138,7 @@ This generalizes a pattern the codebase **already proves out today**: `ClaimSumm
 
 Net effect: `SummaryArea.tsx` stops doing `useMemo`-driven `aggregateRowPrices` + dirty-diff `setFieldValue` writes; it becomes a pure presentational component reading `summary`/`summaryMaterial` off the item-row store (§7), with a preview fallback only while `status === "pending"`. The `>0.0001` diff-guard and `activeValueChangeFieldRef` workaround disappear — there is nothing left to "fight" once summary is confirmed-data-driven instead of derived-and-written-back into Formik on every render pass.
 
-Editing the summary discount/total directly (`onSummaryDiscountChange` et al., currently backed by `distributeGrossToRows`/`distributeNetToRows`) becomes a **request**, not client math: a special `summary` pseudo-row sent to `/prices/validate`, whose response carries the redistributed per-row values in `rows[]`. The existing distribution functions remain in `priceCalculator.ts` only for the optimistic preview of that redistribution while the request is in flight.
+Editing the summary discount/total directly (`onSummaryDiscountChange` et al., currently backed by `distributeGrossToRows`/`distributeNetToRows`) becomes a **request**, not client math: named via `changedSummaryFields: [{ target: "priceSummaryMaterial", field: "discount" }]` (see the companion spec's `ChangeTrigger`), sent alongside the full `diagnostic.materials[]`/`priceSummaryMaterial` carrying the frontend's optimistic redistribution — the response's `diagnostic.materials[]`/`priceSummaryMaterial` then carries the backend-authoritative redistribution. The existing distribution functions remain in `priceCalculator.ts` only for that optimistic preview while the request is in flight.
 
 ## 7. Formik isolation strategy
 
@@ -178,6 +178,8 @@ type ItemsAction =
 Paired with a React Query `useMutation` for `/prices/validate` (or `putClaimPrices`), debounced via the same 300–500ms pattern already proven in `useSparePartPriceCalculation.ts`. **Rows are keyed by stable client-generated `rowId`s (UUIDs), not by Formik field-name ordinals** — this is what eliminates the need for dynamic `diagnosticsSpareParts#N` Area/Field cloning entirely, since row identity no longer depends on Formik's field-naming scheme.
 
 Rendering rule: show `confirmed ?? optimistic`, with a subtle pending affordance while `status === "pending"`, and an inline error state on `"error"` that reverts the row to its last `confirmed` value (never leaves a value on screen the BE rejected). Race handling: each debounced batch call carries a `requestId`; a response whose `requestId` isn't the latest one issued for that row is discarded.
+
+`MaterialItem.isValidated`/`.isNew` already exist client-side today (optional, `useDiagnosticsManager.ts`) to distinguish a freshly-added row from one loaded/confirmed from the API. The wire-level `MaterialRow.isValidated` (required, companion spec) formalizes the same concept as part of the contract instead of an FE-only convention: `ADD_ROW`/`ADD_MATERIALS` initialize a row with `isValidated: false`, and only `CONFIRM_ROWS` flips it `true` — this is also the gate the debounce/mutation layer uses to decide whether a row belongs in the outgoing `changedRowIds`/`changedFields` at all (a row that has never been confirmed is never "changed," it's just priced for the first time).
 
 ### 7.2 What stays in Formik vs what moves out
 

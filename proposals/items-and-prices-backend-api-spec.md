@@ -114,6 +114,14 @@ interface MaterialRow {
   status?: string;
   notBelongsToTool?: boolean;
   isPriceSetManually: boolean;
+  isValidated: boolean;          // NEW — wire-level exposure of the frontend's existing
+                                  // MaterialItem.isValidated/isNew concept (useDiagnosticsManager.ts).
+                                  // false until this exact row has received one "confirmed"
+                                  // response; the backend flips it true when it returns the row
+                                  // with status: "confirmed". A row the user just added has
+                                  // nothing to diff against yet, so it must not be treated the
+                                  // same as an edit to a row that already has a confirmed price —
+                                  // see the changedRowIds/changedFields rule below.
   price: Price | null;           // null = "not yet priced, please calculate" (existing contract
                                   // — see buildDiagnosticPayload's price?.unitPrice === null
                                   // check in JobOverview.tsx)
@@ -123,6 +131,7 @@ interface MaterialRow {
 // priceSummaryMaterial is a new addition needed for the summaryMaterial concept from
 // items-and-prices-refactor.md §6 — JobDiagnostic has no per-position-group summary today.
 type PriceSummary = Omit<Price, "unitPrice" | "tax"> & { discountAmount: number };
+type SummaryFieldName = keyof PriceSummary;
 
 // The full diagnostic payload — same shape validate-and-save already sends/returns today
 // (JobDiagnostic in JobList.types.ts:174-229), typed here as the one shape every pricing call
@@ -148,17 +157,23 @@ interface DiagnosticPricingPayload {
 }
 ```
 
-**What "validate" adds on top of "validate-and-save"**: both send/receive the same `DiagnosticPricingPayload`. The debounced, non-persisting "validate" calls (API-2, and the claim equivalent in API-3) additionally carry two small fields identifying what triggered the call, instead of the backend having to diff the full row set itself:
+**What "validate" adds on top of "validate-and-save"**: both send/receive the same `DiagnosticPricingPayload`. The debounced, non-persisting "validate" calls (API-2, and the claim equivalent in API-3) additionally carry small fields identifying what triggered the call, instead of the backend having to diff the full row set itself:
 
 ```ts
 interface ChangeTrigger {
-  changedRowIds: string[];                   // rowId(s) touched since the last confirmed response
+  changedRowIds: string[];                   // rowId(s) touched since the last confirmed response —
+                                               // only rows where isValidated === true belong here (see below)
   changedFields: { rowId: string; field: "quantity" | "unitPrice" | "netAmount"
     | "suggestedNetPrice" | "tax" | "grossAmount" | "discount" | "totalAmount" }[];
+  changedSummaryFields: { target: "priceSummary" | "priceSummaryMaterial"; field: SummaryFieldName }[];
 }
 ```
 
 `field` reuses the frontend's row-level calculation engine's field vocabulary (`FieldName` in `src/utils/priceCalculator.ts`), but aligned to the persisted `Price` type's names (`tax`/`discount`) rather than the calculator's internal `taxPercent`/`discountPercent` — one vocabulary now serves both the wire contract and the persisted shape.
+
+**Editing the summary rows directly** (`onSummaryDiscountChange` et al., today backed by client-side `distributeGrossToRows`/`distributeNetToRows` — see `items-and-prices-refactor.md` §6): the user can edit `priceSummaryMaterial`'s (and `priceSummary`'s) own fields directly — e.g. changing the material summary's discount% redistributes it across the distributable rows. This is **not** a `MaterialRow` edit, so it can't be named via `changedFields`'s `rowId`. `changedSummaryFields` names it instead: `{ target: "priceSummaryMaterial", field: "discount" }`. The request still carries the frontend's locally-redistributed `diagnostic.priceSummaryMaterial` **and** the affected rows' `diagnostic.materials[]` (same client-side `distributeGrossToRows`/`distributeNetToRows` output the frontend already renders optimistically today) — the backend recomputes authoritatively from `changedSummaryFields` rather than trusting the client's distribution, exactly like a row-level edit is recomputed from `changedFields` rather than trusted as-is.
+
+**`isValidated` gates what counts as "changed"**: a row with `isValidated: false` (just added by the user, never yet confirmed by the backend) is priced for the first time on every call it's part of — there's no prior confirmed value to diff against, so it must never appear in `changedRowIds`/`changedFields`. It's still present in `diagnostic.materials[]` (the backend needs to price it), just not flagged as an edit. Only rows with `isValidated: true` — i.e. already confirmed at least once — can legitimately appear in `changedRowIds`/`changedFields`, since only those have a "before" state for the flag to mean anything against. The backend sets `isValidated: true` on a row in its response once that row comes back `status: "confirmed"`; the frontend persists that flag onto the row going forward.
 
 ---
 
@@ -191,7 +206,9 @@ interface PriceValidateResponse {
 **Validation rules (backend-side)**:
 - Every row's `price` must be internally consistent for the country's `discountBase` mode — the backend becomes the single implementation of the GROSS_PRICE/NET_PRICE math currently duplicated on the frontend (frontend keeps a copy only for optimistic preview; see `src/utils/priceCalculator.ts` for the exact formulas to match).
 - `priceSummaryMaterial` aggregates only rows whose `position` is in the distributable set (`SP`, `PN`, `AC` today; should be driven by API-1's `positions[].isProtected === false`, not hardcoded independently).
-- Only rows named in `changedRowIds` strictly need recomputation; rows outside that set may be echoed back with whatever `status` reflects their last-known state (informational, not authoritative for unedited rows).
+- Every row with `isValidated: false` must be (re)computed on every call it appears in, regardless of `changedRowIds` — it has no prior confirmed state. A row with `isValidated: false` must never appear in `changedRowIds`/`changedFields`; reject the request (`400`) if one does, since that combination is meaningless (nothing to have changed from).
+- Beyond that, only rows named in `changedRowIds`, or referenced by `changedSummaryFields` (which can imply redistribution across distributable rows), strictly need recomputation; other rows may be echoed back with whatever `status` reflects their last-known state (informational, not authoritative for unedited rows).
+- When `changedSummaryFields` names `priceSummaryMaterial` (or `priceSummary`), the backend recomputes that summary's redistribution independently of the client-sent value — the request's `diagnostic.priceSummaryMaterial` is the frontend's optimistic preview, not authoritative.
 - Reject (`status: "error"` on that row) rather than silently clamp, whenever a computed value would be negative or a required price lookup fails (mirrors today's "price not available" behavior on validate-and-save).
 
 **Errors**: always HTTP `200` for validation-level failures (per-row `status: "error"` + `errorMessage`, and/or top-level `errorMessages[]`). `400` only for structurally malformed requests (missing `jobId`, empty `diagnostic.materials`). `401`/`403` per existing convention.
@@ -201,23 +218,24 @@ interface PriceValidateResponse {
 - Must tolerate out-of-order delivery: the frontend discards any response whose `requestId` isn't the latest one it issued; no server-side ordering guarantee is required.
 - Idempotent for the same `requestId` — safe to retry on client network failure. This is the one behavioral difference from validate-and-save/API-4: this endpoint has no side effects beyond computing/returning prices — it does not persist anything.
 
-**Example**:
+**Example 1 — a row-level edit (existing, already-validated row)**:
 ```json
 // Request
 {
   "requestId": "b1e7...",
   "changedRowIds": ["row-3f2a"],
   "changedFields": [{ "rowId": "row-3f2a", "field": "quantity" }],
+  "changedSummaryFields": [],
   "diagnostic": {
     "jobId": "J-1001", "actionType": "REPAIR", "jobType": "CHARGEABLE", "status": "IN_DIAGNOSTICS",
     "typeOfUsage": "PRIVATE", "faultCode": "F1", "faultCodeDescription": "...", "faultCodeLabourQuantity": 1,
     "materials": [
       { "rowId": "row-3f2a", "id": "M-1", "position": "SP", "partNumber": "1609888887",
-        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false,
+        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false, "isValidated": true,
         "price": { "unitPrice": 45.5, "suggestedNetPrice": 45.5, "netAmount": 45.5, "tax": 20,
                    "taxAmount": 9.1, "grossAmount": 54.6, "discount": 10, "totalAmount": 49.14 } },
       { "rowId": "row-9c11", "id": "M-2", "position": "LA", "partNumber": "", "description": "Labour",
-        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false,
+        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false, "isValidated": true,
         "price": { "unitPrice": 20, "suggestedNetPrice": 20, "netAmount": 20, "tax": 20,
                    "taxAmount": 4, "grossAmount": 24, "discount": 0, "totalAmount": 24 } }
     ],
@@ -233,11 +251,11 @@ interface PriceValidateResponse {
     "typeOfUsage": "PRIVATE", "faultCode": "F1", "faultCodeDescription": "...", "faultCodeLabourQuantity": 1,
     "materials": [
       { "rowId": "row-3f2a", "id": "M-1", "position": "SP", "partNumber": "1609888887",
-        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false, "status": "confirmed",
+        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false, "isValidated": true, "status": "confirmed",
         "price": { "unitPrice": 45.5, "suggestedNetPrice": 91.0, "netAmount": 91.0, "tax": 20,
                    "taxAmount": 18.2, "grossAmount": 109.2, "discount": 10, "totalAmount": 98.28 } },
       { "rowId": "row-9c11", "id": "M-2", "position": "LA", "partNumber": "", "description": "Labour",
-        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false, "status": "confirmed",
+        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false, "isValidated": true, "status": "confirmed",
         "price": { "unitPrice": 20, "suggestedNetPrice": 20, "netAmount": 20, "tax": 20,
                    "taxAmount": 4, "grossAmount": 24, "discount": 0, "totalAmount": 24 } }
     ],
@@ -249,12 +267,50 @@ interface PriceValidateResponse {
 }
 ```
 
+**Example 2 — a summary-level discount edit that redistributes across rows, alongside a brand-new unvalidated row**: the user directly edits `priceSummaryMaterial`'s discount%, which the frontend optimistically redistributes across `SP row-3f2a` and `PN row-7bd1`; `row-7bd1` was just added this session and has never been confirmed, so it rides along in `materials[]` but is absent from `changedRowIds`/`changedFields`.
+```json
+// Request (abbreviated — only the fields relevant to this example)
+{
+  "requestId": "c2f9...",
+  "changedRowIds": ["row-3f2a"],
+  "changedFields": [],
+  "changedSummaryFields": [{ "target": "priceSummaryMaterial", "field": "discount" }],
+  "diagnostic": {
+    "...": "envelope fields as above",
+    "materials": [
+      { "rowId": "row-3f2a", "id": "M-1", "position": "SP", "...": "as above", "isValidated": true,
+        "price": { "...": "frontend's optimistic redistribution result" } },
+      { "rowId": "row-7bd1", "position": "PN", "partNumber": "", "description": "", "type": "CHARGEABLE",
+        "quantity": 1, "isPriceSetManually": false, "isValidated": false,
+        "price": null }
+    ],
+    "priceSummary": { "...": "..." },
+    "priceSummaryMaterial": { "...": "frontend's optimistic redistribution result — not authoritative" }
+  }
+}
+// Response
+{
+  "requestId": "c2f9...",
+  "diagnostic": {
+    "...": "envelope fields echoed back",
+    "materials": [
+      { "rowId": "row-3f2a", "...": "backend-recomputed redistribution", "isValidated": true, "status": "confirmed" },
+      { "rowId": "row-7bd1", "...": "priced for the first time", "isValidated": true, "status": "confirmed" }
+    ],
+    "priceSummary": { "...": "..." },
+    "priceSummaryMaterial": { "...": "backend-authoritative redistribution" }
+  }
+}
+```
+
 **Acceptance criteria**:
 - [ ] Response `diagnostic.materials[].price` for rows in `changedRowIds` matches the frontend's existing calculation output to 2 decimal places, for the same inputs, in both `discountBase` modes — verified via a shared fixture/contract test during the Phase-3 feature-flag rollout.
-- [ ] `priceSummary`/`priceSummaryMaterial` match the frontend's existing aggregation output for the same row set.
+- [ ] `priceSummary`/`priceSummaryMaterial` match the frontend's existing aggregation output for the same row set, including when redistribution was triggered via `changedSummaryFields` rather than a row edit.
+- [ ] A row with `isValidated: false` is always (re)computed, and is rejected (`400`) if it appears in `changedRowIds`/`changedFields`.
+- [ ] A row returned with `status: "confirmed"` always comes back with `isValidated: true`, regardless of what the request sent for that row.
 - [ ] Stale `requestId` responses are safely ignorable by the client.
 - [ ] Row-level `status: "error"` used for negative-amount/lookup-failure cases instead of silent clamping.
-- [ ] Request/response `diagnostic` shape is structurally identical to API-4's (`POST /v1/jobs/flow/validate-and-save`) request/response — the only allowed differences are the added `rowId`/`status`/`errorMessage` fields on each row, and the top-level `changedRowIds`/`changedFields`/`requestId`.
+- [ ] Request/response `diagnostic` shape is structurally identical to API-4's (`POST /v1/jobs/flow/validate-and-save`) request/response — the only allowed differences are the added `rowId`/`isValidated`/`status`/`errorMessage` fields on each row, and the top-level `changedRowIds`/`changedFields`/`changedSummaryFields`/`requestId`.
 
 ---
 
@@ -281,11 +337,18 @@ interface ClaimPriceValidateRequest extends ChangeTrigger {
     job: unknown;
     materials: MaterialRow[];
     archivedMaterials?: MaterialRow[];
-    priceSummary: PriceSummary;    // renamed from today's claimPriceSummary — see migration notes
+    priceSummary: PriceSummary;            // renamed from today's claimPriceSummary — see migration notes
+    priceSummaryMaterial?: PriceSummary;   // NEW — parity with DiagnosticPricingPayload; claims didn't
+                                            // have a distributable-positions summary before this revision,
+                                            // but items-and-prices-refactor.md §6 already has
+                                            // ClaimSummaryArea bridging into the same summary/
+                                            // summaryMaterial pair job's SummaryArea renders
   };
   jobDiagnostic: DiagnosticPricingPayload;   // same shape as API-2's diagnostic, passed through
 }
 ```
+
+`ChangeTrigger`'s `changedRowIds`/`changedFields`/`changedSummaryFields` here refer to the **claim's own** `claim.materials`/`claim.priceSummaryMaterial` — never to `jobDiagnostic`'s rows, which are read-only on this endpoint. The same `isValidated` rule applies: a claim material row the user just added is present in `claim.materials[]` but excluded from `changedRowIds`/`changedFields` until it's been confirmed once.
 
 **Response `200`**:
 ```ts
@@ -295,6 +358,7 @@ interface ClaimPriceValidateResponse {
     materials: (MaterialRow & { status: "confirmed" | "error"; errorMessage?: string })[];
     archivedMaterials?: (MaterialRow & { status: "confirmed" | "error"; errorMessage?: string })[];
     priceSummary: PriceSummary;
+    priceSummaryMaterial?: PriceSummary;
   };
   errorMessages?: { rowId?: string; field?: string; message: string }[];
 }
@@ -309,8 +373,10 @@ interface ClaimPriceValidateResponse {
 **Errors**: same in-body convention as API-2 (no 422).
 
 **Acceptance criteria**:
-- [ ] `claim.materials[]`/`claim.archivedMaterials[]` use the exact same `MaterialRow` shape as API-2's `diagnostic.materials[]` — field names, not just field sets, match (in particular `type`, not `jobType`).
-- [ ] `claim.priceSummary` uses the exact same `PriceSummary` shape as `DiagnosticPricingPayload.priceSummary`.
+- [ ] `claim.materials[]`/`claim.archivedMaterials[]` use the exact same `MaterialRow` shape as API-2's `diagnostic.materials[]` — field names, not just field sets, match (in particular `type`, not `jobType`; `isValidated` included).
+- [ ] `claim.priceSummary`/`claim.priceSummaryMaterial` use the exact same `PriceSummary` shape as `DiagnosticPricingPayload.priceSummary`/`.priceSummaryMaterial`.
+- [ ] `claim.priceSummaryMaterial` aggregates only the claim's own distributable-position rows, same rule as API-2's `priceSummaryMaterial`.
+- [ ] A claim material row with `isValidated: false` is rejected (`400`) if it appears in `changedRowIds`/`changedFields`, and always comes back `isValidated: true` once confirmed — same rule as API-2.
 - [ ] `jobDiagnostic` is structurally identical to API-2's `diagnostic` request/response shape — no claim-specific fields leak into it.
 - [ ] Confirm with backend whether `claim.id`/`ascId`/`customerId`/`ascName`/`countryCode` are still needed in-body given they're derivable from `claimId` (path) plus the claim record backend already holds, or can be dropped as redundant.
 
@@ -329,7 +395,8 @@ interface ClaimPriceValidateResponse {
 **Acceptance criteria**:
 - [ ] Backend confirms (or fixes) that a `200` response with no `errorMessages` always includes complete, authoritative `materials[].price` and `priceSummary`.
 - [ ] `priceSummaryMaterial` added to the response, aggregating the distributable positions only (see API-1's `isProtected === false`).
-- [ ] No frontend-visible request shape change beyond optionally sending `priceSummaryMaterial` (additive, ignorable by backend if unused).
+- [ ] Every row in a successful response comes back with `isValidated: true` — a successful save confirms every row it persists, whether or not that row was `isValidated: true` going into the request.
+- [ ] No frontend-visible request shape change beyond optionally sending `priceSummaryMaterial`/`isValidated` (additive, ignorable by backend if unused).
 - [ ] Field names for `materials[]`/`priceSummary` match `MaterialRow`/`PriceSummary` above exactly (this is largely already true — this criterion exists to catch drift, not to request a rename).
 
 ---
