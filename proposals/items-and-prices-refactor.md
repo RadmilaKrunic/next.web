@@ -124,7 +124,7 @@ Job's `SparePartsRow`, Claim's `ClaimSparePartsRow`, and the read-only `diagnost
 
 Full request/response contracts live in the companion document, `items-and-prices-backend-api-spec.md`. Summary of the design decisions:
 
-- **One payload shape for validate and validate-and-save, diagnostic and claim alike** (revised from the original per-field diff design — see the companion spec's "API-2/API-3/API-4: one shared payload shape" section for the full rationale). `POST /v1/jobs/flow/validate-and-save` already sends/receives the full `materials[]` array on every call; the new `POST /v1/diagnostic/{jobId}/prices/validate` (API-2) sends/receives that **same** shape (`DiagnosticPricingPayload`), just adding `changedRowIds`/`changedFields` so the backend knows what triggered the call without diffing. This was a direct response to the fact that validate and validate-and-save operate on the same Formik fields through the same `attributeMapping`-based mapping — maintaining two different row representations for the same edit was unjustified duplication.
+- **One response shape for validate and validate-and-save, diagnostic and claim alike; a lean request for validate** (revised twice — see the companion spec's "API-2/API-3/API-4" section for the full rationale). `POST /v1/jobs/flow/validate-and-save` (API-4) keeps sending/receiving the full `DiagnosticPricingPayload` — it's a full persist. `POST /v1/diagnostic/{jobId}/prices/validate` (API-2) fires once per field edit (500ms debounce), so its request only carries the rows dirty since the last save (`changedRows: ChangedMaterialRow[]`, usually one entry) — the backend merges those onto its last-saved baseline before recomputing (see "Backend merge semantics" in the companion spec). Both endpoints' **responses** are the identical `DiagnosticPricingResult` shape — one frontend rendering path regardless of which call produced it. This was a direct response to the fact that validate and validate-and-save operate on the same Formik fields through the same `attributeMapping`-based mapping — maintaining two different row representations for the same edit was unjustified duplication, and resending untouched rows on every keystroke was unjustified bandwidth.
 - **Claim pricing aligns onto the same shape**: `PUT /v1/claims/{claimId}/prices` (API-3) reuses the identical `MaterialRow[]`/`PriceSummary` types for the claim's own materials, plus the existing verbatim `jobDiagnostic` pass-through (already shaped like `DiagnosticPricingPayload` today) and a small claim-only envelope. This retires the claim-specific field names that drifted from the job side (`materials[].jobType` → `type`, `claimPriceSummary` → `priceSummary`).
 - **Tri-state confidence**: `status: "pending" | "confirmed" | "error"` per row (and per summary), with a client-generated `requestId` for race-discarding superseded responses — replacing today's ad hoc `isDistributingRef`/`isResyncingRef`/`activeValueChangeFieldRef` guards with one mechanism.
 - **Error convention**: keep the existing in-body `errorMessages` (always-HTTP-200) convention rather than introducing 422s. It is proven in this codebase (`ValidateAndSaveResponse.errorMessages`) and the axios client has no structured-validation-error handling today (only 401/403 are special-cased). Type it properly and attach `rowId`/`field` where possible instead of inventing a second error channel.
@@ -138,14 +138,14 @@ This generalizes a pattern the codebase **already proves out today**: `ClaimSumm
 
 Net effect: `SummaryArea.tsx` stops doing `useMemo`-driven `aggregateRowPrices` + dirty-diff `setFieldValue` writes; it becomes a pure presentational component reading `summary`/`summaryMaterial` off the item-row store (§7), with a preview fallback only while `status === "pending"`. The `>0.0001` diff-guard and `activeValueChangeFieldRef` workaround disappear — there is nothing left to "fight" once summary is confirmed-data-driven instead of derived-and-written-back into Formik on every render pass.
 
-Editing the summary discount/total directly (`onSummaryDiscountChange` et al., currently backed by `distributeGrossToRows`/`distributeNetToRows`) becomes a **request**, not client math: named via `changedSummaryFields: [{ target: "priceSummaryMaterial", field: "discount" }]` (see the companion spec's `ChangeTrigger`), sent alongside the full `diagnostic.materials[]`/`priceSummaryMaterial` carrying the frontend's optimistic redistribution — the response's `diagnostic.materials[]`/`priceSummaryMaterial` then carries the backend-authoritative redistribution. The existing distribution functions remain in `priceCalculator.ts` only for that optimistic preview while the request is in flight.
+Editing the summary discount/total directly (`onSummaryDiscountChange` et al., currently backed by `distributeGrossToRows`/`distributeNetToRows`) becomes a **request**, not client math: named via `changedSummary: { target: "priceSummaryMaterial", field: "discount", summary }` (see the companion spec's "Leaning out validate's request"), carrying the frontend's optimistic redistribution — the response's `diagnostic.materials[]`/`priceSummaryMaterial` then carries the backend-authoritative redistribution across the full row set. The existing distribution functions remain in `priceCalculator.ts` only for that optimistic preview while the request is in flight.
 
 ## 7. Formik isolation strategy
 
 ### 7.1 Recommendation: dedicated reducer-based row store, bridging into Formik only at submit time
 
 ```ts
-// PriceSummary/PriceValidateResponse/MaterialRow are the wire types from the companion
+// PriceSummary/DiagnosticPricingResult/MaterialRow are the wire types from the companion
 // spec's shared-types section — the store reuses them directly rather than inventing a
 // parallel FE-only shape.
 interface ItemsState {
@@ -171,7 +171,7 @@ type ItemsAction =
   | { type: "RESTORE_ROW"; rowId: string }
   | { type: "EDIT_FIELD"; rowId: string; field: FieldName; value: number }
   | { type: "OPTIMISTIC_UPDATE"; rowId: string; prices: PriceResults }
-  | { type: "CONFIRM_ROWS"; requestId: string; response: PriceValidateResponse }
+  | { type: "CONFIRM_ROWS"; requestId: string; response: DiagnosticPricingResult }
   | { type: "REJECT_ROWS"; requestId: string; errors: (MaterialRow & { status: "error"; errorMessage?: string })[] };
 ```
 
@@ -179,7 +179,7 @@ Paired with a React Query `useMutation` for `/prices/validate` (or `putClaimPric
 
 Rendering rule: show `confirmed ?? optimistic`, with a subtle pending affordance while `status === "pending"`, and an inline error state on `"error"` that reverts the row to its last `confirmed` value (never leaves a value on screen the BE rejected). Race handling: each debounced batch call carries a `requestId`; a response whose `requestId` isn't the latest one issued for that row is discarded.
 
-`MaterialItem.isValidated`/`.isNew` already exist client-side today (optional, `useDiagnosticsManager.ts`) to distinguish a freshly-added row from one loaded/confirmed from the API. The wire-level `MaterialRow.isValidated` (required, companion spec) formalizes the same concept as part of the contract instead of an FE-only convention: `ADD_ROW`/`ADD_MATERIALS` initialize a row with `isValidated: false`, and only `CONFIRM_ROWS` flips it `true` — this is also the gate the debounce/mutation layer uses to decide whether a row belongs in the outgoing `changedRowIds`/`changedFields` at all (a row that has never been confirmed is never "changed," it's just priced for the first time).
+`MaterialItem.isValidated`/`.isNew` already exist client-side today (optional, `useDiagnosticsManager.ts`) to distinguish a freshly-added row from one loaded/confirmed from the API. The wire-level `MaterialRow.isValidated` (required, companion spec) formalizes the same concept as part of the contract instead of an FE-only convention: `ADD_ROW`/`ADD_MATERIALS` initialize a row with `isValidated: false`, and only `CONFIRM_ROWS` flips it `true`. The debounce/mutation layer uses `RowPriceState.status !== "confirmed"` (i.e. dirty-since-last-save, whether or not it's ever been validated) to decide what belongs in an outgoing `validate` call's `changedRows` — every dirty row, new or edited, goes in; `isValidated` itself no longer gates that (see the companion spec's "Leaning out validate's request" for why), it only decides what the row renders while `status === "pending"`.
 
 ### 7.2 What stays in Formik vs what moves out
 
