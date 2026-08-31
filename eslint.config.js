@@ -11,7 +11,7 @@ import prettierConfig from "eslint-config-prettier";
 
 export default defineConfig([
   // Global ignores
-  { ignores: ["dist", "build", "coverage", "node_modules"] },
+  { ignores: ["dist", "build", "coverage", "node_modules", "original"] },
 
   // Base JS rules for all files
   js.configs.recommended,
