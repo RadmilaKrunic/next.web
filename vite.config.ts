@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react-swc";
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
 import path from "path";
 
@@ -27,6 +27,11 @@ export default defineConfig({
     setupFiles: ["./src/setupTests.ts"],
     globals: true, // enables describe/it without import
     css: true, // if you import css/scss in components
+    // original/ is a static reference snapshot of the pristine codebase (for diffing against
+    // upstream changes), not code under test here — its own *.test.tsx files would otherwise
+    // be picked up too, and fail regardless since its imports resolve against ./src via the
+    // aliases above, not ./original/src.
+    exclude: [...configDefaults.exclude, "original/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov"],
@@ -37,6 +42,7 @@ export default defineConfig({
         "node_modules/**",
         "dist/**",
         "coverage/**",
+        "original/**",
         "**/*.d.ts",
         "**/*config.{js,ts,mjs,mts,cjs,cts}",
         "**/*.config.{js,ts,mjs,mts,cjs,cts}",
