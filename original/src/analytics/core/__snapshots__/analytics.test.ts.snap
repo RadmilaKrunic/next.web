@@ -1,0 +1,18 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Analytics facade — every business event > matches the documented dataLayer shape for job_created (snapshot) 1`] = `
+{
+  "asc_id": "ASC_TR_001",
+  "country_code": "TR",
+  "environment": "DEV",
+  "event": "job_created",
+  "job_creation_duration_seconds": 420,
+  "job_status": "ready_for_diagnostic",
+  "job_type": "warranty",
+  "language": "en-US",
+  "local_day_of_week": "Monday",
+  "local_time_hour": "09AM",
+  "user_role": "asc_technician",
+  "virtual_url": "/dashboard",
+}
+`;

@@ -1,0 +1,59 @@
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .status-text-wrapper {
+    display: flex;
+    flex-direction: column;
+
+    .status-message {
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 400;
+      line-height: 18px;
+      color: var(--bosch-gray-40);
+    }
+  }
+  .-draft {
+    background-color: var(--bosch-white);
+    border: 1px solid var(--neutral__enabled__front__default);
+  }
+  .-gray {
+    background-color: var(--bosch-gray-60);
+    color: var(--bosch-black);
+  }
+  .-skyBlue {
+    background-color: var(--bosch-blue-60);
+  }
+  .-boschBlue {
+    background-color: var(--bosch-blue-50);
+  }
+  .-amber {
+    background-color: var(--bosch-yellow-75);
+  }
+  .-purple {
+    background-color: var(--bosch-purple-45);
+  }
+  .-red {
+    background-color: var(--bosch-red-50);
+  }
+  .-teal {
+    background-color: var(--bosch-turquoise-55);
+  }
+  .-darkBlue {
+    background-color: var(--bosch-blue-35);
+  }
+  .-lightGreen {
+    background-color: var(--bosch-green-70);
+  }
+  .-green {
+    background-color: var(--bosch-green-50);
+  }
+  .-darkGreen {
+    background-color: var(--bosch-green-35);
+  }
+  .-black {
+    background-color: var(--bosch-gray-10);
+  }
+}

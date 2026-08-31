@@ -1,0 +1,49 @@
+.purchase-date-modal {
+  &.m-dialog {
+    width: 40rem;
+    min-height: 22rem;
+    padding: 2rem 2rem 0 2rem;
+    position: relative;
+    overflow: visible;
+  }
+
+  .m-dialog__content {
+    padding: 1.5rem 0 0 0;
+    overflow: visible;
+  }
+  .modal-header {
+    margin-bottom: 1.75rem;
+    border-bottom: 2px solid var(--bosch-gray-85);
+    .modal-title {
+      color: var(--schemes-primary-plain-pure-enabled-default-front, #000);
+      font-family: var(--font-family-Bosch-Sans, "Bosch Sans");
+      font-size: var(--font-size-XL, 24px);
+      font-style: normal;
+      font-weight: 700;
+      line-height: var(--font-line-height-XL, 34px);
+    }
+    .modal-subtitle {
+      font-size: 1rem;
+      font-weight: 400;
+      line-height: 1.5rem;
+      padding-top: 1rem;
+      padding-bottom: 1rem;
+    }
+  }
+
+  .modal-datepicker {
+    padding-bottom: 1rem;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .modal-actions {
+    position: absolute;
+    bottom: 2rem;
+    right: 2rem;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 1rem;
+  }
+}

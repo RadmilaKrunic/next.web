@@ -1,0 +1,75 @@
+@use "../../../styles/images.scss" as *;
+header {
+  padding: 1rem 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--bosch-white);
+  color: var(--bosch-black);
+  padding-top: calc(1rem + 8px);
+  position: sticky;
+  top: 0;
+  z-index: 101;
+  height: calc(3rem + 8px);
+
+  &::before {
+    position: fixed;
+    content: "";
+    display: block;
+    height: 8px;
+    background-image: $colored-bar;
+    background-repeat: no-repeat;
+    background-size: cover;
+    left: 0;
+    top: 0;
+    width: 100%;
+    z-index: 2;
+  }
+
+  .header-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    padding-left: 2rem;
+  }
+
+  .header-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    align-items: center;
+    color: var(--neutral__enabled__front__default);
+    display: inline-flex;
+    height: 3rem;
+    justify-content: center;
+    width: 3rem;
+
+    &:focus:not(:focus-visible) {
+      outline: none;
+    }
+
+    &:focus-visible {
+      outline: 3px solid var(--plain__enabled__front__default);
+      outline-offset: -3px;
+      position: relative;
+      --focus-border-radius: 0px;
+    }
+  }
+
+  .header-content {
+    display: flex;
+    align-items: center;
+  }
+
+  .bosch-logo-container {
+    display: flex;
+    width: 8.75rem;
+    height: 3rem;
+    padding: 0.75rem 1rem;
+    justify-content: center;
+    align-items: center;
+
+    img {
+      height: 100%;
+    }
+  }
+}

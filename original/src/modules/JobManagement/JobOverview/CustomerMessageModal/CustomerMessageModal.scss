@@ -1,0 +1,57 @@
+.customer-message-modal {
+  display: flex;
+  height: 27.5rem;
+  padding-top: 1.5rem !important;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1 0 0;
+  position: relative;
+
+  .m-dialog__title {
+    color: var(--schemes-primary-plain-pure-enabled-default-front, var(--bosch-black));
+    font-family: var(--font-family-Bosch-Sans, "Bosch Sans");
+    font-style: normal;
+    font-weight: 700;
+    line-height: 2.125rem;
+    font-size: 1.5rem;
+    margin-top: 1rem;
+  }
+
+  .a-divider {
+    display: none;
+  }
+
+  .a-icon {
+    color: inherit;
+    font-size: 24px;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.25rem;
+    cursor: pointer;
+  }
+
+  .modal-subtitle {
+    align-self: stretch;
+    font-size: 1rem;
+    font-family: var(--font-family-Bosch-Sans, "Bosch Sans");
+    font-weight: 400;
+    line-height: 1.5rem;
+    word-wrap: break-word;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding-bottom: 1rem;
+  }
+
+  .modal-actions {
+    align-self: stretch;
+    padding-top: 0.5rem;
+    height: 3rem;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+    gap: 1rem;
+  }
+}

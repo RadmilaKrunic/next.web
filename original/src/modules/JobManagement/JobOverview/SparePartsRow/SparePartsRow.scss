@@ -1,0 +1,132 @@
+.spare-parts-row-wrapper {
+  &:not(:first-child) {
+    margin-top: 12px;
+  }
+  background-color: var(--bosch-white);
+  padding: 32px 24px;
+
+  .a-divider {
+    margin: 0;
+  }
+
+  .a-text-field label {
+    max-width: fit-content;
+  }
+}
+
+.spare-parts-row {
+  display: grid;
+  grid-template-columns: repeat(18, 1fr);
+  width: 100%;
+  gap: 1rem;
+  align-items: center;
+
+  i {
+    cursor: pointer;
+  }
+}
+
+.spare-parts-row.admin {
+  padding-bottom: 24px;
+}
+
+.spare-parts-field {
+  grid-column: span 3;
+
+  .number-input {
+    .input-button {
+      display: none;
+    }
+  }
+}
+
+.spare-parts-field.small {
+  grid-column: span 2;
+  overflow: hidden;
+}
+
+.spare-part-status {
+  grid-column: span 2;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 8px;
+  color: #595e62;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.spare-part-action {
+  justify-self: end;
+  align-self: center;
+}
+
+.spare-part-action.dots {
+  color: var(--bosch-blue-50);
+  background-color: transparent;
+  vertical-align: middle;
+
+  &:hover {
+    background-color: transparent;
+    color: var(--bosch-blue-50);
+  }
+  &.a-button.-without-label .a-button__icon {
+    margin: auto;
+    padding: 0px;
+  }
+}
+
+.spare-parts-row-collapsed {
+  padding-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(18, 1fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+.spare-part-actions-popover {
+  .a-popover__content {
+    display: flex;
+    padding: 1.5rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+    align-self: stretch;
+  }
+}
+
+.spare-part-actions-popover--top {
+  right: 1rem !important;
+  top: -1.2rem !important;
+}
+
+.spare-part-actions-popover--bottom {
+  right: 1rem !important;
+  bottom: -1rem !important;
+}
+
+.spare-part-action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  align-self: stretch;
+  border-bottom: 0.0625rem solid var(--bosch-gray-90);
+  min-width: 13.75rem;
+  cursor: pointer;
+  padding: 0.75rem 0.375rem;
+  background-color: transparent;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .spare-part-action-text {
+    color: var(--bosch-black);
+    font-family: Inter, sans-serif;
+    font-size: 1rem;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 1.5rem;
+  }
+}

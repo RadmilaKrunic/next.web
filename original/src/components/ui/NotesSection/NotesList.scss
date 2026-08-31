@@ -1,0 +1,100 @@
+.recent-notes-list {
+  display: flex;
+  flex-direction: column;
+  padding-top: 1.5rem;
+}
+
+.recent-notes-header {
+  color: var(--Schemes-Primary-background-Plain-Enabled-front-default, var(--bosch-black));
+  font-family: "Bosch Sans", sans-serif;
+  font-size: 1rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.5rem;
+}
+
+.recent-notes-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.show-more-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  background-color: transparent;
+
+  color: var(
+    --Schemes-Secondary-background-Minor-accent-Enabled-front-default,
+    var(--bosch-blue-45)
+  );
+  font-family: "Bosch Sans", sans-serif;
+  font-size: 1rem;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.5rem;
+
+  &:hover {
+    text-decoration: none;
+    background: none;
+    padding: 0 !important;
+  }
+}
+
+.show-more-button.a-button.-without-icon .a-button__label {
+  margin: auto;
+  padding: 0 !important;
+}
+
+.notes-section-block {
+  border-bottom: 1px solid var(--bosch-gray-50);
+  padding-bottom: 1rem;
+  min-width: 20rem;
+  padding-top: 0.75rem;
+
+  &:first-child {
+    padding-top: 0;
+  }
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.no-notes {
+  color: var(--schemes-secondary-plain-pure-enabled-default-front, var(--bosch-black));
+  font-family: var(--font-family-Bosch-Sans, "Bosch Sans", sans-serif);
+  font-size: var(--font-size-S, 0.75rem);
+  font-style: normal;
+  font-weight: 400;
+  line-height: var(--font-line-height-S, 1.125rem);
+}
+
+.notes-legend {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+.notes-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notes-legend-label {
+  color: var(--schemes-secondary-plain-pure-enabled-default-front, var(--bosch-black));
+  font-family: var(--font-family-Bosch-Sans, "Bosch Sans", sans-serif);
+  font-size: var(--font-size-S, 0.75rem);
+  font-style: normal;
+  font-weight: 400;
+  line-height: var(--font-line-height-S, 1.125rem);
+}
+
+.notes-badge {
+  min-width: 0.5rem;
+  height: 0.5rem;
+  line-height: 0.5rem;
+}

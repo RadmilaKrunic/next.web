@@ -1,0 +1,82 @@
+.file-name-with-type {
+  font-weight: normal;
+}
+
+.file-row {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  column-gap: 1rem;
+  align-items: center;
+
+  .file-left {
+    display: flex;
+    justify-content: center;
+  }
+
+  .file-icon {
+    display: flex;
+    width: 3rem;
+    padding: 0.75rem;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .file-center {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+
+    :hover {
+      color: var(
+        --schemes-primary-accent-major-enabled-default-fill,
+        var(--bosch-blue-50)
+      ) !important;
+    }
+
+    &:disabled {
+      cursor: default;
+    }
+
+    &:not(:disabled):focus-visible {
+      outline: 2px solid var(--bosch-black, black);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    .file-name {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      align-self: stretch;
+      overflow: hidden;
+      color: var(--schemes-secondary-plain-pure-enabled-default-front, var(--bosch-black));
+      text-overflow: ellipsis;
+      font-family: var(--font-family-Bosch-Sans, "Bosch Sans", sans-serif);
+      font-size: var(--font-size-M, 1rem);
+      font-style: normal;
+      font-weight: 700;
+      line-height: var(--font-line-height-M, 1.5rem);
+    }
+
+    .file-size {
+      color: var(--schemes-secondary-plain-pure-enabled-default-front, var(--bosch-black));
+      font-family: var(--font-family-Bosch-Sans, "Bosch Sans", sans-serif);
+      font-size: var(--font-size-S, 0.75rem);
+      font-style: normal;
+      font-weight: 400;
+      line-height: var(--font-line-height-S, 1.125rem);
+    }
+  }
+
+  .delete-btn {
+    display: flex;
+    padding: 0.75rem;
+    justify-content: center;
+    align-items: flex-start;
+
+    &:hover {
+      opacity: 0.7;
+    }
+  }
+}

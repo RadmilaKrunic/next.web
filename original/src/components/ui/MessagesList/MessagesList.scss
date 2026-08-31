@@ -1,0 +1,11 @@
+.messages-list {
+  margin: 2rem;
+  margin-bottom: 0;
+
+  .a-notification {
+    position: relative;
+    &:not(:last-child) {
+      margin-bottom: 12px;
+    }
+  }
+}

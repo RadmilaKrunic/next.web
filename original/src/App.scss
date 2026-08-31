@@ -1,0 +1,153 @@
+@use "./styles/images" as *;
+
+#root {
+  width: 100%;
+
+  --rt-color-white: black;
+  --rt-color-dark: white;
+  --rt-opacity: 1;
+
+  ul > li:before {
+    display: none;
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+
+    li {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+  }
+}
+
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.app-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.text-input-error-message {
+  position: relative;
+  opacity: 1;
+  background-color: rgb(255, 217, 217);
+  min-height: 32px;
+  display: block;
+  padding: 4px 16px 4px 44px;
+  font-size: 12px;
+  line-height: 24px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  &::before {
+    content: "";
+    background-image: url("./assets/alert-error.svg");
+    width: 24px;
+    height: 24px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    display: inline-block;
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+}
+
+.a-dropdown {
+  position: relative;
+
+  &:after {
+    content: none !important;
+  }
+
+  &.a-dropdown--disabled {
+    background-color: var(--bosch-gray-95);
+
+    &:hover {
+      background-color: var(--bosch-gray-95);
+    }
+
+    select,
+    label {
+      background-color: var(--bosch-gray-95);
+
+      &:hover {
+        background-color: var(--bosch-gray-95);
+      }
+    }
+  }
+
+  select,
+  .a-dropdown__input,
+  input[type="select"] {
+    border-bottom: 0.0625rem solid var(--bosch-black) !important;
+  }
+
+  &::before {
+    content: var(--ui-ic-down);
+    font-family: Bosch-UI-Icon, monospace;
+    font-size: 1.5rem;
+    height: 1.5rem;
+    line-height: 1;
+    pointer-events: none;
+    position: absolute;
+    width: 1.5rem;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: inherit;
+  }
+}
+
+.bass-modal {
+  .m-dialog__title {
+    padding-top: 1.5rem;
+    font-size: var(--font-size-XL, 1.5rem);
+
+    font-style: normal;
+    font-weight: 700;
+  }
+
+  .a-divider {
+    display: none;
+  }
+}
+
+.area-fields {
+  .a-text-area {
+    height: auto;
+    max-height: 7.5rem;
+
+    textarea {
+      height: 3rem !important;
+      min-height: 3rem !important;
+      max-height: 7.5rem !important;
+      transition: height 0.2s ease-in-out;
+      resize: vertical;
+      overflow-y: hidden;
+    }
+
+    textarea:focus,
+    textarea:not(:placeholder-shown) {
+      height: 7.5rem !important;
+      overflow-y: auto;
+    }
+  }
+}
+
+.loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}

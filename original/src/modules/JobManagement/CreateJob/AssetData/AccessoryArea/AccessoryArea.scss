@@ -1,0 +1,43 @@
+.accessory-area {
+  margin-top: 0.5rem;
+}
+
+.accessory-item {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem 1.5rem;
+  margin-top: 1rem;
+}
+
+.full-width {
+  grid-column: span 2;
+}
+
+.accessory-title {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  button {
+    border: none;
+  }
+
+  i {
+    cursor: pointer;
+  }
+}
+
+.add-new-accessory {
+  color: var(--bosch-blue-50);
+  border: none;
+}
+
+.accessory-notice {
+  margin: 0;
+}
+
+.accessory-header {
+  display: flex;
+  justify-content: space-between;
+}

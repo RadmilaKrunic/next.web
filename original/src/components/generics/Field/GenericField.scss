@@ -1,0 +1,43 @@
+.generic-field-text-input {
+  position: relative;
+}
+
+.generic-field-hidden {
+  visibility: hidden;
+  height: 0;
+  overflow: hidden;
+  position: absolute;
+}
+
+.generic-info-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  p {
+    margin: 0;
+  }
+}
+
+.grant-access-checkbox {
+  background-color: white;
+  padding: 1rem;
+  display: block;
+  label {
+    font-weight: 700;
+  }
+}
+
+.generic-field-toggle {
+  background-color: white;
+  padding-left: 24px;
+  padding-right: 24px;
+  padding-bottom: 12px;
+  label {
+    background-color: white;
+    display: flex;
+    justify-content: space-between;
+    font-weight: bold;
+    padding-top: 12px;
+  }
+}

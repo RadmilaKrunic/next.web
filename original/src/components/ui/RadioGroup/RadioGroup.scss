@@ -1,0 +1,29 @@
+.radio-group {
+  display: flex;
+  gap: 1.5rem;
+
+  &.--column {
+    flex-direction: column;
+  }
+  &.--row {
+    flex-direction: row;
+  }
+}
+
+.radio-group-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+
+  .info-icon {
+    position: static;
+    transform: none;
+    right: auto;
+    top: auto;
+  }
+}
+
+fieldset {
+  border: none;
+  padding: 0;
+}
