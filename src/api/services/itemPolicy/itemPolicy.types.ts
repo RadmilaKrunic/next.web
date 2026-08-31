@@ -81,6 +81,9 @@ export interface MaterialRow {
   description: string;
   type: string;
   quantity: number;
+  /** The row's real approval status ("APPROVED"/"PENDING"/"REVISED"/"REJECTED"/...), as
+   *  already returned by the API today — not related to price-validation confirmation, which
+   *  is MaterialRowResult.changeStatus below. */
   status?: string;
   notBelongsToTool?: boolean;
   isPriceSetManually: boolean;
@@ -121,8 +124,11 @@ export interface DiagnosticPricingPayload {
   priceSummaryMaterial?: PriceSummary;
 }
 
+// changeStatus, not status — MaterialRow.status is already the row's real approval status
+// (e.g. "APPROVED"/"PENDING"/"REVISED"/"REJECTED", as returned by the API today). Reusing
+// "status" here for price-validation confirmation would silently overwrite that field.
 export type MaterialRowResult = MaterialRow & {
-  status: "confirmed" | "error";
+  changeStatus: "confirmed" | "error";
   errorMessage?: string;
 };
 

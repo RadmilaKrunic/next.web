@@ -96,7 +96,10 @@ interface MaterialRow {
   description: string;
   type: string;
   quantity: number;
-  status?: string;
+  status?: string;                // the row's real approval status ("APPROVED"/"PENDING"/
+                                   // "REVISED"/"REJECTED"/...), as already returned by the API
+                                   // today. Not related to price-validation confirmation —
+                                   // that's MaterialRowResult.changeStatus below, a different field.
   notBelongsToTool?: boolean;
   isPriceSetManually: boolean;
   isValidated: boolean;          // false until this row has received one "confirmed" response.
@@ -134,7 +137,7 @@ interface DiagnosticPricingPayload {
   priceSummaryMaterial?: PriceSummary;
 }
 
-type MaterialRowResult = MaterialRow & { status: "confirmed" | "error"; errorMessage?: string };
+type MaterialRowResult = MaterialRow & { changeStatus: "confirmed" | "error"; errorMessage?: string };
 
 interface PriceValidateErrorMessage {
   rowId?: string;
@@ -204,8 +207,8 @@ interface PriceValidateRequest {
 - Every row's price must be internally consistent for the country's `discountBase` mode (`GROSS_PRICE`/`NET_PRICE`) — this is the single implementation of that math, replacing the frontend's duplicate (which becomes optimistic-preview-only).
 - `priceSummaryMaterial` aggregates only rows in the distributable position set (`SP`/`PN`/`AC` today — should be driven by API-1's `isProtected === false`, not hardcoded independently).
 - When `changedSummary` names `priceSummary`/`priceSummaryMaterial`, recompute that summary's redistribution independently of the client-sent value — it's the frontend's preview, not authoritative.
-- Reject via row-level `status: "error"` (not silent clamping) whenever a computed value would be negative or a price lookup fails.
-- A row returned `"confirmed"` always comes back with `isValidated: true`.
+- Reject via row-level `changeStatus: "error"` (not silent clamping) whenever a computed value would be negative or a price lookup fails.
+- A row returned `changeStatus: "confirmed"` always comes back with `isValidated: true`.
 
 **Errors**: always `200` for validation-level failures. `400` only for structurally malformed requests (missing `jobId`, or both `changedRows` empty and `changedSummary` absent). `401`/`403` per convention.
 
@@ -236,11 +239,11 @@ interface PriceValidateRequest {
     "typeOfUsage": "PRIVATE", "faultCode": "F1", "faultCodeDescription": "...", "faultCodeLabourQuantity": 1,
     "materials": [
       { "rowId": "row-3f2a", "id": "M-1", "position": "SP", "partNumber": "1609888887",
-        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false, "isValidated": true, "status": "confirmed",
+        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false, "isValidated": true, "changeStatus": "confirmed",
         "price": { "unitPrice": 45.5, "suggestedNetPrice": 91.0, "netAmount": 91.0, "tax": 20,
                    "taxAmount": 18.2, "grossAmount": 109.2, "discount": 10, "totalAmount": 98.28 } },
       { "rowId": "row-9c11", "id": "M-2", "position": "LA", "partNumber": "", "description": "Labour",
-        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false, "isValidated": true, "status": "confirmed",
+        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false, "isValidated": true, "changeStatus": "confirmed",
         "price": { "unitPrice": 20, "suggestedNetPrice": 20, "netAmount": 20, "tax": 20,
                    "taxAmount": 4, "grossAmount": 24, "discount": 0, "totalAmount": 24 } }
     ],
@@ -256,7 +259,7 @@ interface PriceValidateRequest {
 - [ ] Response prices match the frontend's existing calculation output to 2 decimal places, in both `discountBase` modes.
 - [ ] `priceSummary`/`priceSummaryMaterial` match the frontend's aggregation for the equivalent full row set.
 - [ ] A row omitted from `changedRows` is returned unchanged from the backend's last-saved state — never missing.
-- [ ] A row returned `"confirmed"` always has `isValidated: true`.
+- [ ] A row returned `changeStatus: "confirmed"` always has `isValidated: true`.
 - [ ] Stale `requestId` responses are safely ignorable by the client.
 - [ ] Response shape (`DiagnosticPricingResult`) is identical, field-for-field, to API-4's response.
 

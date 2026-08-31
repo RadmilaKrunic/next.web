@@ -77,7 +77,7 @@ function computeRowResult(
   forceRecompute = false,
 ): MaterialRowResult {
   if (!changedField && !forceRecompute && row.price !== null) {
-    return { ...row, isValidated: true, status: "confirmed" };
+    return { ...row, isValidated: true, changeStatus: "confirmed" };
   }
 
   const inputs = priceToInputs(row.price, row.quantity);
@@ -90,7 +90,7 @@ function computeRowResult(
     ...row,
     price,
     isValidated: !isNegative,
-    status: isNegative ? "error" : "confirmed",
+    changeStatus: isNegative ? "error" : "confirmed",
     ...(isNegative ? { errorMessage: "Computed price would be negative" } : {}),
   };
 }
@@ -199,7 +199,7 @@ export function simulatePriceValidate(
   materials = applySummaryRedistribution(materials, request.changedSummary, discountBase, typeFilter);
 
   const archivedMaterials = (baseline.archivedMaterials ?? []).map(
-    (row): MaterialRowResult => ({ ...row, status: "confirmed" }),
+    (row): MaterialRowResult => ({ ...row, changeStatus: "confirmed" }),
   );
 
   return {
@@ -245,7 +245,7 @@ export function simulateClaimPriceValidate(
   materials = applySummaryRedistribution(materials, request.changedSummary, discountBase, typeFilter);
 
   const archivedMaterials = (baseline.archivedMaterials ?? []).map(
-    (row): MaterialRowResult => ({ ...row, status: "confirmed" }),
+    (row): MaterialRowResult => ({ ...row, changeStatus: "confirmed" }),
   );
 
   return {
@@ -297,7 +297,7 @@ export function simulateClaimPricesSave(
 
   const archivedMaterials = (request.archivedMaterials ?? [])
     .map((material, index) => toRow(material, index))
-    .map((row): MaterialRowResult => ({ ...row, status: "confirmed" }));
+    .map((row): MaterialRowResult => ({ ...row, changeStatus: "confirmed" }));
 
   return {
     claim: {

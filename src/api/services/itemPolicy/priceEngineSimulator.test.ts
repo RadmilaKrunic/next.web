@@ -106,7 +106,7 @@ describe("simulatePriceValidate", () => {
 
     expect(response.requestId).toBe("req-1");
     const spRow = response.diagnostic.materials.find((m) => m.rowId === "row-sp");
-    expect(spRow?.status).toBe("confirmed");
+    expect(spRow?.changeStatus).toBe("confirmed");
     expect(spRow?.isValidated).toBe(true);
     expect(spRow?.quantity).toBe(2);
     // Quantity doubled at the same unitPrice roughly doubles the amounts.
@@ -114,7 +114,7 @@ describe("simulatePriceValidate", () => {
 
     // The untouched LA row is echoed back from the baseline unchanged, not recomputed.
     const laRow = response.diagnostic.materials.find((m) => m.rowId === "row-la");
-    expect(laRow?.status).toBe("confirmed");
+    expect(laRow?.changeStatus).toBe("confirmed");
     expect(laRow?.price?.grossAmount).toBe(24);
 
     // Summary reflects both rows even though only one was sent.
@@ -138,7 +138,7 @@ describe("simulatePriceValidate", () => {
     const response = simulatePriceValidate(baseline, request, "GROSS_PRICE");
 
     const row = response.diagnostic.materials.find((m) => m.rowId === "row-new");
-    expect(row?.status).toBe("confirmed");
+    expect(row?.changeStatus).toBe("confirmed");
     expect(row?.isValidated).toBe(true);
     expect(row?.price).not.toBeNull();
   });
@@ -239,7 +239,7 @@ describe("simulateClaimPriceValidate", () => {
 
     expect(response.requestId).toBe("req-4");
     expect(response.claim.materials).toHaveLength(1);
-    expect(response.claim.materials[0].status).toBe("confirmed");
+    expect(response.claim.materials[0].changeStatus).toBe("confirmed");
     expect(response.claim.priceSummary.grossAmount).toBeGreaterThan(0);
   });
 });
@@ -300,7 +300,7 @@ describe("simulateClaimPricesSave", () => {
   it("computes one confirmed row per material via calculatePrices", () => {
     const response = simulateClaimPricesSave(baseRequest, "GROSS_PRICE");
     expect(response.claim.materials).toHaveLength(1);
-    expect(response.claim.materials[0].status).toBe("confirmed");
+    expect(response.claim.materials[0].changeStatus).toBe("confirmed");
     expect(response.claim.materials[0].isValidated).toBe(true);
     expect(response.claim.materials[0].price?.totalAmount).toBe(109.2);
   });
