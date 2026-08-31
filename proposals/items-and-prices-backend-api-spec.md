@@ -85,6 +85,8 @@ interface ItemPolicyConfigResponse {
 
 **Revision note 2 — leaning out the validate request**: the first pass of this alignment still had `validate` resend the diagnostic's **entire** `materials[]` array on every call, just with `changedRowIds`/`changedFields`/`changedSummaryFields` markers layered on top. In practice, a `validate` call fires once per field edit (500ms debounce, one field at a time) — resending every untouched row on every keystroke is unnecessary bandwidth, and it duplicates data the backend already has: `validate` is scoped to a known `jobId`/`diagnosticId`, so the backend already knows every row's last-saved state. **`validate`'s request now carries only the rows that are actually dirty** — edited or newly added since the diagnostic's last save — not the full row set; the backend merges these onto its last-saved baseline before recomputing. `validate-and-save` (API-4) is unaffected by this — it is a full persist, so it keeps sending everything, same as today. See "Backend merge semantics" below for the statelessness argument, and "Leaning out `validate`'s request" for the exact shape.
 
+**Revision note 3 — `status` was already taken**: `MaterialRowResult` originally reused the field name `status: "confirmed" | "error"` for price-validation confirmation. Real material data already has a `status` field with a different meaning entirely — the row's approval status (`"APPROVED"`, `"PENDING"`, `"REVISED"`, `"REJECTED"`, ...), returned by the API today and consumed by the frontend (`RESETTABLE_ROW_STATUSES`, `STATUSES_DISABLING_ROW` in `SparePartsRow.tsx`). `MaterialRow & { status: ... }` would have silently overwritten that field wherever a validate/save response was rendered. Renamed to `changeStatus` throughout this document (and the equivalent frontend store field in the companion refactor doc's §7.1) — `MaterialRow.status` is untouched and keeps meaning exactly what it means today.
+
 ### Shared types
 
 ```ts
@@ -112,18 +114,21 @@ interface MaterialRow {
   description: string;
   type: string;
   quantity: number;
-  status?: string;
+  status?: string;                // the row's real approval status ("APPROVED"/"PENDING"/
+                                   // "REVISED"/"REJECTED"/...), as already returned by the API
+                                   // today — unrelated to price-validation confirmation, which
+                                   // is MaterialRowResult.changeStatus below, not this field.
   notBelongsToTool?: boolean;
   isPriceSetManually: boolean;
   isValidated: boolean;          // NEW — wire-level exposure of the frontend's existing
                                   // MaterialItem.isValidated/isNew concept (useDiagnosticsManager.ts).
                                   // false until this exact row has received one "confirmed"
                                   // response; the backend flips it true when it returns the row
-                                  // with status: "confirmed". Distinguishes "never priced yet, has
-                                  // nothing to show" from "has a last-known price, now being
-                                  // revalidated" — see "Leaning out validate's request" below for
-                                  // why this no longer gates request membership the way the first
-                                  // pass of this revision had it.
+                                  // with changeStatus: "confirmed". Distinguishes "never priced
+                                  // yet, has nothing to show" from "has a last-known price, now
+                                  // being revalidated" — see "Leaning out validate's request"
+                                  // below for why this no longer gates request membership the
+                                  // way the first pass of this revision had it.
   price: Price | null;           // null = "not yet priced, please calculate" (existing contract
                                   // — see buildDiagnosticPayload's price?.unitPrice === null
                                   // check in JobOverview.tsx)
@@ -162,7 +167,7 @@ interface DiagnosticPricingPayload {
   priceSummaryMaterial?: PriceSummary;   // NEW — see items-and-prices-refactor.md §6
 }
 
-type MaterialRowResult = MaterialRow & { status: "confirmed" | "error"; errorMessage?: string };
+type MaterialRowResult = MaterialRow & { changeStatus: "confirmed" | "error"; errorMessage?: string };
 
 interface PriceValidateErrorMessage {
   rowId?: string;
@@ -245,10 +250,10 @@ interface PriceValidateRequest {
 - Every row's `price` must be internally consistent for the country's `discountBase` mode — the backend becomes the single implementation of the GROSS_PRICE/NET_PRICE math currently duplicated on the frontend (frontend keeps a copy only for optimistic preview; see `src/utils/priceCalculator.ts` for the exact formulas to match).
 - `priceSummaryMaterial` aggregates only rows whose `position` is in the distributable set (`SP`, `PN`, `AC` today; should be driven by API-1's `positions[].isProtected === false`, not hardcoded independently).
 - When `changedSummary.target` is `priceSummaryMaterial`/`priceSummary`, the backend recomputes that summary's redistribution across the merged row set independently of the client-sent value — `changedSummary.summary` is the frontend's optimistic preview, not authoritative.
-- Reject (`status: "error"` on that row) rather than silently clamp, whenever a computed value would be negative or a required price lookup fails (mirrors today's "price not available" behavior on validate-and-save).
-- Every row in the response — sent this call or merged in from the saved baseline — comes back with a `status`; a row returned `"confirmed"` always has `isValidated: true`.
+- Reject (`changeStatus: "error"` on that row) rather than silently clamp, whenever a computed value would be negative or a required price lookup fails (mirrors today's "price not available" behavior on validate-and-save).
+- Every row in the response — sent this call or merged in from the saved baseline — comes back with a `changeStatus`; a row returned `"confirmed"` always has `isValidated: true`. This is separate from the row's own `status` (approval status), which is untouched.
 
-**Errors**: always HTTP `200` for validation-level failures (per-row `status: "error"` + `errorMessage`, and/or top-level `errorMessages[]`). `400` only for structurally malformed requests (missing `jobId`, or both `changedRows` empty and `changedSummary` absent). `401`/`403` per existing convention.
+**Errors**: always HTTP `200` for validation-level failures (per-row `changeStatus: "error"` + `errorMessage`, and/or top-level `errorMessages[]`). `400` only for structurally malformed requests (missing `jobId`, or both `changedRows` empty and `changedSummary` absent). `401`/`403` per existing convention.
 
 **Non-functional**:
 - Target p95 < 400ms — the debounce + round-trip should not feel laggier than today's instant client-side math. Flag for backend capacity planning; this is the primary UX risk of moving pricing authority server-side.
@@ -277,11 +282,11 @@ interface PriceValidateRequest {
     "typeOfUsage": "PRIVATE", "faultCode": "F1", "faultCodeDescription": "...", "faultCodeLabourQuantity": 1,
     "materials": [
       { "rowId": "row-3f2a", "id": "M-1", "position": "SP", "partNumber": "1609888887",
-        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false, "isValidated": true, "status": "confirmed",
+        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false, "isValidated": true, "changeStatus": "confirmed",
         "price": { "unitPrice": 45.5, "suggestedNetPrice": 91.0, "netAmount": 91.0, "tax": 20,
                    "taxAmount": 18.2, "grossAmount": 109.2, "discount": 10, "totalAmount": 98.28 } },
       { "rowId": "row-9c11", "id": "M-2", "position": "LA", "partNumber": "", "description": "Labour",
-        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false, "isValidated": true, "status": "confirmed",
+        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false, "isValidated": true, "changeStatus": "confirmed",
         "price": { "unitPrice": 20, "suggestedNetPrice": 20, "netAmount": 20, "tax": 20,
                    "taxAmount": 4, "grossAmount": 24, "discount": 0, "totalAmount": 24 } }
     ],
@@ -315,8 +320,8 @@ interface PriceValidateRequest {
   "diagnostic": {
     "...": "envelope fields from the saved baseline",
     "materials": [
-      { "rowId": "row-3f2a", "...": "backend-recomputed redistribution", "isValidated": true, "status": "confirmed" },
-      { "rowId": "row-7bd1", "...": "priced for the first time, included in the redistribution", "isValidated": true, "status": "confirmed" }
+      { "rowId": "row-3f2a", "...": "backend-recomputed redistribution", "isValidated": true, "changeStatus": "confirmed" },
+      { "rowId": "row-7bd1", "...": "priced for the first time, included in the redistribution", "isValidated": true, "changeStatus": "confirmed" }
     ],
     "priceSummary": { "...": "..." },
     "priceSummaryMaterial": { "...": "backend-authoritative redistribution, not the client's preview" }
@@ -328,9 +333,9 @@ interface PriceValidateRequest {
 - [ ] Response `diagnostic.materials[].price` for rows in `changedRows` matches the frontend's existing calculation output to 2 decimal places, for the same inputs, in both `discountBase` modes — verified via a shared fixture/contract test during the Phase-3 feature-flag rollout.
 - [ ] `priceSummary`/`priceSummaryMaterial` match the frontend's existing aggregation output for the equivalent full row set (saved baseline merged with the request's dirty rows), including when redistribution was triggered via `changedSummary` rather than a row edit.
 - [ ] A row omitted from `changedRows` is returned unchanged from the backend's last-saved state for it — the response is never missing a row the backend already knew about.
-- [ ] A row returned with `status: "confirmed"` always comes back with `isValidated: true`, regardless of what the request sent for that row.
+- [ ] A row returned with `changeStatus: "confirmed"` always comes back with `isValidated: true`, regardless of what the request sent for that row.
 - [ ] Stale `requestId` responses are safely ignorable by the client.
-- [ ] Row-level `status: "error"` used for negative-amount/lookup-failure cases instead of silent clamping.
+- [ ] Row-level `changeStatus: "error"` used for negative-amount/lookup-failure cases instead of silent clamping.
 - [ ] Response shape (`DiagnosticPricingResult`) is identical, field-for-field, to API-4's (`POST /v1/jobs/flow/validate-and-save`) response — one frontend type renders either.
 
 ---
