@@ -79,31 +79,100 @@ interface ItemPolicyConfigResponse {
 
 ---
 
+## API-2/API-3/API-4: one shared payload shape for diagnostic + claim pricing
+
+**Revision note**: API-2 and API-3 were originally specified with two unrelated shapes — API-2 as a lean `changedRows[]` diff array keyed by `rowId`, API-3 as the claim's existing full-`materials[]` payload (itself using different field names from the job side's `JobDiagnostic`, e.g. `jobType` per material instead of `type`). Reviewing the real `JobDiagnostic` type (`JobList.types.ts:174-229`) and the real `onValidateClaim` payload (`ClaimOverview.tsx:346-444`) shows: (a) diagnostic and claim materials are both edited through the same metadata-driven Formik fields, with the same `attributeMapping`-based field→API mapping (`mapValuesToAPI`) producing the same shape either way; (b) `POST /v1/jobs/flow/validate-and-save` already sends/receives the **full** `materials[]` array on every call — there is no existing "send only what changed" endpoint to diverge from; and (c) claim's `jobDiagnostic` field is already, today, a verbatim pass-through of the parent `JobDiagnostic` object (`ClaimOverview.tsx:443`). Given that, API-2 keeping a bespoke diff shape would mean the frontend maintains two different row representations — and two different mapping paths — for what is functionally the same edit. **API-2, API-3, and the existing validate-and-save endpoint (API-4) now share one payload shape**, differing only in the small envelope each needs.
+
+### Shared types
+
+```ts
+// Already defined and shipped (Part B of the companion refactor doc) — src/types/price.types.ts.
+// Reused as-is; no new price shape is introduced by this revision.
+interface Price {
+  discount: number; suggestedNetPrice: number; taxAmount: number; unitPrice: number;
+  netAmount: number; tax: number; taxTypes?: string[]; grossAmount: number;
+  totalAmount: number; discountAmount?: number;
+}
+
+// A material/spare-part row, shared by diagnostic and claim materials/archivedMaterials.
+// Matches JobDiagnostic["materials"][number] (JobList.types.ts:188-204) field-for-field, plus
+// one addition: rowId. Claim's material today names this field's type "jobType" instead of
+// "type" — aligned here to the diagnostic name since both hold the same values
+// (CHARGEABLE/WARRANTY/...) and "jobType" already means something else at the top level (the
+// claim's/diagnostic's own jobType) — see the claim migration notes under API-3 below.
+interface MaterialRow {
+  rowId: string;                 // NEW — stable client-generated id (not array-index-derived),
+                                  // used to correlate a request row to its response row/error
+                                  // and to name rows in changedRowIds/changedFields below.
+  id?: string;                   // absent for a brand-new, not-yet-saved row
+  order?: number;
+  position: string;
+  partNumber: string;
+  description: string;
+  type: string;
+  quantity: number;
+  status?: string;
+  notBelongsToTool?: boolean;
+  isPriceSetManually: boolean;
+  price: Price | null;           // null = "not yet priced, please calculate" (existing contract
+                                  // — see buildDiagnosticPayload's price?.unitPrice === null
+                                  // check in JobOverview.tsx)
+}
+
+// Same field set as today's ValidateAndSaveResponse.priceSummary (JobList.types.ts:220-228).
+// priceSummaryMaterial is a new addition needed for the summaryMaterial concept from
+// items-and-prices-refactor.md §6 — JobDiagnostic has no per-position-group summary today.
+type PriceSummary = Omit<Price, "unitPrice" | "tax"> & { discountAmount: number };
+
+// The full diagnostic payload — same shape validate-and-save already sends/returns today
+// (JobDiagnostic in JobList.types.ts:174-229), typed here as the one shape every pricing call
+// (validate and validate-and-save alike) reuses.
+interface DiagnosticPricingPayload {
+  jobId: string;
+  diagnosticId?: string;
+  ascId?: string;
+  actionType: string;
+  jobType: string;
+  exchangeReason?: string;
+  status: string;
+  customerAnswer?: string;
+  typeOfUsage: string;
+  faultCode: string;
+  faultCodeDescription: string;
+  faultCodeLabourQuantity: number;
+  technicianNote?: string;
+  materials: MaterialRow[];
+  archivedMaterials?: MaterialRow[];
+  priceSummary: PriceSummary;
+  priceSummaryMaterial?: PriceSummary;   // NEW — see items-and-prices-refactor.md §6
+}
+```
+
+**What "validate" adds on top of "validate-and-save"**: both send/receive the same `DiagnosticPricingPayload`. The debounced, non-persisting "validate" calls (API-2, and the claim equivalent in API-3) additionally carry two small fields identifying what triggered the call, instead of the backend having to diff the full row set itself:
+
+```ts
+interface ChangeTrigger {
+  changedRowIds: string[];                   // rowId(s) touched since the last confirmed response
+  changedFields: { rowId: string; field: "quantity" | "unitPrice" | "netAmount"
+    | "suggestedNetPrice" | "tax" | "grossAmount" | "discount" | "totalAmount" }[];
+}
+```
+
+`field` reuses the frontend's row-level calculation engine's field vocabulary (`FieldName` in `src/utils/priceCalculator.ts`), but aligned to the persisted `Price` type's names (`tax`/`discount`) rather than the calculator's internal `taxPercent`/`discountPercent` — one vocabulary now serves both the wire contract and the persisted shape.
+
+---
+
 ## API-2: `POST /v1/diagnostic/{jobId}/prices/validate`
 
-**Purpose**: The core backend-source-of-truth pricing call. Replaces client-side price calculation as the authority for what's rendered; the frontend renders the response directly with no re-derivation. Supports FE Phase 3.
+**Purpose**: The core backend-source-of-truth pricing call for the job diagnostics tab. Replaces client-side price calculation as the authority for what's rendered; the frontend renders the response directly with no re-derivation. Supports FE Phase 3.
 
-**Trigger/cadence**: Debounced 500ms client-side, coalesced by row. Called with only the rows the user actually edited since the last confirmed response (`changedRows`), plus the IDs of unchanged rows still in scope for summary recomputation (`unchangedRowIds`).
+**Trigger/cadence**: Debounced 500ms client-side. Called with the diagnostic's full current material set — same as validate-and-save would send — plus `changedRowIds`/`changedFields` identifying what the user just edited, so the backend knows what to prioritize without diffing.
 
 **Request**:
 ```ts
-interface PriceValidateRequest {
-  jobId: string;
-  actionType: string;
-  jobType: string;
+interface PriceValidateRequest extends ChangeTrigger {
   requestId: string;               // client-generated UUID, echoed back verbatim
-  changedRows: {
-    rowId: string;                 // stable client-generated UUID, not a form-field-derived name
-    position: string;
-    changedField: "quantity" | "unitPrice" | "netAmount" | "suggestedNetPrice"
-                | "taxPercent" | "grossAmount" | "discountPercent" | "totalAmount";
-    values: {
-      quantity: number; unitPrice: number; taxPercent: number; discountPercent: number;
-      suggestedNetPrice: number; netAmount: number; grossAmount: number;
-      totalAmount: number; taxAmount: number;
-    };
-  }[];
-  unchangedRowIds: string[];
+  diagnostic: DiagnosticPricingPayload;
 }
 ```
 
@@ -111,138 +180,166 @@ interface PriceValidateRequest {
 ```ts
 interface PriceValidateResponse {
   requestId: string;               // must equal request.requestId
-  rows: {
-    rowId: string;
-    status: "confirmed" | "error";
-    prices: {
-      quantity: number; unitPrice: number; suggestedNetPrice: number; netAmount: number;
-      taxPercent: number; taxAmount: number; grossAmount: number;
-      discountPercent: number; discountAmount: number; totalAmount: number;
-    };
-    errorMessage?: string;
-  }[];
-  summary: { type: string; /* ...same price fields as rows[].prices */ };
-  summaryMaterial: { type: string; positions: string[]; /* ...same price fields */ };
+  diagnostic: Omit<DiagnosticPricingPayload, "materials" | "archivedMaterials"> & {
+    materials: (MaterialRow & { status: "confirmed" | "error"; errorMessage?: string })[];
+    archivedMaterials?: (MaterialRow & { status: "confirmed" | "error"; errorMessage?: string })[];
+  };
   errorMessages?: { rowId?: string; field?: string; message: string }[];
 }
 ```
 
 **Validation rules (backend-side)**:
-- Every field in a row's `prices` must be internally consistent for the country's `discountBase` mode — the backend becomes the single implementation of the GROSS_PRICE/NET_PRICE math currently duplicated on the frontend (frontend keeps a copy only for optimistic preview; see the reference implementation in `src/utils/priceCalculator.ts` for the exact formulas to match).
-- `summaryMaterial` aggregates only rows whose `position` is in the distributable set (`SP`, `PN`, `AC` today; should be driven by API-1's `positions[].isProtected === false`, not hardcoded independently).
-- A row not present in `changedRows` or `unchangedRowIds` must not appear in the response.
-- Reject (`status: "error"` on that row) rather than silently clamp, whenever a computed value would be negative or a required price lookup fails (mirrors today's "price not available" behavior on `validate-and-save`).
+- Every row's `price` must be internally consistent for the country's `discountBase` mode — the backend becomes the single implementation of the GROSS_PRICE/NET_PRICE math currently duplicated on the frontend (frontend keeps a copy only for optimistic preview; see `src/utils/priceCalculator.ts` for the exact formulas to match).
+- `priceSummaryMaterial` aggregates only rows whose `position` is in the distributable set (`SP`, `PN`, `AC` today; should be driven by API-1's `positions[].isProtected === false`, not hardcoded independently).
+- Only rows named in `changedRowIds` strictly need recomputation; rows outside that set may be echoed back with whatever `status` reflects their last-known state (informational, not authoritative for unedited rows).
+- Reject (`status: "error"` on that row) rather than silently clamp, whenever a computed value would be negative or a required price lookup fails (mirrors today's "price not available" behavior on validate-and-save).
 
-**Errors**: always HTTP `200` for validation-level failures (per-row `status: "error"` + `errorMessage`, and/or top-level `errorMessages[]`). `400` only for structurally malformed requests (missing `jobId`; both `changedRows` and `unchangedRowIds` empty). `401`/`403` per existing convention.
+**Errors**: always HTTP `200` for validation-level failures (per-row `status: "error"` + `errorMessage`, and/or top-level `errorMessages[]`). `400` only for structurally malformed requests (missing `jobId`, empty `diagnostic.materials`). `401`/`403` per existing convention.
 
 **Non-functional**:
-- Target p95 < 400ms — the debounce + round-trip should not feel laggier than today's instant client-side math. Flag for backend capacity planning; this is the primary UX risk of moving pricing authority server-side.
-- Must tolerate out-of-order delivery: the frontend discards any response whose `requestId` isn't the latest one it issued for that row; no server-side ordering guarantee is required.
-- Idempotent for the same `requestId` — safe to retry on client network failure. This endpoint has no side effects beyond computing/returning prices; it does not persist anything (persistence remains a separate save/validate-and-save call).
+- Target p95 < 400ms — the debounce + round-trip should not feel laggier than today's instant client-side math. Flag for backend capacity planning; this is the primary UX risk of moving pricing authority server-side. Sending the full material set (not just a diff) on every call makes payload size, not row count, the thing to capacity-plan against — flag if a diagnostic can realistically have enough rows for this to matter.
+- Must tolerate out-of-order delivery: the frontend discards any response whose `requestId` isn't the latest one it issued; no server-side ordering guarantee is required.
+- Idempotent for the same `requestId` — safe to retry on client network failure. This is the one behavioral difference from validate-and-save/API-4: this endpoint has no side effects beyond computing/returning prices — it does not persist anything.
 
 **Example**:
 ```json
 // Request
 {
-  "jobId": "J-1001", "actionType": "REPAIR", "jobType": "CHARGEABLE", "requestId": "b1e7...",
-  "changedRows": [{
-    "rowId": "row-3f2a", "position": "SP", "changedField": "quantity",
-    "values": { "quantity": 2, "unitPrice": 45.5, "taxPercent": 20, "discountPercent": 10,
-                "suggestedNetPrice": 45.5, "netAmount": 45.5, "grossAmount": 54.6, "totalAmount": 49.14, "taxAmount": 9.1 }
-  }],
-  "unchangedRowIds": ["row-9c11", "row-4b02"]
+  "requestId": "b1e7...",
+  "changedRowIds": ["row-3f2a"],
+  "changedFields": [{ "rowId": "row-3f2a", "field": "quantity" }],
+  "diagnostic": {
+    "jobId": "J-1001", "actionType": "REPAIR", "jobType": "CHARGEABLE", "status": "IN_DIAGNOSTICS",
+    "typeOfUsage": "PRIVATE", "faultCode": "F1", "faultCodeDescription": "...", "faultCodeLabourQuantity": 1,
+    "materials": [
+      { "rowId": "row-3f2a", "id": "M-1", "position": "SP", "partNumber": "1609888887",
+        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false,
+        "price": { "unitPrice": 45.5, "suggestedNetPrice": 45.5, "netAmount": 45.5, "tax": 20,
+                   "taxAmount": 9.1, "grossAmount": 54.6, "discount": 10, "totalAmount": 49.14 } },
+      { "rowId": "row-9c11", "id": "M-2", "position": "LA", "partNumber": "", "description": "Labour",
+        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false,
+        "price": { "unitPrice": 20, "suggestedNetPrice": 20, "netAmount": 20, "tax": 20,
+                   "taxAmount": 4, "grossAmount": 24, "discount": 0, "totalAmount": 24 } }
+    ],
+    "priceSummary": { "suggestedNetPrice": 65.5, "netAmount": 65.5, "taxAmount": 13.1, "grossAmount": 78.6,
+                       "discount": 10, "discountAmount": 10.92, "totalAmount": 73.14 }
+  }
 }
 // Response
 {
   "requestId": "b1e7...",
-  "rows": [{ "rowId": "row-3f2a", "status": "confirmed",
-    "prices": { "quantity": 2, "unitPrice": 45.5, "suggestedNetPrice": 91.0, "netAmount": 91.0,
-                "taxPercent": 20, "taxAmount": 18.2, "grossAmount": 109.2,
-                "discountPercent": 10, "discountAmount": 10.92, "totalAmount": 98.28 } }],
-  "summary": { "type": "chargeable", "quantity": 0, "unitPrice": 0, "suggestedNetPrice": 91.0, "netAmount": 91.0,
-               "taxPercent": 20, "taxAmount": 18.2, "grossAmount": 109.2, "discountPercent": 10,
-               "discountAmount": 10.92, "totalAmount": 98.28 },
-  "summaryMaterial": { "type": "chargeable", "positions": ["SP", "PN", "AC"], "quantity": 0, "unitPrice": 0,
-                        "suggestedNetPrice": 91.0, "netAmount": 91.0, "taxPercent": 20, "taxAmount": 18.2,
-                        "grossAmount": 109.2, "discountPercent": 10, "discountAmount": 10.92, "totalAmount": 98.28 }
+  "diagnostic": {
+    "jobId": "J-1001", "actionType": "REPAIR", "jobType": "CHARGEABLE", "status": "IN_DIAGNOSTICS",
+    "typeOfUsage": "PRIVATE", "faultCode": "F1", "faultCodeDescription": "...", "faultCodeLabourQuantity": 1,
+    "materials": [
+      { "rowId": "row-3f2a", "id": "M-1", "position": "SP", "partNumber": "1609888887",
+        "description": "...", "type": "CHARGEABLE", "quantity": 2, "isPriceSetManually": false, "status": "confirmed",
+        "price": { "unitPrice": 45.5, "suggestedNetPrice": 91.0, "netAmount": 91.0, "tax": 20,
+                   "taxAmount": 18.2, "grossAmount": 109.2, "discount": 10, "totalAmount": 98.28 } },
+      { "rowId": "row-9c11", "id": "M-2", "position": "LA", "partNumber": "", "description": "Labour",
+        "type": "CHARGEABLE", "quantity": 1, "isPriceSetManually": false, "status": "confirmed",
+        "price": { "unitPrice": 20, "suggestedNetPrice": 20, "netAmount": 20, "tax": 20,
+                   "taxAmount": 4, "grossAmount": 24, "discount": 0, "totalAmount": 24 } }
+    ],
+    "priceSummary": { "suggestedNetPrice": 111.0, "netAmount": 111.0, "taxAmount": 22.2, "grossAmount": 133.2,
+                       "discount": 10, "discountAmount": 10.92, "totalAmount": 122.28 },
+    "priceSummaryMaterial": { "suggestedNetPrice": 91.0, "netAmount": 91.0, "taxAmount": 18.2, "grossAmount": 109.2,
+                               "discount": 10, "discountAmount": 10.92, "totalAmount": 98.28 }
+  }
 }
 ```
 
 **Acceptance criteria**:
-- [ ] Response `rows[].prices` matches the frontend's existing calculation output to 2 decimal places, for the same inputs, in both `discountBase` modes — verified via a shared fixture/contract test during the Phase-3 feature-flag rollout.
-- [ ] `summary`/`summaryMaterial` match the frontend's existing aggregation output for the same row set.
+- [ ] Response `diagnostic.materials[].price` for rows in `changedRowIds` matches the frontend's existing calculation output to 2 decimal places, for the same inputs, in both `discountBase` modes — verified via a shared fixture/contract test during the Phase-3 feature-flag rollout.
+- [ ] `priceSummary`/`priceSummaryMaterial` match the frontend's existing aggregation output for the same row set.
 - [ ] Stale `requestId` responses are safely ignorable by the client.
 - [ ] Row-level `status: "error"` used for negative-amount/lookup-failure cases instead of silent clamping.
+- [ ] Request/response `diagnostic` shape is structurally identical to API-4's (`POST /v1/jobs/flow/validate-and-save`) request/response — the only allowed differences are the added `rowId`/`status`/`errorMessage` fields on each row, and the top-level `changedRowIds`/`changedFields`/`requestId`.
 
 ---
 
-## API-3: `PUT /v1/claims/{claimId}/prices` (formalize existing endpoint)
+## API-3: `PUT /v1/claims/{claimId}/prices` (aligned to the shared diagnostic shape)
 
-**Purpose**: Same authority shift as API-2, scoped to claims. Currently untyped in both directions; its response body is unused today by the frontend (success is inferred purely from a subsequent `GET /v1/claims/{claimId}`). This ticket both confirms the existing request contract (frontend-only change, already shipped — see §"Shipped now" in the companion doc) **and** proposes an upgraded response so the frontend can reach parity with API-2 without an extra round trip.
+**Purpose**: Same authority shift as API-2, scoped to claims. The claim owns its own editable material rows — separate from, but now shaped identically to, the parent diagnostic's — plus a read-only mirror of the parent diagnostic (`jobDiagnostic`) that today is already passed through verbatim (`ClaimOverview.tsx:443`). This revision aligns the claim's own `materials`/summary to the same `MaterialRow[]`/`PriceSummary` types API-2 uses; only the envelope differs (claim-specific fields, plus `jobDiagnostic`).
 
-**Request** (current shape, now typed on the frontend):
+**Request**:
 ```ts
-interface PutClaimPricesRequest {
-  id: string; jobId: string; ascId: string; customerId: string; ascName: string;
-  diagnosticId: string; countryCode: string; actionType: string; jobType: string;
-  typeOfUsage: string; faultCode: string; faultCodeDescription: string;
-  faultCodeLabourQuantity: number; exchangeReason: string; claimStatus: string;
-  claimNotes: unknown; customer: unknown; job: unknown;
-  materials: {
-    position: string; partNumber: string; description: string; jobType: string;
-    quantity: number; order: number; isPriceSetManually: boolean;
-    price: { unitPrice: number; suggestedNetPrice: number; netAmount: number; tax: number;
-              taxAmount: number; grossAmount: number; discount: number; totalAmount: number };
-  }[];
-  archivedMaterials: /* same material shape */[];
-  claimPriceSummary: { netAmount: number; suggestedNetPrice: number; grossAmount: number;
-                        discount: number; totalAmount: number; taxAmount: number };
-  jobDiagnostic: unknown;
+interface ClaimPriceValidateRequest extends ChangeTrigger {
+  requestId: string;
+  jobId: string;
+  diagnosticId: string;
+  claim: {
+    id: string;                    // claimId — also in the URL path; kept here too, matching
+                                    // today's shipped payload, until confirmed path-only suffices
+    ascId: string;
+    customerId: string;
+    ascName: string;
+    countryCode: string;
+    claimStatus: string;
+    claimNotes: unknown;
+    customer: unknown;
+    job: unknown;
+    materials: MaterialRow[];
+    archivedMaterials?: MaterialRow[];
+    priceSummary: PriceSummary;    // renamed from today's claimPriceSummary — see migration notes
+  };
+  jobDiagnostic: DiagnosticPricingPayload;   // same shape as API-2's diagnostic, passed through
 }
 ```
 
-**Response `200` — proposed upgrade** (target state, not required to unblock the frontend typing pass already shipped):
+**Response `200`**:
 ```ts
-interface PutClaimPricesResponse {
-  requestId?: string;
-  rows: RowPriceResult[];          // same shape as API-2's rows[]
-  summary: PriceResults & { type: string };
-  summaryMaterial: PriceResults & { type: string; positions: string[] };
+interface ClaimPriceValidateResponse {
+  requestId: string;
+  claim: {
+    materials: (MaterialRow & { status: "confirmed" | "error"; errorMessage?: string })[];
+    archivedMaterials?: (MaterialRow & { status: "confirmed" | "error"; errorMessage?: string })[];
+    priceSummary: PriceSummary;
+  };
+  errorMessages?: { rowId?: string; field?: string; message: string }[];
 }
 ```
 
-**Migration note**: today's response is discarded by the frontend, which just invalidates its claim cache and refetches via `GET /v1/claims/{claimId}`. Two valid paths, either acceptable:
-(a) keep the current response; frontend keeps refetching via GET (zero backend change needed); or
-(b) adopt the upgraded response shape above so the frontend can render immediately without the extra GET (recommended follow-up, not blocking).
+**Migration notes** (supersedes this section's original "Migration note"/acceptance criteria, and is a larger contract than the Part B FE-only typing pass already shipped — see below):
+- **`materials[].jobType` → `materials[].type`**: today's shipped claim payload (`ClaimOverview.tsx:376`, `src/api/services/claims/claims.types.ts`) names this field `jobType`, which collides in meaning with the diagnostic side's `type` (both hold values like `CHARGEABLE`/`WARRANTY`) and with the claim's own top-level `jobType`. Rename to `type` to match `MaterialRow`. Small, isolated frontend follow-up — not blocking this proposal.
+- **`claimPriceSummary` → `priceSummary`**: a key rename for parity with `DiagnosticPricingPayload.priceSummary`; same field set already, except `discountAmount` becomes required (today's shipped `ClaimPriceSummary` has no `discountAmount` field at all — it's computed and sent as part of the summary object per-field today, confirm this is a strict superset before dropping the old shape).
+- **This is a bigger contract than the Part B FE-only typing pass shipped** (`PutClaimPricesRequest` in `claims.types.ts`, which typed today's *existing* untyped endpoint as-is, zero behavior change). Adopting `ClaimPriceValidateRequest` above is new backend + frontend work — track as a distinct ticket from the already-shipped Part B pass, not a revision of it.
+- Two adoption paths, either acceptable: (a) backend accepts this aligned shape at the existing `PUT /v1/claims/{claimId}/prices` route, retiring today's shape entirely; or (b) if backend prefers not to change the existing persisting route, introduce a new `POST /v1/claims/{claimId}/prices/validate` for the debounced, non-persisting case (mirroring API-2's URL pattern) and keep today's `PUT .../prices` for the final save — recommended if claims should keep the same "validate never persists, save always does" split that job diagnostics has between API-2 and API-4.
 
 **Errors**: same in-body convention as API-2 (no 422).
 
 **Acceptance criteria**:
-- [ ] (Blocking, already needed) Confirm the current response shape/fields so the frontend's typed placeholder (`Record<string, unknown>`) can be tightened.
-- [ ] (Non-blocking follow-up) Adopt the upgraded response shape, reusing the same `Price`/`RowPriceResult` contract as API-2 to eliminate the job/claim field-name drift (`tax` vs `taxPercent`, `isPriceManuallySet` vs `isPriceSetManually` — standardize on job's existing names, since the frontend's shared `Price` type already does).
+- [ ] `claim.materials[]`/`claim.archivedMaterials[]` use the exact same `MaterialRow` shape as API-2's `diagnostic.materials[]` — field names, not just field sets, match (in particular `type`, not `jobType`).
+- [ ] `claim.priceSummary` uses the exact same `PriceSummary` shape as `DiagnosticPricingPayload.priceSummary`.
+- [ ] `jobDiagnostic` is structurally identical to API-2's `diagnostic` request/response shape — no claim-specific fields leak into it.
+- [ ] Confirm with backend whether `claim.id`/`ascId`/`customerId`/`ascName`/`countryCode` are still needed in-body given they're derivable from `claimId` (path) plus the claim record backend already holds, or can be dropped as redundant.
 
 ---
 
-## API-4: Tightened semantics on existing `POST /v1/jobs/flow/validate-and-save`
+## API-4: `POST /v1/jobs/flow/validate-and-save` — the reference implementation of `DiagnosticPricingPayload`
 
-**Purpose**: No shape change — a behavioral contract clarification so the frontend can safely stop re-deriving prices client-side after this call succeeds (Phase 3 cleanup item).
+**Purpose**: No route change. This ticket (a) confirms the behavioral invariant from the original spec (a successful response always includes complete `materials[]`/`priceSummary`), and (b) formalizes that this endpoint's request/response *is* the reference shape `DiagnosticPricingPayload` above is modeled on — API-2/API-3's `diagnostic`/`jobDiagnostic` are typed to match this endpoint, not the reverse, since this endpoint already exists and already sends/returns the full row set today.
 
-**Current response** (unchanged): `errorMessages`, `diagnostic?`, `materials?`, `archivedMaterials?`, `priceSummary?`.
+**Current response** (unchanged, now named): `errorMessages: Record<string, string>[]`, plus the fields of `DiagnosticPricingPayload` — today flattened at the top level (`diagnostic?`/`materials?`/`archivedMaterials?`/`actionType?`/`jobType?`/...) rather than nested under a `diagnostic` key the way API-2/API-3 nest it. Not required to change just for nesting consistency — the field *names and shapes* aligning is what matters for one shared frontend type to serve all three endpoints.
 
-**Requested contract tightening**: whenever `errorMessages` is empty (success), `materials[]` and `priceSummary` **must** be fully populated and internally consistent. Today the frontend cannot trust this and re-derives via client-side calculation as a defensive measure; this ticket asks the backend to confirm/guarantee that invariant so the frontend can delete the re-derivation step. `priceSummary`'s field set should match API-2's `prices` shape so one frontend type serves both endpoints.
+**Requested contract tightening** (unchanged from the original spec): whenever `errorMessages` is empty (success), `materials[]` and `priceSummary` **must** be fully populated and internally consistent. Today the frontend cannot trust this and re-derives via client-side calculation as a defensive measure; this ticket asks the backend to confirm/guarantee that invariant so the frontend can delete the re-derivation step.
+
+**New in this revision**: add `priceSummaryMaterial` to the response (and accept it, if sent, on the request) — matching `DiagnosticPricingPayload.priceSummaryMaterial`. This endpoint has no per-distributable-position summary today; the frontend currently derives it entirely client-side (`aggregateRowPrices`). Same "summary/summaryMaterial move to backend-computed" change described in `items-and-prices-refactor.md` §6, landing here (not only on the new API-2 endpoint) since validate-and-save is the endpoint that actually persists the confirmed summary.
 
 **Acceptance criteria**:
 - [ ] Backend confirms (or fixes) that a `200` response with no `errorMessages` always includes complete, authoritative `materials[].price` and `priceSummary`.
-- [ ] No frontend-visible request shape change.
+- [ ] `priceSummaryMaterial` added to the response, aggregating the distributable positions only (see API-1's `isProtected === false`).
+- [ ] No frontend-visible request shape change beyond optionally sending `priceSummaryMaterial` (additive, ignorable by backend if unused).
+- [ ] Field names for `materials[]`/`priceSummary` match `MaterialRow`/`PriceSummary` above exactly (this is largely already true — this criterion exists to catch drift, not to request a rename).
 
 ---
 
 ## Suggested Jira ticket breakdown
 
 1. **[BE] Item Policy Config endpoint** — API-1 (`GET /v1/countries/{cc}/item-policy`, policy overlay only — no rule-data duplication). Independent, low risk. Supports FE Phase 2.
-2. **[BE] Diagnostic price validate endpoint** — API-2. Net-new endpoint, no dependencies. Supports FE Phase 3; FE work can proceed against a local simulator until this lands.
-3. **[BE] Confirm/type PUT claim prices response** — API-3, acceptance criterion 1 only (contract confirmation, no code change expected). Already unblocked the frontend typing work.
-4. **[BE] Upgrade PUT claim prices to return confirmed row prices** — API-3's proposed response upgrade, follow-up to #3.
-5. **[BE] Guarantee validate-and-save success invariant** — API-4, small low-risk contract confirmation.
+2. **[BE] Align validate-and-save on `DiagnosticPricingPayload`** — API-4. Confirms the existing success invariant and adds `priceSummaryMaterial` to the response. Low risk, no request shape change. Do this **first** among 2–5: API-2/API-3 are typed against this endpoint's shape, so confirming/adjusting it first avoids rework.
+3. **[BE] Diagnostic price validate endpoint** — API-2 (`POST /v1/diagnostic/{jobId}/prices/validate`). Net-new endpoint, reuses `DiagnosticPricingPayload` from #2. Supports FE Phase 3; FE work can proceed against a local simulator until this lands.
+4. **[BE] Confirm current PUT claim prices shape** — API-3, migration-notes acceptance criteria only (contract confirmation of what's already shipped — `PutClaimPricesRequest` in `claims.types.ts` — no code change expected). Already unblocked the frontend typing work from Part B.
+5. **[BE] Align claim prices to the shared `MaterialRow`/`PriceSummary`/`jobDiagnostic` shape** — API-3's full revision (rename `materials[].jobType`→`type`, `claimPriceSummary`→`priceSummary`, decide the "same route vs. new `/validate` route" question). Depends on #2 (reuses `DiagnosticPricingPayload` for `jobDiagnostic`) and follows #4 (don't touch the shape until the current one is confirmed). Larger than the original "upgrade the response" ticket — this also touches the request.
 
-Tickets 1–2 can be scheduled independently of 3–5.
+Ticket 1 can be scheduled independently of 2–5. Ticket 4 can start immediately (no dependency); tickets 2, 3, 5 have the dependency order noted above.
