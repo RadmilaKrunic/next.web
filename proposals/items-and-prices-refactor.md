@@ -124,18 +124,17 @@ Job's `SparePartsRow`, Claim's `ClaimSparePartsRow`, and the read-only `diagnost
 
 Full request/response contracts live in the companion document, `items-and-prices-backend-api-spec.md`. Summary of the design decisions:
 
-- **Granularity: debounced batch of changed rows** (500ms, coalesced by stable client-generated `rowId`), not per-field (too chatty — 9 fields recompute per row per edit) and not whole-diagnostic-per-edit (today's `postValidateAndSave` problem: it always sends the entire diagnostic).
-- **New endpoint** `POST /v1/diagnostic/{jobId}/prices/validate` — request/response reuse `priceCalculator.ts`'s existing `PriceInputs`/`PriceResults`/`FieldName` types directly. The FE renders response rows **directly** — no more `resyncMaterialsFromAPI` → `calculatePrices` re-derivation after a successful call.
-- **Formalize** `putClaimPrices` with real `PutClaimPricesRequest`/`PutClaimPricesResponse` types (the low-risk slice of this proposal already shipped — see §9).
+- **One payload shape for validate and validate-and-save, diagnostic and claim alike** (revised from the original per-field diff design — see the companion spec's "API-2/API-3/API-4: one shared payload shape" section for the full rationale). `POST /v1/jobs/flow/validate-and-save` already sends/receives the full `materials[]` array on every call; the new `POST /v1/diagnostic/{jobId}/prices/validate` (API-2) sends/receives that **same** shape (`DiagnosticPricingPayload`), just adding `changedRowIds`/`changedFields` so the backend knows what triggered the call without diffing. This was a direct response to the fact that validate and validate-and-save operate on the same Formik fields through the same `attributeMapping`-based mapping — maintaining two different row representations for the same edit was unjustified duplication.
+- **Claim pricing aligns onto the same shape**: `PUT /v1/claims/{claimId}/prices` (API-3) reuses the identical `MaterialRow[]`/`PriceSummary` types for the claim's own materials, plus the existing verbatim `jobDiagnostic` pass-through (already shaped like `DiagnosticPricingPayload` today) and a small claim-only envelope. This retires the claim-specific field names that drifted from the job side (`materials[].jobType` → `type`, `claimPriceSummary` → `priceSummary`).
 - **Tri-state confidence**: `status: "pending" | "confirmed" | "error"` per row (and per summary), with a client-generated `requestId` for race-discarding superseded responses — replacing today's ad hoc `isDistributingRef`/`isResyncingRef`/`activeValueChangeFieldRef` guards with one mechanism.
 - **Error convention**: keep the existing in-body `errorMessages` (always-HTTP-200) convention rather than introducing 422s. It is proven in this codebase (`ValidateAndSaveResponse.errorMessages`) and the axios client has no structured-validation-error handling today (only 401/403 are special-cased). Type it properly and attach `rowId`/`field` where possible instead of inventing a second error channel.
-- **Evolution of existing endpoints**: `postDiagnostic` (silent save) stops carrying client-computed `priceSummary` once the new endpoint is authoritative. `postValidateAndSave`'s consumer stops re-deriving via `calculatePrices` and trusts its response directly, once BE guarantees the invariant described in API-4 of the companion spec — both endpoints converge on the same `RowPriceResult`/`Price` contract as the new endpoint.
+- **Evolution of existing endpoints**: `postDiagnostic` (silent save) stops carrying client-computed `priceSummary` once the new endpoint is authoritative. `postValidateAndSave`'s consumer stops re-deriving via `calculatePrices` and trusts its response directly, once BE guarantees the invariant described in API-4 of the companion spec — all three endpoints now converge on the same `MaterialRow`/`Price`/`DiagnosticPricingPayload` contract described there, rather than each having its own shape.
 
 ## 6. `summary` / `summaryMaterial` approach
 
-**Recommendation: move both to backend-computed** (`PriceValidateResponse.summary` / `.summaryMaterial`), and delete `aggregateRowPrices` from the runtime path — keep it in `priceCalculator.ts` only as the *optimistic preview* aggregate, computed client-side over `pending`-status rows while waiting on BE confirmation, using the same "confirmed wins" rule as row prices.
+**Recommendation: move both to backend-computed** (`DiagnosticPricingPayload.priceSummary` / `.priceSummaryMaterial` — see the companion spec's shared-types section), and delete `aggregateRowPrices` from the runtime path — keep it in `priceCalculator.ts` only as the *optimistic preview* aggregate, computed client-side over `pending`-status rows while waiting on BE confirmation, using the same "confirmed wins" rule as row prices.
 
-This generalizes a pattern the codebase **already proves out today**: `ClaimSummaryArea` is a thin bridge adapter — it maps `ClaimContext` fields into a `DiagnosticsContextValue`-shaped object and renders the job side's `SummaryArea` inside a fresh `DiagnosticsContext.Provider`. Under the new design, both Job's context and Claim's bridge adapter expose the same two fields — `summary: PriceResults & { type }` and `summaryMaterial: PriceResults & { type; positions }` — sourced from the BE response. `ClaimSummaryArea`'s adapter role shrinks to "map claim-specific fields into the shared shape," exactly what it already does, just with less to bridge.
+This generalizes a pattern the codebase **already proves out today**: `ClaimSummaryArea` is a thin bridge adapter — it maps `ClaimContext` fields into a `DiagnosticsContextValue`-shaped object and renders the job side's `SummaryArea` inside a fresh `DiagnosticsContext.Provider`. Under the new design, both Job's context and Claim's bridge adapter expose the same two fields — `priceSummary: PriceSummary` and `priceSummaryMaterial: PriceSummary` — sourced from the BE response, using the exact same `PriceSummary` type on both surfaces (not a job-shaped and a claim-shaped variant). `ClaimSummaryArea`'s adapter role shrinks to "map claim-specific fields into the shared shape," exactly what it already does, just with less to bridge.
 
 Net effect: `SummaryArea.tsx` stops doing `useMemo`-driven `aggregateRowPrices` + dirty-diff `setFieldValue` writes; it becomes a pure presentational component reading `summary`/`summaryMaterial` off the item-row store (§7), with a preview fallback only while `status === "pending"`. The `>0.0001` diff-guard and `activeValueChangeFieldRef` workaround disappear — there is nothing left to "fight" once summary is confirmed-data-driven instead of derived-and-written-back into Formik on every render pass.
 
@@ -146,18 +145,21 @@ Editing the summary discount/total directly (`onSummaryDiscountChange` et al., c
 ### 7.1 Recommendation: dedicated reducer-based row store, bridging into Formik only at submit time
 
 ```ts
+// PriceSummary/PriceValidateResponse/MaterialRow are the wire types from the companion
+// spec's shared-types section — the store reuses them directly rather than inventing a
+// parallel FE-only shape.
 interface ItemsState {
   rows: Record<string /* rowId */, MaterialItem & RowPriceState>;
   archivedRows: Record<string, MaterialItem & RowPriceState>;
-  summary: (PriceResults & { type: string }) | null;
-  summaryMaterial: (PriceResults & { type: string; positions: string[] }) | null;
+  priceSummary: PriceSummary | null;
+  priceSummaryMaterial: PriceSummary | null;
   order: string[];
 }
 
 interface RowPriceState {
   status: "pending" | "confirmed" | "error";
   optimistic: PriceResults;        // instant, via existing calculatePrices()
-  confirmed?: PriceResults;        // last BE-confirmed values; rendered once present
+  confirmed?: Price;               // last BE-confirmed values (MaterialRow["price"]); rendered once present
   requestId?: string;
   errorMessage?: string;
 }
@@ -170,7 +172,7 @@ type ItemsAction =
   | { type: "EDIT_FIELD"; rowId: string; field: FieldName; value: number }
   | { type: "OPTIMISTIC_UPDATE"; rowId: string; prices: PriceResults }
   | { type: "CONFIRM_ROWS"; requestId: string; response: PriceValidateResponse }
-  | { type: "REJECT_ROWS"; requestId: string; errors: RowPriceResult[] };
+  | { type: "REJECT_ROWS"; requestId: string; errors: (MaterialRow & { status: "error"; errorMessage?: string })[] };
 ```
 
 Paired with a React Query `useMutation` for `/prices/validate` (or `putClaimPrices`), debounced via the same 300–500ms pattern already proven in `useSparePartPriceCalculation.ts`. **Rows are keyed by stable client-generated `rowId`s (UUIDs), not by Formik field-name ordinals** — this is what eliminates the need for dynamic `diagnosticsSpareParts#N` Area/Field cloning entirely, since row identity no longer depends on Formik's field-naming scheme.
