@@ -1,158 +1,250 @@
 import { describe, it, expect } from "vitest";
-import { calculatePrices, aggregateRowPrices, PriceInputs } from "utils/priceCalculator";
-import Field from "components/generics/Field/GenericField.types";
-import { simulatePriceValidate, simulateClaimPricesResponse } from "./priceEngineSimulator";
-import { PriceValidateRequest } from "./itemPolicy.types";
-import { PutClaimPricesRequest } from "../claims/claims.types";
+import {
+  simulatePriceValidate,
+  simulateClaimPriceValidate,
+  simulateClaimPricesSave,
+} from "./priceEngineSimulator";
+import type {
+  ChangedMaterialRow,
+  DiagnosticPricingPayload,
+  MaterialRow,
+  PriceValidateRequest,
+} from "./itemPolicy.types";
+import type { PutClaimPricesRequest } from "../claims/claims.types";
 
-const emptyInputs: PriceInputs = {
-  quantity: 0,
-  unitPrice: 0,
-  taxPercent: 0,
-  discountPercent: 0,
-  suggestedNetPrice: 0,
-  netAmount: 0,
-  grossAmount: 0,
-  totalAmount: 0,
-  taxAmount: 0,
-};
+function makeRow(overrides: Partial<MaterialRow>): MaterialRow {
+  return {
+    rowId: "row-1",
+    position: "SP",
+    partNumber: "PN-1",
+    description: "part",
+    type: "CHARGEABLE",
+    quantity: 1,
+    isPriceSetManually: false,
+    isValidated: true,
+    price: {
+      unitPrice: 0,
+      suggestedNetPrice: 0,
+      netAmount: 0,
+      tax: 0,
+      taxAmount: 0,
+      grossAmount: 0,
+      discount: 0,
+      totalAmount: 0,
+    },
+    ...overrides,
+  };
+}
+
+function makeBaseline(materials: MaterialRow[]): DiagnosticPricingPayload {
+  return {
+    jobId: "J1",
+    actionType: "REPAIR",
+    jobType: "CHARGEABLE",
+    status: "IN_DIAGNOSTICS",
+    typeOfUsage: "PRIVATE",
+    faultCode: "F1",
+    faultCodeDescription: "desc",
+    faultCodeLabourQuantity: 1,
+    materials,
+    archivedMaterials: [],
+    priceSummary: {
+      suggestedNetPrice: 0,
+      netAmount: 0,
+      taxAmount: 0,
+      grossAmount: 0,
+      discount: 0,
+      discountAmount: 0,
+      totalAmount: 0,
+    },
+  };
+}
 
 describe("simulatePriceValidate", () => {
-  it("computes each row via calculatePrices directly (row-level parity)", () => {
-    const request: PriceValidateRequest = {
-      jobId: "J1",
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
-      requestId: "req-1",
-      changedRows: [
-        {
-          rowId: "row-1",
-          position: "SP",
-          type: "CHARGEABLE",
-          changedField: "quantity",
-          values: { ...emptyInputs, quantity: 2, unitPrice: 45.5, taxPercent: 20 },
+  it("merges a single changed row onto the baseline and recomputes only that row", () => {
+    const baseline = makeBaseline([
+      makeRow({
+        rowId: "row-sp",
+        position: "SP",
+        quantity: 1,
+        price: {
+          unitPrice: 45.5,
+          suggestedNetPrice: 45.5,
+          netAmount: 45.5,
+          tax: 20,
+          taxAmount: 9.1,
+          grossAmount: 54.6,
+          discount: 10,
+          totalAmount: 49.14,
         },
-      ],
-      unchangedRowIds: [],
-    };
+      }),
+      makeRow({
+        rowId: "row-la",
+        position: "LA",
+        quantity: 1,
+        price: {
+          unitPrice: 20,
+          suggestedNetPrice: 20,
+          netAmount: 20,
+          tax: 20,
+          taxAmount: 4,
+          grossAmount: 24,
+          discount: 0,
+          totalAmount: 24,
+        },
+      }),
+    ]);
 
-    const response = simulatePriceValidate(request, "GROSS_PRICE");
-    const expected = calculatePrices(
-      request.changedRows[0].values,
-      "quantity",
-      2,
-      "GROSS_PRICE",
-    );
+    const changedRow: ChangedMaterialRow = {
+      rowId: "row-sp",
+      changedField: "quantity",
+      row: { ...baseline.materials[0], quantity: 2 },
+    };
+    const request: PriceValidateRequest = { requestId: "req-1", changedRows: [changedRow] };
+
+    const response = simulatePriceValidate(baseline, request, "GROSS_PRICE");
 
     expect(response.requestId).toBe("req-1");
-    expect(response.rows).toEqual([{ rowId: "row-1", status: "confirmed", prices: expected }]);
+    const spRow = response.diagnostic.materials.find((m) => m.rowId === "row-sp");
+    expect(spRow?.status).toBe("confirmed");
+    expect(spRow?.isValidated).toBe(true);
+    expect(spRow?.quantity).toBe(2);
+    // Quantity doubled at the same unitPrice roughly doubles the amounts.
+    expect(spRow?.price?.grossAmount).toBeCloseTo(109.2, 1);
+
+    // The untouched LA row is echoed back from the baseline unchanged, not recomputed.
+    const laRow = response.diagnostic.materials.find((m) => m.rowId === "row-la");
+    expect(laRow?.status).toBe("confirmed");
+    expect(laRow?.price?.grossAmount).toBe(24);
+
+    // Summary reflects both rows even though only one was sent.
+    expect(response.diagnostic.priceSummary.grossAmount).toBeCloseTo(133.2, 1);
   });
 
-  it("matches aggregateRowPrices for the summary and summaryMaterial totals", () => {
-    const request: PriceValidateRequest = {
-      jobId: "J1",
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
-      requestId: "req-2",
-      changedRows: [
-        {
-          rowId: "row-sp",
-          position: "SP",
-          type: "CHARGEABLE",
-          changedField: "quantity",
-          values: { ...emptyInputs, quantity: 2, unitPrice: 45.5, taxPercent: 20 },
-        },
-        {
-          rowId: "row-la",
-          position: "LA",
-          type: "CHARGEABLE",
-          changedField: "quantity",
-          values: { ...emptyInputs, quantity: 1, unitPrice: 30, taxPercent: 20 },
-        },
-        {
-          rowId: "row-warranty",
-          position: "SP",
-          type: "WARRANTY",
-          changedField: "quantity",
-          values: { ...emptyInputs, quantity: 5, unitPrice: 999, taxPercent: 20 },
-        },
-      ],
-      unchangedRowIds: [],
+  it("includes a brand-new, never-saved row via changedRows and prices it for the first time", () => {
+    const baseline = makeBaseline([]);
+    const newRow: ChangedMaterialRow = {
+      rowId: "row-new",
+      row: makeRow({
+        rowId: "row-new",
+        position: "PN",
+        quantity: 1,
+        isValidated: false,
+        price: null,
+      }),
     };
+    const request: PriceValidateRequest = { requestId: "req-2", changedRows: [newRow] };
 
-    const response = simulatePriceValidate(request, "GROSS_PRICE", "chargeable");
+    const response = simulatePriceValidate(baseline, request, "GROSS_PRICE");
 
-    // Build an equivalent Formik-shaped fixture and aggregate via the real
-    // aggregateRowPrices() to prove the simulator's summary math matches.
-    const values: Record<string, unknown> = {};
-    const fields: Field[] = [];
-    response.rows.forEach((row, index) => {
-      const prefix = `row${index}`;
-      const position = request.changedRows[index].position;
-      const rowType = request.changedRows[index].type;
-      const push = (subtype: string, name: string, value: unknown) => {
-        fields.push({ name, label: "", type: "text", subtype, fieldMapping: { nameStartsWith: prefix } });
-        values[name] = value;
-      };
-      push("diagnosticType", `${prefix}_type`, rowType);
-      push("diagnosticPosition", `${prefix}_position`, position);
-      push("diagnosticSuggestedNetPrice", `${prefix}_suggestedNetPrice`, row.prices.suggestedNetPrice);
-      push("diagnosticNetAmount", `${prefix}_netAmount`, row.prices.netAmount);
-      push("diagnosticGrossAmount", `${prefix}_grossAmount`, row.prices.grossAmount);
-      push("diagnosticTotalAmount", `${prefix}_totalAmount`, row.prices.totalAmount);
-      push("diagnosticTaxAmount", `${prefix}_taxAmount`, row.prices.taxAmount);
-    });
-
-    const expectedSummary = aggregateRowPrices(
-      values,
-      fields,
-      (t) => t === "CHARGEABLE",
-      "GROSS_PRICE",
-    );
-    const expectedSummaryMaterial = aggregateRowPrices(
-      values,
-      fields,
-      (t) => t === "CHARGEABLE",
-      "GROSS_PRICE",
-      (p) => p === "SP" || p === "PN" || p === "AC",
-    );
-
-    expect(response.summary.suggestedNetPrice).toBe(expectedSummary.suggestedNetPrice);
-    expect(response.summary.netAmount).toBe(expectedSummary.netAmount);
-    expect(response.summary.grossAmount).toBe(expectedSummary.grossAmount);
-    expect(response.summary.totalAmount).toBe(expectedSummary.totalAmount);
-    expect(response.summary.discountPercent).toBe(expectedSummary.discount);
-    expect(response.summary.discountAmount).toBe(expectedSummary.discountAmount);
-
-    // Only the SP row is a distributable position, so summaryMaterial should equal
-    // that single row's totals, matching aggregateRowPrices with the position filter.
-    expect(response.summaryMaterial.suggestedNetPrice).toBe(expectedSummaryMaterial.suggestedNetPrice);
-    expect(response.summaryMaterial.totalAmount).toBe(expectedSummaryMaterial.totalAmount);
-    expect(response.summaryMaterial.positions).toEqual(["SP", "PN", "AC"]);
-
-    // The WARRANTY row must not leak into the "chargeable" summary scope.
-    const warrantyRowTotal = response.rows.find((r) => r.rowId === "row-warranty")?.prices
-      .totalAmount as number;
-    expect(response.summary.totalAmount).toBeLessThan(warrantyRowTotal);
+    const row = response.diagnostic.materials.find((m) => m.rowId === "row-new");
+    expect(row?.status).toBe("confirmed");
+    expect(row?.isValidated).toBe(true);
+    expect(row?.price).not.toBeNull();
   });
 
-  it("returns zeroed aggregates for an empty request", () => {
+  it("redistributes discount% across distributable rows via changedSummary", () => {
+    const baseline = makeBaseline([
+      makeRow({
+        rowId: "row-sp",
+        position: "SP",
+        price: {
+          unitPrice: 100,
+          suggestedNetPrice: 100,
+          netAmount: 100,
+          tax: 20,
+          taxAmount: 20,
+          grossAmount: 120,
+          discount: 0,
+          totalAmount: 120,
+        },
+      }),
+      makeRow({
+        rowId: "row-la",
+        position: "LA",
+        price: {
+          unitPrice: 50,
+          suggestedNetPrice: 50,
+          netAmount: 50,
+          tax: 20,
+          taxAmount: 10,
+          grossAmount: 60,
+          discount: 0,
+          totalAmount: 60,
+        },
+      }),
+    ]);
+
     const request: PriceValidateRequest = {
-      jobId: "J1",
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
       requestId: "req-3",
       changedRows: [],
-      unchangedRowIds: [],
+      changedSummary: {
+        target: "priceSummaryMaterial",
+        field: "discount",
+        summary: {
+          suggestedNetPrice: 100,
+          netAmount: 90,
+          taxAmount: 18,
+          grossAmount: 108,
+          discount: 10,
+          discountAmount: 12,
+          totalAmount: 108,
+        },
+      },
     };
-    const response = simulatePriceValidate(request, "GROSS_PRICE");
-    expect(response.rows).toEqual([]);
-    expect(response.summary.totalAmount).toBe(0);
-    expect(response.summary.discountPercent).toBe(0);
+
+    const response = simulatePriceValidate(baseline, request, "GROSS_PRICE");
+
+    // SP is distributable (gets the 10% discount); LA is protected (untouched).
+    const spRow = response.diagnostic.materials.find((m) => m.rowId === "row-sp");
+    const laRow = response.diagnostic.materials.find((m) => m.rowId === "row-la");
+    expect(spRow?.price?.discount).toBe(10);
+    expect(laRow?.price?.discount).toBe(0);
+    expect(response.diagnostic.priceSummaryMaterial?.discount).toBeGreaterThan(0);
   });
 });
 
-describe("simulateClaimPricesResponse", () => {
+describe("simulateClaimPriceValidate", () => {
+  it("merges a claim's own changed row onto its baseline materials", () => {
+    const baseline = {
+      materials: [
+        makeRow({
+          rowId: "row-sp",
+          price: {
+            unitPrice: 10,
+            suggestedNetPrice: 10,
+            netAmount: 10,
+            tax: 20,
+            taxAmount: 2,
+            grossAmount: 12,
+            discount: 0,
+            totalAmount: 12,
+          },
+        }),
+      ],
+    };
+
+    const response = simulateClaimPriceValidate(
+      baseline,
+      {
+        requestId: "req-4",
+        jobId: "J1",
+        diagnosticId: "D1",
+        changedRows: [
+          { rowId: "row-sp", changedField: "quantity", row: { ...baseline.materials[0], quantity: 3 } },
+        ],
+      },
+      "GROSS_PRICE",
+    );
+
+    expect(response.requestId).toBe("req-4");
+    expect(response.claim.materials).toHaveLength(1);
+    expect(response.claim.materials[0].status).toBe("confirmed");
+    expect(response.claim.priceSummary.grossAmount).toBeGreaterThan(0);
+  });
+});
+
+describe("simulateClaimPricesSave", () => {
   const baseRequest: PutClaimPricesRequest = {
     id: "C1",
     jobId: "J1",
@@ -206,16 +298,16 @@ describe("simulateClaimPricesResponse", () => {
   };
 
   it("computes one confirmed row per material via calculatePrices", () => {
-    const response = simulateClaimPricesResponse(baseRequest, "GROSS_PRICE");
-    expect(response.rows).toHaveLength(1);
-    expect(response.rows[0].status).toBe("confirmed");
-    expect(response.rows[0].prices.totalAmount).toBe(109.2);
+    const response = simulateClaimPricesSave(baseRequest, "GROSS_PRICE");
+    expect(response.claim.materials).toHaveLength(1);
+    expect(response.claim.materials[0].status).toBe("confirmed");
+    expect(response.claim.materials[0].isValidated).toBe(true);
+    expect(response.claim.materials[0].price?.totalAmount).toBe(109.2);
   });
 
-  it("aggregates summary and summaryMaterial from the computed rows", () => {
-    const response = simulateClaimPricesResponse(baseRequest, "GROSS_PRICE");
-    expect(response.summary.totalAmount).toBe(109.2);
-    expect(response.summaryMaterial.totalAmount).toBe(109.2);
-    expect(response.summaryMaterial.positions).toEqual(["SP", "PN", "AC"]);
+  it("aggregates priceSummary/priceSummaryMaterial from the computed rows", () => {
+    const response = simulateClaimPricesSave(baseRequest, "GROSS_PRICE");
+    expect(response.claim.priceSummary.totalAmount).toBe(109.2);
+    expect(response.claim.priceSummaryMaterial?.totalAmount).toBe(109.2);
   });
 });
