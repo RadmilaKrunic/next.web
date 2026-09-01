@@ -914,6 +914,68 @@ describe("useDiagnosticsManager hook behavior", () => {
     expect(mocks.setInitialFormValues).toHaveBeenCalled();
   });
 
+  it("deleting the first of several rows preserves the order of the remaining rows", async () => {
+    // Regression for the full-derivation reconciliation (items-and-prices-refactor.md §7):
+    // onDeleteRow no longer shifts every subsequent row's Formik field names/values itself —
+    // it only needs to remove the right item from `materials`, in the right order, and trust
+    // Effect 3 to fully re-derive everything else from the resulting array.
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    act(() => {
+      result.current.setMaterials([
+        makeItem({ position: "SP", partNumber: "ROW-0" }),
+        makeItem({ position: "SP", partNumber: "ROW-1" }),
+        makeItem({ position: "SP", partNumber: "ROW-2" }),
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(3);
+    });
+
+    act(() => {
+      result.current.onDeleteRow("diagnosticData_diagnosticsSpareParts#0");
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(2);
+    });
+    // What used to be ROW-1/ROW-2 are now materials[0]/materials[1], in that order — not
+    // reordered, and not still carrying ROW-0.
+    expect(result.current.materials.map((m) => m.partNumber)).toEqual(["ROW-1", "ROW-2"]);
+  });
+
+  it("forces a full rebuild of allFields/tabs after a delete, not just a values patch", async () => {
+    const { props, mocks } = createHookProps();
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    // Two rows so materials.length stays > 0 after the delete below — Effect 3 short-circuits
+    // entirely (no setAllFields/setTabs/setInitialFormValues call at all) once materials is
+    // empty, which would otherwise mask whether forceRebuildRef actually triggered a rebuild.
+    act(() => {
+      result.current.setMaterials([
+        makeItem({ partNumber: "ROW-0" }),
+        makeItem({ partNumber: "ROW-1" }),
+      ]);
+    });
+    await waitFor(() => expect(result.current.materials).toHaveLength(2));
+    mocks.setAllFields.mockClear();
+    mocks.setTabs.mockClear();
+
+    act(() => {
+      result.current.onDeleteRow("diagnosticData_diagnosticsSpareParts#0");
+    });
+
+    // Effect 3 runs with forceRebuildRef set by onDeleteRow, so it must push a fresh
+    // allFields/tabs derivation for the remaining row(s) rather than relying on stale,
+    // possibly-shifted values already sitting in Formik state.
+    await waitFor(() => {
+      expect(mocks.setAllFields).toHaveBeenCalled();
+      expect(mocks.setTabs).toHaveBeenCalled();
+    });
+  });
+
   it("restores archived row as pending and unvalidated", async () => {
     const { props, mocks } = createHookProps({
       diagnosticData: {
