@@ -60,22 +60,6 @@ const makeField = (name: string, subtype?: string, overrides: Partial<Field> = {
   ...overrides,
 });
 
-const makeItem = (overrides: Partial<MaterialItem> = {}): MaterialItem => ({
-  position: "SP",
-  partNumber: "12345",
-  description: "Spare Part",
-  type: "CHARGEABLE",
-  quantity: 2,
-  unitPrice: 50,
-  netAmount: 100,
-  tax: 19,
-  grossAmount: 119,
-  discount: 0,
-  taxAmount: 19,
-  totalAmount: 119,
-  ...overrides,
-});
-
 const makeArea = (name: string, fields: Field[], index = 0): Area => ({
   name,
   label: name,
@@ -290,6 +274,8 @@ const buildJobConfig = (
     permanentDeleteFromActiveStatuses: new Set(["IN_DIAGNOSTICS"]),
     supportsPermanentArchivedDelete: false,
   },
+  resyncOnApiMaterialsReferenceChange: false,
+  setArePricesValidatedOnSync: false,
   jobStatus: "",
   ...overrides,
 });
@@ -545,9 +531,256 @@ describe("useItemsManager — job-shaped config equivalence", () => {
   });
 });
 
-describe("useItemsManager — makeItem fixture sanity", () => {
-  it("makeItem produces a materially valid MaterialItem", () => {
-    const item = makeItem({ position: "PN" });
-    expect(item.position).toBe("PN");
+// ── Claim-shaped config: Step 4 (items-and-prices-refactor.md §15) ──────────
+//
+// Proves useItemsManager driven by the real claimItemsSurfaceConfig (not a synthetic
+// stand-in) reproduces useClaimMaterialsManager.ts's real behavior, AND exercises the one
+// deliberate behavior change this step makes: claim's live-row reconciliation switches from
+// its old incremental add/remove-diff to the same full-recomputation
+// deriveSparePartsAreasAndFields/buildMaterialsRowValues job already uses (Phase 4). Per the
+// plan, the one edge case NOT provably behavior-preserving by construction is claim's cruder
+// row-value-reuse heuristic vs. job's shouldReuseExistingRowValues (position-match +
+// rowHasNoPrices) — flagged here rather than asserted as equivalent.
+import { buildClaimItemsSurfaceConfig, claimMaterialToMaterialItem } from "modules/ClaimManagement/ClaimOverview/claimItemsSurfaceConfig";
+import type { Material } from "modules/ClaimManagement/ClaimOverview/Claims.types";
+
+const makeClaimMaterial = (overrides: Partial<Material> = {}): Material => ({
+  position: "SP",
+  partNumber: "P-1",
+  jobType: "WARRANTY",
+  status: "APPROVED",
+  approvedBy: "",
+  approvedByName: "",
+  approvedAt: "",
+  description: "Part 1",
+  quantity: 1,
+  isValidated: true,
+  isPriceManuallySet: true,
+  price: {
+    unitPrice: 10,
+    suggestedNetPrice: 10,
+    netAmount: 10,
+    tax: 0,
+    taxAmount: 0,
+    grossAmount: 10,
+    discount: 0,
+    totalAmount: 10,
+  },
+  ...overrides,
+});
+
+const claimsFields: Field[] = [
+  makeField("claims_claimSpareParts#0_position", "diagnosticPosition"),
+  makeField("claims_claimSpareParts#0_sparePartNumber", "diagnosticPartNumber"),
+  makeField("claims_claimSpareParts#0_description", "diagnosticDescription"),
+  makeField("claims_claimSpareParts#0_quantity", "diagnosticQuantity"),
+  makeField("claims_claimSpareParts#0_unitPrice", "diagnosticUnitPrice"),
+  makeField("claims_claimSpareParts#0_netAmount", "diagnosticNetAmount"),
+  makeField("claims_claimSpareParts#0_tax", "diagnosticTax"),
+  makeField("claims_claimSpareParts#0_grossAmount", "diagnosticGrossAmount"),
+  makeField("claims_claimSpareParts#0_discount", "diagnosticDiscount"),
+  makeField("claims_claimSpareParts#0_totalAmount", "diagnosticTotalAmount"),
+  makeField("claims_claimSpareParts#0_type", "diagnosticType"),
+  makeField("claims_claimSpareParts#0_status", "diagnosticMaterialStatus"),
+];
+const claimsArea = makeArea("claims_claimSpareParts#0", claimsFields);
+const claimsTab = (): Section => ({
+  name: "claims",
+  label: "claims",
+  position: 0,
+  isHidden: false,
+  dependFieldCondition: "AND",
+  dependentFields: [],
+  areas: [claimsArea],
+  actions: null,
+  isSubSection: false,
+  isAccordion: false,
+  isTab: true,
+});
+
+const createClaimHookProps = (
+  claimOverrides: {
+    apiMaterials?: Material[];
+    permissions?: string[];
+    allowedPositions?: AllowedPosition[];
+    resetKey?: string;
+    configOverrides?: Partial<ItemsSurfaceConfig<Material>>;
+  } = {},
+) => {
+  const setTabs = vi.fn();
+  const setAllFields = vi.fn();
+  const setInitialFormValues = vi.fn();
+  const setArePricesValidated = vi.fn();
+  const skipFormResetRef = { current: false };
+  const formValuesRef = { current: {} as Record<string, unknown> };
+
+  const allowedPositions = claimOverrides.allowedPositions ?? [
+    makeAllowedPosition("SP", "USER", 1, 2),
+    makeAllowedPosition("PN", "DEFAULT", 4, 1),
+  ];
+  const user = makeUser(claimOverrides.permissions);
+  const countryConfiguration = makeCountryConfig(allowedPositions);
+  const getQueryData = vi.fn((key: unknown) => {
+    if (Array.isArray(key) && key[0] === "user") return user;
+    if (Array.isArray(key) && key[0] === "countryConfiguration") return countryConfiguration;
+    return undefined;
+  });
+  vi.mocked(useQueryClient).mockReturnValue({ getQueryData } as never);
+  vi.mocked(useBareSalesRelation).mockReturnValue({ data: undefined } as never);
+
+  const config = buildClaimItemsSurfaceConfig({
+    apiMaterials: claimOverrides.apiMaterials,
+    resetKey: claimOverrides.resetKey,
+    currentActionType: "REPAIR",
+    currentJobType: "WARRANTY",
+    ...claimOverrides.configOverrides,
+  });
+
+  return {
+    props: {
+      config,
+      tabs: [claimsTab()],
+      setTabs,
+      allFields: claimsFields,
+      setAllFields,
+      setInitialFormValues,
+      skipFormResetRef,
+      formValuesRef,
+      arePricesValidated: false,
+      setArePricesValidated,
+      readOnly: false,
+    },
+    mocks: { setTabs, setAllFields, setInitialFormValues, setArePricesValidated },
+  };
+};
+
+describe("useItemsManager — claim-shaped config (claimItemsSurfaceConfig)", () => {
+  it("filters allowedPositions by claim's own positionViewPermissions (PN gated on CAN_VIEW_NET_DEALER_PRICE)", () => {
+    const { props } = createClaimHookProps({ permissions: [] });
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.allowedPositions.map((p) => p.position)).toEqual(["SP"]);
+  });
+
+  it("grants PN when the user has CAN_VIEW_NET_DEALER_PRICE", () => {
+    const { props } = createClaimHookProps({
+      permissions: [PERMISSIONS.DIAGNOSTICS.CAN_VIEW_NET_DEALER_PRICE],
+    });
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.allowedPositions.map((p) => p.position)).toEqual(["SP", "PN"]);
+  });
+
+  it("loads claim materials via claimMaterialToMaterialItem and sets arePricesValidated from sync (setArePricesValidatedOnSync)", async () => {
+    const { props, mocks } = createClaimHookProps({
+      apiMaterials: [makeClaimMaterial({ isValidated: true }), makeClaimMaterial({ isValidated: true })],
+    });
+    const { result } = renderHook(() => useItemsManager(props));
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(2));
+
+    expect(mocks.setArePricesValidated).toHaveBeenCalledWith(true);
+  });
+
+  it("re-syncs automatically when apiMaterials gets a new array reference, without an explicit resync call (resyncOnApiMaterialsReferenceChange)", async () => {
+    const firstBatch = [makeClaimMaterial({ partNumber: "P-1" })];
+    const { props } = createClaimHookProps({ apiMaterials: firstBatch });
+    const { result, rerender } = renderHook((p) => useItemsManager(p), { initialProps: props });
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(1));
+
+    // A genuinely new array reference (e.g. a background refetch) — job's equivalent config
+    // (resyncOnApiMaterialsReferenceChange: false) would ignore this without an explicit
+    // resyncMaterialsFromAPI() call; claim's picks it up automatically.
+    const secondBatch = [makeClaimMaterial({ partNumber: "P-1" }), makeClaimMaterial({ partNumber: "P-2" })];
+    const nextProps = { ...props, config: { ...props.config, apiMaterials: secondBatch } };
+    rerender(nextProps);
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(2));
+  });
+
+  it("onDeleteRow always archives (no deletionPolicy.permanentDeleteFromActiveStatuses for claim)", () => {
+    const { props } = createClaimHookProps({
+      apiMaterials: [makeClaimMaterial()],
+    });
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.canArchiveOnDelete).toBe(true);
+  });
+
+  it("exposes onDeleteArchivedRow for claim config (supportsPermanentArchivedDelete: true)", () => {
+    const { props } = createClaimHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.onDeleteArchivedRow).toBeInstanceOf(Function);
+  });
+
+  it("delete-from-the-middle preserves the order of the remaining rows (full recomputation, not incremental patching)", async () => {
+    const { props } = createClaimHookProps({
+      apiMaterials: [
+        makeClaimMaterial({ partNumber: "P-1", order: 1 }),
+        makeClaimMaterial({ partNumber: "P-2", order: 2 }),
+        makeClaimMaterial({ partNumber: "P-3", order: 3 }),
+      ],
+    });
+    const { result } = renderHook(() => useItemsManager(props));
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(3));
+
+    const middleAreaName = "claims_claimSpareParts#0"; // no-op setDuplicatedArea mock: every
+    // derived area keeps the template's name — onDeleteRow resolves areaIndex via the
+    // sparePartsAreas array position, not the name itself, so this still targets index 0.
+    act(() => {
+      result.current.onDeleteRow(middleAreaName);
+    });
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(2));
+    expect(result.current.materials.map((m) => m.partNumber)).toEqual(["P-2", "P-3"]);
+  });
+
+  it("claimNewRowDefaults only auto-fills a position when exactly one still has capacity, type is always WARRANTY", () => {
+    const config = buildClaimItemsSurfaceConfig();
+    const allowed = [makeAllowedPosition("SP", "USER", 1, 1), makeAllowedPosition("PN", "USER", 1, 1)];
+
+    expect(config.newRowDefaults.resolvePosition({ allowed, positionCounts: { SP: 1 } })).toBe(
+      "PN",
+    );
+    expect(config.newRowDefaults.resolvePosition({ allowed, positionCounts: {} })).toBe("");
+    expect(config.newRowDefaults.resolveType({ currentJobType: "CHARGEABLE" })).toBe("WARRANTY");
+  });
+
+  it("claimMaterialToMaterialItem matches calculatePrices output for the same fixture (equivalence anchor)", () => {
+    const material = makeClaimMaterial({
+      price: {
+        unitPrice: 20,
+        suggestedNetPrice: 0,
+        netAmount: 0,
+        tax: 10,
+        taxAmount: 0,
+        grossAmount: 0,
+        discount: 5,
+        totalAmount: 0,
+      },
+      quantity: 3,
+    });
+    const item = claimMaterialToMaterialItem(material, "NET_PRICE");
+    const expected = calculatePrices(
+      {
+        quantity: 3,
+        unitPrice: 20,
+        taxPercent: 10,
+        discountPercent: 5,
+        suggestedNetPrice: 0,
+        netAmount: 0,
+        grossAmount: 0,
+        totalAmount: 0,
+        taxAmount: 0,
+      },
+      "unitPrice",
+      20,
+      "NET_PRICE",
+    );
+    expect(item.netAmount).toBe(expected.netAmount);
+    expect(item.totalAmount).toBe(expected.totalAmount);
   });
 });

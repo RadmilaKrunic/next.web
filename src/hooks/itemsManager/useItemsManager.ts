@@ -85,35 +85,35 @@ function removeArchivedArea(tab: Section, areaName: string, tabName: string): Se
   };
 }
 
-const SPARE_PARTS_PREFIX = "diagnosticData_diagnosticsSpareParts#";
 const RESETTABLE_MATERIAL_STATUSES = new Set(["REVISED", "REJECTED"]);
 
-const syncMaterialsWithForm = (materials: MaterialItem[], formValues: Record<string, unknown>) => {
+// Prefix is `${tabName}_${liveAreaMarker}#` — job's original hardcoded
+// "diagnosticData_diagnosticsSpareParts#" is exactly this pattern for job's naming, and
+// claim's real field keys (e.g. "claims_claimSpareParts#0_sparePartNumber") follow the same
+// pattern for claim's naming — confirmed against useClaimMaterialsManager.ts's onAddRow,
+// which read/wrote these exact keys by hand instead of going through a shared sync helper.
+const syncMaterialsWithForm = (
+  materials: MaterialItem[],
+  formValues: Record<string, unknown>,
+  naming: ItemsSurfaceNaming,
+) => {
+  const prefix = `${naming.tabName}_${naming.liveAreaMarker}#`;
   const syncedMaterials = materials.map((materialItem, index) => {
     return {
       ...materialItem,
       description:
-        (formValues[`${SPARE_PARTS_PREFIX}${index}_description`] as string) ??
-        materialItem.description,
-      discount:
-        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_discount`]) || materialItem.discount,
-      totalAmount:
-        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_totalAmount`]) || materialItem.totalAmount,
-      grossAmount:
-        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_grossAmount`]) || materialItem.grossAmount,
+        (formValues[`${prefix}${index}_description`] as string) ?? materialItem.description,
+      discount: Number(formValues[`${prefix}${index}_discount`]) || materialItem.discount,
+      totalAmount: Number(formValues[`${prefix}${index}_totalAmount`]) || materialItem.totalAmount,
+      grossAmount: Number(formValues[`${prefix}${index}_grossAmount`]) || materialItem.grossAmount,
       partNumber:
-        (formValues[`${SPARE_PARTS_PREFIX}${index}_sparePartNumber`] as string) ??
-        materialItem.partNumber,
-      position:
-        (formValues[`${SPARE_PARTS_PREFIX}${index}_position`] as string) ?? materialItem.position,
-      quantity:
-        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_quantity`]) || materialItem.quantity,
-      tax: Number(formValues[`${SPARE_PARTS_PREFIX}${index}_tax`]) || materialItem.tax,
-      netAmount:
-        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_netAmount`]) || materialItem.netAmount,
-      type: (formValues[`${SPARE_PARTS_PREFIX}${index}_type`] as string) ?? materialItem.type,
-      unitPrice:
-        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_unitPrice`]) || materialItem.unitPrice,
+        (formValues[`${prefix}${index}_sparePartNumber`] as string) ?? materialItem.partNumber,
+      position: (formValues[`${prefix}${index}_position`] as string) ?? materialItem.position,
+      quantity: Number(formValues[`${prefix}${index}_quantity`]) || materialItem.quantity,
+      tax: Number(formValues[`${prefix}${index}_tax`]) || materialItem.tax,
+      netAmount: Number(formValues[`${prefix}${index}_netAmount`]) || materialItem.netAmount,
+      type: (formValues[`${prefix}${index}_type`] as string) ?? materialItem.type,
+      unitPrice: Number(formValues[`${prefix}${index}_unitPrice`]) || materialItem.unitPrice,
     };
   });
   return syncedMaterials;
@@ -331,6 +331,9 @@ export const useItemsManager = <TApiMaterial = unknown>({
   tRef.current = t;
 
   const hasSyncedFromAPIRef = useRef(false);
+  // Only consulted when config.resyncOnApiMaterialsReferenceChange is true (claim) — see the
+  // type's docstring. Stays unused (always null) for job, matching job's original hook exactly.
+  const lastSyncedMaterialsRef = useRef<unknown>(null);
   const hasSyncedArchivedRef = useRef(false);
   const forceRebuildRef = useRef(false);
   const archivedForceRebuildRef = useRef(false);
@@ -374,6 +377,7 @@ export const useItemsManager = <TApiMaterial = unknown>({
   // Reset on new job
   useEffect(() => {
     hasSyncedFromAPIRef.current = false;
+    lastSyncedMaterialsRef.current = null;
     hasSyncedArchivedRef.current = false;
     prevRuleKeyRef.current = "";
     prAutofillAppliedRef.current = false;
@@ -393,9 +397,23 @@ export const useItemsManager = <TApiMaterial = unknown>({
   // ── Effect 1: API data → materials list ───────────────────────────────────
   useEffect(() => {
     const apiMaterials = diagnosticData?.materials as Array<Record<string, unknown>> | undefined;
-    if (!apiMaterials?.length || hasSyncedFromAPIRef.current) return;
+    if (!apiMaterials?.length) return;
+    if (hasSyncedFromAPIRef.current) {
+      // Job (resyncOnApiMaterialsReferenceChange: false): once synced, always skip until
+      // resyncMaterialsFromAPI() explicitly resets hasSyncedFromAPIRef — matches job's
+      // original hook exactly. Claim (true): also re-syncs on its own whenever apiMaterials
+      // is a genuinely new array reference (e.g. a background refetch), matching claim's
+      // original lastSyncedMaterialsRef behavior exactly.
+      if (
+        !configRef.current.resyncOnApiMaterialsReferenceChange ||
+        lastSyncedMaterialsRef.current === apiMaterials
+      ) {
+        return;
+      }
+    }
 
     hasSyncedFromAPIRef.current = true;
+    lastSyncedMaterialsRef.current = apiMaterials;
 
     const forceValidated = shouldMarkValidatedRef.current;
     const items: MaterialItem[] = apiMaterials.map((m) =>
@@ -404,6 +422,9 @@ export const useItemsManager = <TApiMaterial = unknown>({
       }),
     );
     shouldMarkValidatedRef.current = false;
+    if (configRef.current.setArePricesValidatedOnSync) {
+      setArePricesValidated(items.every((item) => item.isValidated === true));
+    }
 
     // If every material already has an ID it was previously validated — prices exist in DB.
     // Mark rows as validated so prices are visible, but always keep arePricesValidated=false
@@ -681,10 +702,19 @@ export const useItemsManager = <TApiMaterial = unknown>({
     forceRebuildRef.current = false;
   }, [materials, setAllFields, setTabs, setInitialFormValues, formValuesRef, skipFormResetRef]);
   // ── Effect 3b: archivedMaterials[] → areas + allFields + initialFormValues ───
+  // Job (deletionPolicy.supportsPermanentArchivedDelete: false) only ever grows this list —
+  // matches useDiagnosticsManager.ts's original Effect 3b exactly, including its early return
+  // at archivedMaterials.length === 0. Claim (true) can also shrink it (onDeleteArchivedRow),
+  // so it skips that early return and additionally computes a set of areas/fields to remove —
+  // matches useClaimMaterialsManager.ts's original Effect 3b (populateNeeded/
+  // removeArchivedAreaNames) exactly. Both cases converge on one setAllFields/setTabs call
+  // below: removeAreaNames/removeFieldNames are always empty for job, so the filter is a
+  // no-op pass-through and the call reduces to exactly job's original add-only behavior.
   useEffect(() => {
-    if (archivedMaterials.length === 0) return;
-
     const naming = configRef.current.identity.naming;
+    const supportsRemoval = configRef.current.deletionPolicy.supportsPermanentArchivedDelete;
+    if (!supportsRemoval && archivedMaterials.length === 0) return;
+
     const currentTabs = tabsRef.current;
     const diagnosticTab = currentTabs.find((t) => t.name === naming.tabName);
     if (!diagnosticTab) return;
@@ -709,8 +739,9 @@ export const useItemsManager = <TApiMaterial = unknown>({
       name: pos,
     }));
 
-    // Build new area templates if needed
     const newAreasAndFields: { area: Area; fields: Field[] }[] = [];
+    let removeAreaNames = new Set<string>();
+    let removeFieldNames = new Set<string>();
     if (needed > 0) {
       const baseIndex =
         archivedAreas.length === 0
@@ -725,14 +756,21 @@ export const useItemsManager = <TApiMaterial = unknown>({
         const areaFields = area.fields.map((f) => mapFieldToFieldMapping(f));
         newAreasAndFields.push({ area, fields: areaFields });
       }
+    } else if (needed < 0 && supportsRemoval) {
+      const toRemove = archivedAreas.slice(targetCount);
+      removeAreaNames = new Set(toRemove.map((a) => a.name));
+      removeFieldNames = new Set(toRemove.flatMap((a) => a.fields.map((f) => f.name)));
     }
 
-    const allArchivedAreas = [...archivedAreas, ...newAreasAndFields.map((x) => x.area)];
+    const allArchivedAreas =
+      needed >= 0
+        ? [...archivedAreas, ...newAreasAndFields.map((x) => x.area)]
+        : archivedAreas.filter((a) => !removeAreaNames.has(a.name));
     const newFieldsToAdd = newAreasAndFields.flatMap((x) => x.fields);
 
     // Compute form values for all archived rows
-    const existingArchivedFields = (allFieldsRef.current ?? []).filter((f) =>
-      isArchivedAreaName(f.name, naming),
+    const existingArchivedFields = (allFieldsRef.current ?? []).filter(
+      (f) => isArchivedAreaName(f.name, naming) && !removeFieldNames.has(f.name),
     );
     const allArchivedFields = [...existingArchivedFields, ...newFieldsToAdd];
     let rowValues: Record<string, unknown> = {};
@@ -748,21 +786,27 @@ export const useItemsManager = <TApiMaterial = unknown>({
       skipFormResetRef.current = true;
       // Use functional update so this composes correctly with Effect 3's setAllFields call
       setAllFields((prev) => {
-        const fields = [...(prev ?? []), ...newFieldsToAdd];
+        const withoutRemoved = (prev ?? []).filter((f) => !removeFieldNames.has(f.name));
+        const fields = [...withoutRemoved, ...newFieldsToAdd];
         return fields.map((f) => {
           if (f.subtype !== "archivedPosition") return f;
           if ((f.options?.length ?? 0) > 0) return f;
           return { ...f, options: ALL_POSITION_OPTIONS };
         });
       });
-      if (needed !== 0) {
-        const newAreas = newAreasAndFields.map((x) => x.area);
-        setTabs((prev) =>
-          prev.map((tab) =>
-            tab.name === naming.tabName ? { ...tab, areas: [...tab.areas, ...newAreas] } : tab,
-          ),
-        );
-      }
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.name === naming.tabName
+            ? {
+                ...tab,
+                areas: [
+                  ...tab.areas.filter((a) => !removeAreaNames.has(a.name)),
+                  ...newAreasAndFields.map((x) => x.area),
+                ],
+              }
+            : tab,
+        ),
+      );
     }
 
     setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
@@ -872,7 +916,7 @@ export const useItemsManager = <TApiMaterial = unknown>({
     };
 
     setMaterials((prev) => {
-      const syncedMaterials = syncMaterialsWithForm(prev, formValues);
+      const syncedMaterials = syncMaterialsWithForm(prev, formValues, configRef.current.identity.naming);
       return normalizeMaterialOrders([...syncedMaterials, newItem]);
     });
   }, []);
@@ -898,7 +942,11 @@ export const useItemsManager = <TApiMaterial = unknown>({
         configRef.current.deletionPolicy.permanentDeleteFromActiveStatuses;
       const isPermanentDelete = permanentDeleteStatuses?.has(jobStatusRef.current) ?? false;
       if (!isPermanentDelete) {
-        const syncedMaterials = syncMaterialsWithForm(materialsRef.current, formValuesRef.current);
+        const syncedMaterials = syncMaterialsWithForm(
+          materialsRef.current,
+          formValuesRef.current,
+          configRef.current.identity.naming,
+        );
         const deletedMaterial = syncedMaterials[areaIndex];
         if (deletedMaterial) {
           archivedForceRebuildRef.current = true;
@@ -914,7 +962,11 @@ export const useItemsManager = <TApiMaterial = unknown>({
       // whichever row(s) shifted into a new position.
       forceRebuildRef.current = true;
       setMaterials((prev) => {
-        const syncedMaterials = syncMaterialsWithForm(prev, formValuesRef.current);
+        const syncedMaterials = syncMaterialsWithForm(
+          prev,
+          formValuesRef.current,
+          configRef.current.identity.naming,
+        );
         const updatedMaterials = syncedMaterials.filter((_, i) => i !== areaIndex);
         return normalizeMaterialOrders(updatedMaterials);
       });
@@ -956,7 +1008,11 @@ export const useItemsManager = <TApiMaterial = unknown>({
       if (toAdd.length === 0) return;
       const incomingPositions = new Set(toAdd.map((m) => m.position).filter(Boolean));
       setMaterials((prev) => {
-        const syncedMaterials = syncMaterialsWithForm(prev, formValuesRef.current);
+        const syncedMaterials = syncMaterialsWithForm(
+          prev,
+          formValuesRef.current,
+          configRef.current.identity.naming,
+        );
 
         return normalizeMaterialOrders([
           ...syncedMaterials.filter(
@@ -972,7 +1028,7 @@ export const useItemsManager = <TApiMaterial = unknown>({
   const onRestoreRow = useCallback(
     (areaName: string) => {
       const naming = configRef.current.identity.naming;
-      const syncedMaterials = syncMaterialsWithForm(materials, formValuesRef.current);
+      const syncedMaterials = syncMaterialsWithForm(materials, formValuesRef.current, naming);
       const currentTabs = tabsRef.current;
       const diagnosticTab = currentTabs.find((t) => t.name === naming.tabName);
       if (!diagnosticTab) return;
@@ -1021,7 +1077,7 @@ export const useItemsManager = <TApiMaterial = unknown>({
 
       forceRebuildRef.current = true;
       setMaterials((prev) => {
-        const syncedMaterials = syncMaterialsWithForm(prev, formValuesRef.current);
+        const syncedMaterials = syncMaterialsWithForm(prev, formValuesRef.current, naming);
         return normalizeMaterialOrders([
           ...syncedMaterials,
           { ...materialToRestore, isValidated: false, status: "PENDING" },

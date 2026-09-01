@@ -112,6 +112,20 @@ export interface ItemsSurfaceConfig<TApiMaterial = unknown> {
    *  silently by this merge; flip only on explicit product sign-off, see items-and-prices-
    *  refactor.md §15). */
   autoBuildAutomaticRows: boolean;
+  /** Job: false — once Effect 1 has synced from the API for this resetKey, it never re-syncs
+   *  until resyncMaterialsFromAPI() explicitly resets it, even if apiMaterials gets a new
+   *  array reference in the meantime (e.g. an unrelated background refetch) — by design.
+   *  Claim: true — claim's original hook (useClaimMaterialsManager.ts's lastSyncedMaterialsRef)
+   *  re-syncs automatically whenever apiMaterials is a genuinely new reference, without
+   *  needing an explicit reset call. Both still skip a re-sync when the reference is
+   *  unchanged. */
+  resyncOnApiMaterialsReferenceChange: boolean;
+  /** Job: false — arePricesValidated is owned by the caller (JobOverview.tsx), Effect 1 never
+   *  touches it. Claim: true — claim's original Effect 1 additionally calls
+   *  setArePricesValidated(every synced item already validated) on every sync, computed from
+   *  the mapped items' own isValidated (which toMaterialItem is expected to have already
+   *  folded the raw material's real isValidated field into, per its own docstring above). */
+  setArePricesValidatedOnSync: boolean;
   /** Job only (PN row autofill from bareSalesRelation). Undefined for claim. */
   bareSalesAutofill?: { actionTypeGate: Set<string>; excludeUserType: string };
   /** Job only — addSpecialMaterialsAllowed is additionally gated off for these action types
