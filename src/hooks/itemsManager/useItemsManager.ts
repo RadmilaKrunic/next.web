@@ -20,15 +20,12 @@ import {
   mapFieldToFieldMapping,
   syncFieldsToTabs,
 } from "components/generics/utils";
-import { calculatePrices } from "utils/priceCalculator";
 import { useTranslation } from "react-i18next";
 import { useBareSalesRelation } from "api/services/bareSalesRelation/hooks";
-import { PERMISSIONS } from "utils/Permissions";
 import type { HeaderUserData } from "api/services/header/action";
-import { MessagesContext } from "../contexts/messagescontext";
-import { scrollToTop } from "../utils/scrollToError";
+import { MessagesContext } from "../../contexts/messagescontext";
+import { scrollToTop } from "../../utils/scrollToError";
 import {
-  getPositionAutofill,
   POSITION_ORDER,
   sortByPositionOrder,
   normalizeMaterialOrders,
@@ -39,102 +36,24 @@ import {
   buildMaterialsRowValues,
   withSpecialMaterialSpOption,
   deriveSparePartsAreasAndFields,
-} from "./itemsManager/materialsDerivation";
+} from "./materialsDerivation";
+import type {
+  MaterialItem,
+  ImportedMaterial,
+  ItemsSurfaceConfig,
+  ItemsSurfaceNaming,
+  UseItemsManagerReturn,
+} from "./itemsManager.types";
 
-// Re-exported for backward compatibility — moved to itemsManager/materialsDerivation.ts
-// (Phase 5 unification, items-and-prices-refactor.md §15 step 2) so useClaimMaterialsManager.ts
-// and both hooks' test files can import them without a cross-hook dependency. Pure move, no
-// logic change; do not add new logic here, add it in materialsDerivation.ts instead.
-export {
-  getPositionAutofill,
-  buildRowValues,
-  buildMaterialsRowValues,
-  deriveSparePartsAreasAndFields,
-};
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-// MaterialItem/ImportedMaterial live in itemsManager.types.ts (see the re-export block
-// below for why) — imported here so this file's own code keeps referring to them by their
-// short names, unchanged.
-import type { MaterialItem, ImportedMaterial } from "./itemsManager/itemsManager.types";
 export type { MaterialItem, ImportedMaterial };
 
-// ── Diagnostic field helpers ───────────────────────────────────────────────
-
-export function computeIsChargeable(
-  allFields: Field[],
-  values: Record<string, unknown>,
-): boolean | null {
-  const typeFields = allFields.filter((f) => f.subtype === "diagnosticType");
-  if (typeFields.length === 0) return null;
-  return typeFields.some((f) => (values[f.name] as string) === "CHARGEABLE");
-}
-
-export function hasWarrantyOrProServiceItems(
-  allFields: Field[],
-  values: Record<string, unknown>,
-): boolean {
-  const typeFields = allFields.filter((f) => f.subtype === "diagnosticType");
-  return typeFields.some((f) => {
-    const type = (values[f.name] as string) ?? "";
-    return type === "WARRANTY" || type === "SERVICE_OFFERING";
-  });
-}
-
-export function getChargeablePendingInfo(
-  fields: Field[],
-  values: Record<string, unknown>,
-): { pendingTypeFields: Field[]; hasChargeablePending: boolean } {
-  const typeFields = fields.filter((f) => f.subtype === "diagnosticType");
-  const statusFields = fields.filter((f) => f.subtype === "diagnosticMaterialStatus");
-  const pendingTypeFields = typeFields.filter((_, i) => {
-    const statusField = statusFields[i];
-    return !statusField || (values[statusField.name] as string) !== "APPROVED";
-  });
-  const hasChargeablePending = pendingTypeFields.some(
-    (tf) =>
-      (values[tf.name] as string) === "CHARGEABLE" ||
-      (values[tf.name] as string) === "SPECIAL_CONTRACT",
-  );
-  return { pendingTypeFields, hasChargeablePending };
-}
-
-const PREAPPROVAL_ACTION_TYPES = new Set([
-  "NEW_TOOL_EXCHANGE",
-  "SPARE_PARTS_EXCHANGE",
-  "ACCESSORIES_EXCHANGE",
-]);
-
-const PREAPPROVAL_JOB_TYPES = new Set(["WARRANTY", "SERVICE_OFFERING"]);
-
-export function getBoschInternalPending(
-  fields: Field[],
-  values: Record<string, unknown>,
-): { pendingTypeFields: Field[]; hasBoschInternalPending: boolean } {
-  const typeFields = fields.filter((f) => f.subtype === "diagnosticType");
-  const statusFields = fields.filter((f) => f.subtype === "diagnosticMaterialStatus");
-  const actionType = (values.actionType as string) ?? "";
-  const pendingTypeFields = typeFields.filter((_, i) => {
-    const statusField = statusFields[i];
-    return !statusField || (values[statusField.name] as string) !== "APPROVED";
-  });
-  const hasBoschInternalPending = pendingTypeFields.some((tf) => {
-    const type = (values[tf.name] as string) ?? "";
-    if (type === "COMMERCIAL_GOODWILL") return true;
-    if (PREAPPROVAL_ACTION_TYPES.has(actionType) && PREAPPROVAL_JOB_TYPES.has(type)) return true;
-    return false;
-  });
-  return { pendingTypeFields, hasBoschInternalPending };
-}
-
-const POSITION_VIEW_PERMISSIONS = {
-  FR: PERMISSIONS.DIAGNOSTICS.CAN_VIEW_FREIGHT_ITEMS,
-} as const;
-
-const POSITION_INSERT_PERMISSIONS = {
-  FR: PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_FREIGHT_ITEMS,
-} as const;
+// computeIsChargeable/hasWarrantyOrProServiceItems/getChargeablePendingInfo/
+// getBoschInternalPending/PREAPPROVAL_ACTION_TYPES/PREAPPROVAL_JOB_TYPES are NOT moved here —
+// they're job-diagnostic-tab-specific (warranty/goodwill), not shared, and this hook doesn't
+// call them internally. They stay in useDiagnosticsManager.ts (see items-and-prices-
+// refactor.md §15 step 2/3). POSITION_VIEW_PERMISSIONS/POSITION_INSERT_PERMISSIONS become
+// config.positionViewPermissions/config.positionInsertPermissions (ItemsSurfaceConfig) instead
+// of hardcoded module-level constants — see the divergence table in this step's commit.
 
 enum QuantitySource {
   DEFAULT = "DEFAULT",
@@ -144,8 +63,22 @@ enum QuantitySource {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function removeArchivedArea(tab: Section, areaName: string): Section {
-  if (tab.name !== "diagnosticData") return tab;
+/** Matches a live-row Area/Field name for this surface. Guards against
+ *  liveMarkerCollidesWithArchived (see ItemsSurfaceNaming) so a surface whose live marker
+ *  happens to be a substring of its archived marker doesn't double-match archived names. */
+function isLiveAreaName(name: string, naming: ItemsSurfaceNaming): boolean {
+  return (
+    name.includes(naming.liveAreaMarker) &&
+    (!naming.liveMarkerCollidesWithArchived || !name.includes(naming.archivedAreaMarker))
+  );
+}
+
+function isArchivedAreaName(name: string, naming: ItemsSurfaceNaming): boolean {
+  return name.includes(naming.archivedAreaMarker);
+}
+
+function removeArchivedArea(tab: Section, areaName: string, tabName: string): Section {
+  if (tab.name !== tabName) return tab;
   return {
     ...tab,
     areas: tab.areas.filter((area) => area.name !== areaName),
@@ -188,12 +121,8 @@ const syncMaterialsWithForm = (materials: MaterialItem[], formValues: Record<str
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
-interface UseDiagnosticsManagerProps {
-  diagnosticData:
-    | { jobId?: string; materials?: unknown[]; archivedMaterials?: unknown[] }
-    | undefined;
-  currentActionType: string;
-  currentJobType: string;
+export interface UseItemsManagerProps<TApiMaterial = unknown> {
+  config: ItemsSurfaceConfig<TApiMaterial>;
   tabs: Section[];
   setTabs: React.Dispatch<React.SetStateAction<Section[]>>;
   allFields: Field[] | null;
@@ -207,49 +136,10 @@ interface UseDiagnosticsManagerProps {
   isResyncingRef?: RefObject<boolean>;
   /** When true, Effect 2 (rule-change rebuild) is skipped so API-loaded materials are preserved. */
   readOnly?: boolean;
-  jobStatus?: string;
 }
 
-export interface UseDiagnosticsManagerReturn {
-  materials: MaterialItem[];
-  apiMaterialsLoaded: boolean;
-  apiMaterialsEmpty: boolean;
-  hasExistingDiagnostic: boolean;
-  setMaterials: React.Dispatch<React.SetStateAction<MaterialItem[]>>;
-  allowedPositions: AllowedPosition[];
-  automaticRows: string[];
-  positionDropdownOptions: GenericOptionProps[];
-  addSpecialMaterialsAllowed: boolean;
-  discountBase: discountBase;
-  getPositionConfig: (position: string) => AllowedPosition | undefined;
-  getQuantityForPosition: (
-    position: string,
-    faultCodeValue?: string,
-    faultCodeLabourQuantity?: number,
-  ) => number | undefined;
-  onAddRow: (formValues?: Record<string, unknown>) => void;
-  onDeleteRow: (areaName: string) => void;
-  onRestoreRow: (areaName: string) => void;
-  onAddMaterials: (
-    items: ImportedMaterial[],
-    setFieldValue?: (field: string, value: unknown) => void,
-  ) => void;
-  getExistingPartNumbers: (formValues: Record<string, unknown>) => Set<string>;
-  markAllValidated: () => void;
-  markRowDirty: (areaIndex: number) => void;
-  enableValidate: () => boolean;
-  resyncMaterialsFromAPI: (markValidated?: boolean) => void;
-  setRevisedRejectedRowPending: (areaName: string) => void;
-  canArchiveOnDelete: boolean;
-}
-
-/** Statuses where row deletion is permanent (no archiving). */
-export const STATUSES_WITH_PERMANENT_DELETE = ["IN_DIAGNOSTICS"];
-
-export const useDiagnosticsManager = ({
-  diagnosticData,
-  currentActionType,
-  currentJobType,
+export const useItemsManager = <TApiMaterial = unknown>({
+  config,
   tabs,
   setTabs,
   allFields,
@@ -261,8 +151,24 @@ export const useDiagnosticsManager = ({
   setArePricesValidated,
   isResyncingRef,
   readOnly = false,
-  jobStatus = "",
-}: UseDiagnosticsManagerProps): UseDiagnosticsManagerReturn => {
+}: UseItemsManagerProps<TApiMaterial>): UseItemsManagerReturn => {
+  // Everything below still refers to diagnosticData/currentActionType/currentJobType/
+  // jobStatus by their original names (unchanged from useDiagnosticsManager.ts) — derived
+  // here from `config` so the rest of this file's ~1000 lines needed zero further edits
+  // beyond the divergence points called out in this step's commit message. `diagnosticData`
+  // is intentionally NOT memoized: `config` is expected to be rebuilt fresh by the caller
+  // every render (same as every other config-driven value below), so memoizing it here would
+  // just be extra bookkeeping for no benefit — every effect that depends on materials/
+  // archivedMaterials arrays already re-derives its own dependency correctly from `diagnosticData`.
+  const diagnosticData = {
+    jobId: config.resetKey,
+    materials: config.apiMaterials as unknown[] | undefined,
+    archivedMaterials: config.apiArchivedMaterials as unknown[] | undefined,
+  };
+  const currentActionType = config.currentActionType;
+  const currentJobType = config.currentJobType;
+  const jobStatus = config.jobStatus ?? "";
+
   const queryClient = useQueryClient();
   const { setMessages } = useContext(MessagesContext);
 
@@ -296,8 +202,7 @@ export const useDiagnosticsManager = ({
       )
     : (matchedRule?.allowedPositions ?? []);
   const allowedPositions: AllowedPosition[] = rawAllowedPositions.filter((p) => {
-    const requiredPermission =
-      POSITION_VIEW_PERMISSIONS[p.position as keyof typeof POSITION_VIEW_PERMISSIONS];
+    const requiredPermission = config.positionViewPermissions[p.position];
     if (!requiredPermission) return true;
     return hasPermission(requiredPermission);
   });
@@ -308,11 +213,14 @@ export const useDiagnosticsManager = ({
         currentJobType,
       )
     : (matchedRule?.automaticRows ?? []);
+  const currentFormActionType = formValuesRef.current["actionType"] as string | undefined;
+  const isSpecialMaterialsGatedActionType = Boolean(
+    config.addSpecialMaterialsActionTypeGate &&
+      currentFormActionType !== undefined &&
+      config.addSpecialMaterialsActionTypeGate.has(currentFormActionType),
+  );
   const addSpecialMaterialsAllowed =
-    (diagnosticsConfiguration?.addSpecialMaterialsAllowed &&
-      formValuesRef.current["actionType"] !== "NEW_TOOL_EXCHANGE" &&
-      formValuesRef.current["actionType"] !== "SPARE_PARTS_EXCHANGE" &&
-      formValuesRef.current["actionType"] !== "ACCESSORIES_EXCHANGE") ??
+    (diagnosticsConfiguration?.addSpecialMaterialsAllowed && !isSpecialMaterialsGatedActionType) ??
     false;
 
   const positionDropdownOptions = useMemo<GenericOptionProps[]>(
@@ -411,6 +319,12 @@ export const useDiagnosticsManager = ({
   addSpecialMaterialsAllowedRef.current = addSpecialMaterialsAllowed;
   const discountBaseRef = useRef(discountBase);
   discountBaseRef.current = discountBase;
+  // config is rebuilt fresh by the caller every render (same as every other job/claim-
+  // specific value in this hook) — ref'd so stable useCallbacks (onAddRow, onDeleteRow) can
+  // read the latest config.newRowDefaults/positionInsertPermissions/deletionPolicy without
+  // needing config itself in their dependency arrays.
+  const configRef = useRef(config);
+  configRef.current = config;
 
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const tRef = useRef(t);
@@ -448,66 +362,15 @@ export const useDiagnosticsManager = ({
     { bareTool: baretoolNumber ?? "", countryCode, language },
     {
       enabled:
+        !!config.bareSalesAutofill &&
         !!(baretoolNumber && countryCode) &&
-        userData?.type !== "BOSCH_INTERNAL" &&
-        PREAPPROVAL_ACTION_TYPES.has(currentActionType),
+        userData?.type !== config.bareSalesAutofill.excludeUserType &&
+        config.bareSalesAutofill.actionTypeGate.has(currentActionType),
     },
   );
   const bareSalesDataRef = useRef(bareSalesData);
   bareSalesDataRef.current = bareSalesData;
 
-  const mapPrice = (
-    m: Record<string, unknown>,
-    position: string,
-    description: string,
-    price: Record<string, unknown>,
-    mode: discountBase,
-  ) => {
-    const quantity = Number(m.quantity) || 1;
-    const unitPrice = Number(price.unitPrice) || 0;
-    const taxPercent = Number(price.tax) || 0;
-    const discountPercent = Number(price.discount) || 0;
-
-    const calculated = calculatePrices(
-      {
-        quantity,
-        unitPrice,
-        taxPercent,
-        discountPercent,
-        suggestedNetPrice: 0,
-        netAmount: 0,
-        grossAmount: 0,
-        totalAmount: 0,
-        taxAmount: 0,
-      },
-      "unitPrice",
-      unitPrice,
-      mode,
-    );
-
-    return {
-      position,
-      partNumber: (m.partNumber as string) ?? "",
-      description,
-      type: (m.jobType as string) ?? "",
-      quantity,
-      unitPrice,
-      netAmount: calculated.netAmount,
-      tax: taxPercent,
-      taxAmount: calculated.taxAmount,
-      grossAmount: calculated.grossAmount,
-      discount: calculated.discountPercent,
-      discountAmount: calculated.discountAmount,
-      totalAmount: calculated.totalAmount,
-      suggestedNetPrice: calculated.suggestedNetPrice,
-      status: (m.status as string) ?? undefined,
-      materialId: (m.id as string) ?? undefined,
-      isValidated: shouldMarkValidatedRef.current,
-      order: Number(m.order) || 0,
-      notBelongsToTool: (m.notBelongsToTool as boolean) ?? undefined,
-      isPriceSetManually: false,
-    };
-  };
   // Reset on new job
   useEffect(() => {
     hasSyncedFromAPIRef.current = false;
@@ -534,13 +397,12 @@ export const useDiagnosticsManager = ({
 
     hasSyncedFromAPIRef.current = true;
 
-    const autofill = getPositionAutofill(tRef.current);
-    const items: MaterialItem[] = apiMaterials.map((m) => {
-      const position = (m.position as string) ?? "";
-      const price = (m.price as Record<string, unknown>) ?? {};
-      const description = autofill[position]?.description ?? (m.description as string) ?? "";
-      return mapPrice(m, position, description, price, discountBaseRef.current);
-    });
+    const forceValidated = shouldMarkValidatedRef.current;
+    const items: MaterialItem[] = apiMaterials.map((m) =>
+      configRef.current.toMaterialItem(m as TApiMaterial, discountBaseRef.current, {
+        forceValidated,
+      }),
+    );
     shouldMarkValidatedRef.current = false;
 
     // If every material already has an ID it was previously validated — prices exist in DB.
@@ -586,20 +448,23 @@ export const useDiagnosticsManager = ({
 
     hasSyncedArchivedRef.current = true;
 
-    const items: MaterialItem[] = apiArchived.map((m) => {
-      const position = (m.position as string) ?? "";
-      const price = (m.price as Record<string, unknown>) ?? {};
-      const description = (m.description as string) ?? "";
-      return mapPrice(m, position, description, price, discountBaseRef.current);
-    });
+    const items: MaterialItem[] = apiArchived.map((m) =>
+      configRef.current.toMaterialItem(m as TApiMaterial, discountBaseRef.current, {
+        forceValidated: shouldMarkValidatedRef.current,
+      }),
+    );
 
     archivedForceRebuildRef.current = true;
     setArchivedMaterials(items);
   }, [diagnosticData]);
 
   // ── Effect 2: Rule change → rebuild materials list ────────────────────────
+  // Gated on config.autoBuildAutomaticRows (job: true; claim: false today — claim never
+  // auto-built automatic rows, a real pre-existing product gap this merge preserves rather
+  // than silently fixing, see items-and-prices-refactor.md §15).
   useEffect(() => {
     if (readOnly) return;
+    if (!config.autoBuildAutomaticRows) return;
     if (!currentActionType || !currentJobType) return;
     const ruleKey = `${currentActionType}__${currentJobType}`;
     const isFirstApplication = prevRuleKeyRef.current === "";
@@ -678,6 +543,7 @@ export const useDiagnosticsManager = ({
     });
   }, [
     readOnly,
+    config.autoBuildAutomaticRows,
     currentActionType,
     currentJobType,
     diagnosticData?.materials,
@@ -717,14 +583,15 @@ export const useDiagnosticsManager = ({
   useEffect(() => {
     if (materials.length === 0) return;
 
+    const naming = configRef.current.identity.naming;
     const currentTabs = tabsRef.current;
     const currentFields = allFieldsRef.current ?? [];
 
-    const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
+    const diagnosticTab = currentTabs.find((t) => t.name === naming.tabName);
     if (!diagnosticTab) return;
 
     const sparePartsAreas = diagnosticTab.areas.filter(
-      (a) => a.isMultiple && a.name.includes("diagnosticsSpareParts"),
+      (a) => a.isMultiple && isLiveAreaName(a.name, naming),
     );
     // Cache the pristine template once, mirroring archivedTemplateRef below — every
     // derivation pass clones from this, never from whatever sparePartsAreas[0] currently is.
@@ -744,9 +611,7 @@ export const useDiagnosticsManager = ({
       diagnosticTab.name,
     );
 
-    const nonSparePartsFields = currentFields.filter(
-      (f) => !f.name.includes("diagnosticsSpareParts"),
-    );
+    const nonSparePartsFields = currentFields.filter((f) => !isLiveAreaName(f.name, naming));
     let updatedFields = [...nonSparePartsFields, ...derivedFields];
 
     const rowValues = buildMaterialsRowValues({
@@ -768,28 +633,22 @@ export const useDiagnosticsManager = ({
         addSpecialMaterialsAllowed: addSpecialMaterialsAllowedRef.current,
       });
 
-      const sparePartsFieldsFinal = updatedFields.filter((f) =>
-        f.name.includes("diagnosticsSpareParts"),
-      );
+      const sparePartsFieldsFinal = updatedFields.filter((f) => isLiveAreaName(f.name, naming));
 
       // Use functional updaters so this composes correctly with any concurrent
       // functional setter from useClaimMaterialsManager (or any other hook)
       // that shares the same setAllFields / setTabs.
       setAllFields((prev) => {
-        const prevWithoutSpareParts = (prev ?? []).filter(
-          (f) => !f.name.includes("diagnosticsSpareParts"),
-        );
+        const prevWithoutSpareParts = (prev ?? []).filter((f) => !isLiveAreaName(f.name, naming));
         return [...prevWithoutSpareParts, ...sparePartsFieldsFinal];
       });
       setTabs((prev) =>
         prev.map((tab) =>
-          tab.name === "diagnosticData"
+          tab.name === naming.tabName
             ? {
                 ...tab,
                 areas: [
-                  ...tab.areas.filter(
-                    (a) => !(a.isMultiple && a.name.includes("diagnosticsSpareParts")),
-                  ),
+                  ...tab.areas.filter((a) => !(a.isMultiple && isLiveAreaName(a.name, naming))),
                   ...derivedAreas,
                 ],
               }
@@ -798,28 +657,23 @@ export const useDiagnosticsManager = ({
       );
     }
 
+    const rowFieldPrefix = `${naming.tabName}_${naming.liveAreaMarker}`;
     if (forceRebuildRef.current) {
-      // Strip every diagnosticsSpareParts-prefixed key from prev before merging in the
-      // freshly-derived rowValues (which only ever has entries for the current row count) —
-      // otherwise a row count decrease (e.g. deleting the last row) would leave that row's
-      // now-orphaned keys sitting in Formik state indefinitely. Full-derivation replaces
-      // what onDeleteRow used to guarantee via its own separate full-replace call.
+      // Strip every live-row-prefixed key from prev before merging in the freshly-derived
+      // rowValues (which only ever has entries for the current row count) — otherwise a row
+      // count decrease (e.g. deleting the last row) would leave that row's now-orphaned keys
+      // sitting in Formik state indefinitely. Full-derivation replaces what onDeleteRow used
+      // to guarantee via its own separate full-replace call.
       setInitialFormValues((prev) => {
         const prevWithoutRowFields = Object.fromEntries(
-          Object.entries(prev).filter(
-            ([k]) => !k.startsWith("diagnosticData_diagnosticsSpareParts"),
-          ),
+          Object.entries(prev).filter(([k]) => !k.startsWith(rowFieldPrefix)),
         );
         return { ...prevWithoutRowFields, ...rowValues };
       });
     } else {
       const currentFormWithoutRowFields = Object.fromEntries(
         Object.entries(formValuesRef.current).filter(
-          ([k, v]) =>
-            !k.startsWith("diagnosticData_diagnosticsSpareParts") &&
-            v !== "" &&
-            v !== null &&
-            v !== undefined,
+          ([k, v]) => !k.startsWith(rowFieldPrefix) && v !== "" && v !== null && v !== undefined,
         ),
       );
       setInitialFormValues((prev) => ({ ...prev, ...currentFormWithoutRowFields, ...rowValues }));
@@ -830,12 +684,13 @@ export const useDiagnosticsManager = ({
   useEffect(() => {
     if (archivedMaterials.length === 0) return;
 
+    const naming = configRef.current.identity.naming;
     const currentTabs = tabsRef.current;
-    const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
+    const diagnosticTab = currentTabs.find((t) => t.name === naming.tabName);
     if (!diagnosticTab) return;
 
     const archivedAreas = diagnosticTab.areas.filter(
-      (a) => a.isMultiple && a.name.includes("archivedSpareParts"),
+      (a) => a.isMultiple && isArchivedAreaName(a.name, naming),
     );
     // Cache the template area the first time we see it so we can recreate
     // archived rows even after onRestoreRow removes the last area from tabs.
@@ -877,7 +732,7 @@ export const useDiagnosticsManager = ({
 
     // Compute form values for all archived rows
     const existingArchivedFields = (allFieldsRef.current ?? []).filter((f) =>
-      f.name.includes("archivedSpareParts"),
+      isArchivedAreaName(f.name, naming),
     );
     const allArchivedFields = [...existingArchivedFields, ...newFieldsToAdd];
     let rowValues: Record<string, unknown> = {};
@@ -904,7 +759,7 @@ export const useDiagnosticsManager = ({
         const newAreas = newAreasAndFields.map((x) => x.area);
         setTabs((prev) =>
           prev.map((tab) =>
-            tab.name === "diagnosticData" ? { ...tab, areas: [...tab.areas, ...newAreas] } : tab,
+            tab.name === naming.tabName ? { ...tab, areas: [...tab.areas, ...newAreas] } : tab,
           ),
         );
       }
@@ -927,11 +782,14 @@ export const useDiagnosticsManager = ({
     const spInOptions = positionDropdownOptions.some((o) => o.value === "SP");
     const spOption: GenericOptionProps = { value: "SP", name: "SP" };
 
+    const fieldPrefix = `${configRef.current.identity.naming.tabName}_`;
     const updated = allFields.map((f) => {
       // Archived position fields use subtype "archivedPosition" and are not affected here
       if (f.subtype !== "diagnosticPosition") return f;
-      // Claims tab fields are managed by ClaimContext, not by this hook
-      if (f.name.startsWith("claims_")) return f;
+      // Only touch this surface's own fields — a shared allFields array may also carry the
+      // other surface's fields (e.g. ClaimOverview.tsx runs a job-diagnostics instance and a
+      // claim-spare-parts instance of this hook side by side against the same allFields state).
+      if (!f.name.startsWith(fieldPrefix)) return f;
 
       const currentValue = formValuesRef.current[f.name] as string;
       const options =
@@ -960,9 +818,9 @@ export const useDiagnosticsManager = ({
   const onAddRow = useCallback((formValues?: Record<string, unknown>) => {
     if (!formValues) return;
     const perms = userPermissionsRef.current;
+    const insertPermissions = configRef.current.positionInsertPermissions;
     const hasPositionPermission = (position: string): boolean => {
-      const required =
-        POSITION_INSERT_PERMISSIONS[position as keyof typeof POSITION_INSERT_PERMISSIONS];
+      const required = insertPermissions?.[position];
       if (!required) return true;
       return perms.includes(required);
     };
@@ -990,14 +848,10 @@ export const useDiagnosticsManager = ({
         if (val) positionCounts[val] = (positionCounts[val] ?? 0) + 1;
       });
 
-    const nextPosition =
-      [...allowed]
-        .sort(
-          (a, b) =>
-            (POSITION_ORDER[a.position] ?? Number.MAX_SAFE_INTEGER) -
-            (POSITION_ORDER[b.position] ?? Number.MAX_SAFE_INTEGER),
-        )
-        .find((p) => (positionCounts[p.position] ?? 0) < p.maxCount)?.position ?? "";
+    const nextPosition = configRef.current.newRowDefaults.resolvePosition({
+      allowed,
+      positionCounts,
+    });
 
     const qty = nextPosition
       ? (getQuantityForPositionRef.current(
@@ -1009,8 +863,11 @@ export const useDiagnosticsManager = ({
 
     // Bug 6 fix: use tax from existing validated rows as default for new rows
     const defaultTax = materialsRef.current.find((m) => m.tax > 0)?.tax ?? 0;
+    const resolvedType = configRef.current.newRowDefaults.resolveType({
+      currentJobType: configRef.current.currentJobType,
+    });
     const newItem = {
-      ...buildEmptyMaterial(nextPosition, "", qty, tRef.current, discountBaseRef.current),
+      ...buildEmptyMaterial(nextPosition, resolvedType, qty, tRef.current, discountBaseRef.current),
       tax: defaultTax,
     };
 
@@ -1022,18 +879,25 @@ export const useDiagnosticsManager = ({
 
   const onDeleteRow = useCallback(
     (areaName: string) => {
+      const naming = configRef.current.identity.naming;
       const currentTabs = tabsRef.current;
-      const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
+      const diagnosticTab = currentTabs.find((t) => t.name === naming.tabName);
       if (!diagnosticTab) return;
 
       const sparePartsAreas = diagnosticTab.areas.filter(
-        (a) => a.isMultiple && a.name.includes("diagnosticsSpareParts"),
+        (a) => a.isMultiple && isLiveAreaName(a.name, naming),
       );
       const areaIndex = sparePartsAreas.findIndex((a) => a.name === areaName);
       if (areaIndex === -1) return;
 
-      // Archive the row when the current status is not in the permanent-delete set
-      if (!STATUSES_WITH_PERMANENT_DELETE.includes(jobStatusRef.current)) {
+      // Archive the row when the current status is not in the permanent-delete set. Job:
+      // config.deletionPolicy.permanentDeleteFromActiveStatuses is a real Set ("IN_DIAGNOSTICS"),
+      // so a delete there is permanent. Claim: this is undefined, so isPermanentDelete is
+      // always false — onDeleteRow always archives, matching claim's current behavior exactly.
+      const permanentDeleteStatuses =
+        configRef.current.deletionPolicy.permanentDeleteFromActiveStatuses;
+      const isPermanentDelete = permanentDeleteStatuses?.has(jobStatusRef.current) ?? false;
+      if (!isPermanentDelete) {
         const syncedMaterials = syncMaterialsWithForm(materialsRef.current, formValuesRef.current);
         const deletedMaterial = syncedMaterials[areaIndex];
         if (deletedMaterial) {
@@ -1107,13 +971,14 @@ export const useDiagnosticsManager = ({
 
   const onRestoreRow = useCallback(
     (areaName: string) => {
+      const naming = configRef.current.identity.naming;
       const syncedMaterials = syncMaterialsWithForm(materials, formValuesRef.current);
       const currentTabs = tabsRef.current;
-      const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
+      const diagnosticTab = currentTabs.find((t) => t.name === naming.tabName);
       if (!diagnosticTab) return;
 
       const archivedAreas = diagnosticTab.areas.filter(
-        (a) => a.isMultiple && a.name.includes("archivedSpareParts"),
+        (a) => a.isMultiple && isArchivedAreaName(a.name, naming),
       );
       const areaIndex = archivedAreas.findIndex((a) => a.name === areaName);
       if (areaIndex === -1) return;
@@ -1149,7 +1014,7 @@ export const useDiagnosticsManager = ({
       const fieldNamesToRemove = new Set(areaToRemove.fields.map((f) => f.name));
       skipFormResetRef.current = true;
       setAllFields((prev) => (prev ?? []).filter((f) => !fieldNamesToRemove.has(f.name)));
-      setTabs((prev) => prev.map((tab) => removeArchivedArea(tab, areaName)));
+      setTabs((prev) => prev.map((tab) => removeArchivedArea(tab, areaName, naming.tabName)));
 
       setArchivedMaterials((prev) => prev.filter((_, i) => i !== areaIndex));
       pendingArchivedDeletionsRef.current = Math.max(0, pendingArchivedDeletionsRef.current - 1);
@@ -1212,10 +1077,11 @@ export const useDiagnosticsManager = ({
 
   /** Returns the positional index of an area inside the sparePartsAreas array. */
   const getAreaPositionalIndex = useCallback((areaName: string): number => {
-    const diagnosticTab = tabsRef.current.find((t) => t.name === "diagnosticData");
+    const naming = configRef.current.identity.naming;
+    const diagnosticTab = tabsRef.current.find((t) => t.name === naming.tabName);
     if (!diagnosticTab) return -1;
     const sparePartsAreas = diagnosticTab.areas.filter(
-      (a) => a.isMultiple && a.name.includes("diagnosticsSpareParts"),
+      (a) => a.isMultiple && isLiveAreaName(a.name, naming),
     );
     return sparePartsAreas.findIndex((a) => a.name === areaName);
   }, []);
@@ -1244,6 +1110,26 @@ export const useDiagnosticsManager = ({
     );
   }, []);
 
+  // Present in the return object only when config.deletionPolicy.supportsPermanentArchivedDelete
+  // is true (claim) — job has no permanent-archived-delete concept at all. Always defined as a
+  // callback (hooks can't be called conditionally) — porting useClaimMaterialsManager.ts's
+  // onDeleteArchivedRow, generalized over naming instead of hardcoded "claimArchivedSpareParts".
+  const onDeleteArchivedRow = useCallback((areaName: string) => {
+    const naming = configRef.current.identity.naming;
+    const currentTabs = tabsRef.current;
+    const diagnosticTab = currentTabs.find((t) => t.name === naming.tabName);
+    if (!diagnosticTab) return;
+
+    const archivedAreas = diagnosticTab.areas.filter(
+      (a) => a.isMultiple && isArchivedAreaName(a.name, naming),
+    );
+    const areaIndex = archivedAreas.findIndex((a) => a.name === areaName);
+    if (areaIndex === -1) return;
+
+    archivedForceRebuildRef.current = true;
+    setArchivedMaterials((prev) => prev.filter((_, i) => i !== areaIndex));
+  }, []);
+
   return {
     materials,
     apiMaterialsLoaded,
@@ -1259,6 +1145,9 @@ export const useDiagnosticsManager = ({
     getQuantityForPosition,
     onAddRow,
     onDeleteRow,
+    onDeleteArchivedRow: config.deletionPolicy.supportsPermanentArchivedDelete
+      ? onDeleteArchivedRow
+      : undefined,
     onRestoreRow,
     onAddMaterials,
     getExistingPartNumbers,
@@ -1267,6 +1156,8 @@ export const useDiagnosticsManager = ({
     enableValidate,
     resyncMaterialsFromAPI,
     setRevisedRejectedRowPending,
-    canArchiveOnDelete: !STATUSES_WITH_PERMANENT_DELETE.includes(jobStatus),
+    canArchiveOnDelete: !(
+      config.deletionPolicy.permanentDeleteFromActiveStatuses?.has(jobStatus) ?? false
+    ),
   };
 };

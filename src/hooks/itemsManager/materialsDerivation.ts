@@ -8,7 +8,7 @@ import Area from "components/generics/Area/GenericArea.types";
 import { setDuplicatedArea, mapFieldToFieldMapping } from "components/generics/utils";
 import { calculatePrices } from "utils/priceCalculator";
 import type { TFunction } from "i18next";
-import type { MaterialItem } from "hooks/useDiagnosticsManager";
+import type { MaterialItem } from "./itemsManager.types";
 
 // Pure material-row derivation helpers shared by the job (useDiagnosticsManager.ts) and
 // claim (useClaimMaterialsManager.ts, Phase 5) item-row managers. Moved out of
