@@ -18,14 +18,14 @@ Item (spare-part/material) rendering and price computation — for the Job Overv
 2. The **backend as the source of truth** for prices — nothing rendered that isn't backend-confirmed.
 3. Concrete, **typed API contracts** for every price change, at a sensible request granularity.
 4. A rethought **summary / summaryMaterial** approach — backend-computed, not derived-and-written-back into the form on every render.
-5. Diagnostic items **out of (or much lighter inside) Formik**.
+5. Cut the refs/effects/re-renders around diagnostic items by replacing incremental row reconciliation with full recomputation on every change — not by pulling items out of Formik.
 6. A **simplified, unified implementation shared between Job and Claim**, with strong test coverage.
 
 ## Guiding principles
 
 - **Reuse the math, change the authority.** `priceCalculator.ts` stays — it becomes the client-side *optimistic preview* engine, not the source of truth.
 - **One config model, three consumers.** Job diagnostics, the read-only claim diagnostic mirror, and editable claim spare parts all resolve rules through the same functions, parameterized by context — not three hand-rolled tables.
-- **Formik stays for the form shell, not for item rows.** Item rows move to dedicated state; Formik keeps owning everything else (header fields, notes, documents, accessories).
+- **Formik stays for item rows too — fix the reconciliation strategy, not row ownership.** Row field names stay position-based, but instead of incrementally patching (add N missing rows, trim excess ones, leaving existing rows untouched), the row list is fully recomputed from the materials array on every change. `GenericField` and the shared value-to-API mapping engine are untouched.
 - **Backend confirms, client previews.** Every priced value carries a tri-state: `pending` (optimistic) → `confirmed` (backend-authoritative) → `error`. The UI always renders the confirmed value once it exists.
 
 ## The two-config split
@@ -48,9 +48,9 @@ Full contracts are on the **Backend** page. In short:
 - Claims get the same split: the existing `PUT /v1/claims/{claimId}/prices` (full save) plus a new, equivalent debounced validate call.
 - `summary`/`summaryMaterial` move to backend-computed values (`priceSummary`/`priceSummaryMaterial`), replacing today's client-side `aggregateRowPrices` + dirty-diff-guarded Formik writeback in `SummaryArea.tsx`.
 
-## Formik isolation (later phase)
+## Row rendering (later phase)
 
-Item rows move out of Formik into a dedicated reducer-backed store, keyed by a stable client-generated `rowId` (not by Formik field-name ordinals). This is what removes the need for `useDiagnosticsManager.ts`'s dynamic Formik field cloning. Formik keeps owning everything else in the form. Not yet implemented — see phasing below.
+Today, row count is owned by an imperative reconciler in `useDiagnosticsManager.ts` that *incrementally* clones/trims Formik field definitions to match the materials array — appending new rows or removing excess ones, but never touching the rows that already existed. That's why deleting a row requires a separate, manual pass to rename and re-sync every row after it. The fix: recompute the entire row/field/value set fresh from the materials array on every change, instead of patching a previous one. Row field names stay position-based (a stable non-numeric row id would conflict with the shared value-to-API mapping engine every UIConfiguration-driven form depends on, not just this one — investigated and deliberately not pursued). Formik and the existing `GenericField` component stay exactly as they are. Not yet implemented — see phasing below.
 
 ## Phasing & current status
 
@@ -59,7 +59,7 @@ Item rows move out of Formik into a dedicated reducer-backed store, keyed by a s
 | 1 | Type the claim pricing contract, reconcile job/claim `Price` shape drift | **Shipped** |
 | 2 | `ItemPolicyConfig` + resolvers, wired into existing components behind a feature flag | **Shipped, flag off by default** |
 | 3 | New `/prices/validate` endpoint; stop client-side price re-derivation | Proposed — spec finalized, local dev simulator built; blocked on the real backend endpoint |
-| 4 | Move item rows out of Formik into a dedicated store | Proposed, not started |
+| 4 | Replace the incremental Area-cloning row reconciler with full recomputation from the materials array on every change (Formik/`GenericField`/field naming untouched) | Proposed, not started — no backend dependency |
 | 5 | Unify Job/Claim shared hook, context, row component, archived-row rendering | Proposed, not started |
 | 6 | Cleanup / remove the feature flag | Proposed, not started |
 

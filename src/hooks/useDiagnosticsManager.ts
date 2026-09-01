@@ -433,25 +433,6 @@ function withSpecialMaterialSpOption(params: {
   });
 }
 
-function computeFinalSparePartsAreas(
-  needed: number,
-  sparePartsAreas: Area[],
-  newAreas: Area[],
-  removeAreaNames: Set<string>,
-): Area[] {
-  if (needed > 0) return [...sparePartsAreas, ...newAreas];
-  if (needed < 0) return sparePartsAreas.filter((a) => !removeAreaNames.has(a.name));
-  return sparePartsAreas;
-}
-
-function removeDiagnosticsAreas(tab: Section, removeAreaNames: Set<string>): Section {
-  if (tab.name !== "diagnosticData") return tab;
-  return {
-    ...tab,
-    areas: tab.areas.filter((area) => !removeAreaNames.has(area.name)),
-  };
-}
-
 function removeArchivedArea(tab: Section, areaName: string): Section {
   if (tab.name !== "diagnosticData") return tab;
   return {
@@ -464,50 +445,33 @@ const SPARE_PARTS_PREFIX = "diagnosticData_diagnosticsSpareParts#";
 const RESETTABLE_MATERIAL_STATUSES = new Set(["REVISED", "REJECTED"]);
 
 /**
- * Returns the shifted key after deleting row `deletedIndex`.
- * Returns null  → key belonged to the deleted row (drop it).
- * Returns same  → key index < deletedIndex (keep as-is).
- * Returns new   → key index > deletedIndex (shift down by 1).
+ * Rebuilds the full set of spare-parts Areas + Fields for `count` rows from a single
+ * pristine template, every time — rather than incrementally cloning only the rows added
+ * since the last pass and trimming only the rows removed from the end (the previous
+ * design). Field names stay index-based (`#{i}_...`), same as today — `mapValuesToAPI`'s
+ * numeric-index parsing (src/components/generics/utils.ts) is untouched. This is what lets
+ * a delete-from-the-middle collapse into "remove the item from `materials`, recompute
+ * everything" instead of "remove one area, then separately shift every subsequent area's
+ * name/fields/values down by one" (see items-and-prices-refactor.md §7 for the full
+ * rationale, including why field names stay index-based rather than a stable per-row id).
  */
-const shiftSparePartsKey = (key: string, deletedIndex: number): string | null => {
-  if (!key.startsWith(SPARE_PARTS_PREFIX)) return key;
-  const tail = key.slice(SPARE_PARTS_PREFIX.length);
-  const match = /^(\d+)(.*)$/.exec(tail);
-  if (!match) return key;
-  const currentIndex = Number(match[1]);
-  if (currentIndex === deletedIndex) return null;
-  if (currentIndex < deletedIndex) return key;
-  return `${SPARE_PARTS_PREFIX}${currentIndex - 1}${match[2]}`;
-};
-
-const shiftSparePartsArea = (area: Area, deletedIndex: number): Area => {
-  const shiftedAreaName = shiftSparePartsKey(area.name, deletedIndex);
-  if (!shiftedAreaName || shiftedAreaName === area.name) return area;
-  const shiftedFields = area.fields.map((field) => {
-    const shifted = shiftSparePartsKey(field.name, deletedIndex);
-    if (!shifted || shifted === field.name) return field;
-    return mapFieldToFieldMapping({ ...field, name: shifted });
-  });
-  return {
-    ...area,
-    name: shiftedAreaName,
-    index: area.index !== undefined && area.index > deletedIndex ? area.index - 1 : area.index,
-    fields: shiftedFields,
-  };
-};
-
-/** Re-keys every spare-parts form value, dropping the deleted row. */
-const reindexSparePartsValues = (
-  values: Record<string, unknown>,
-  deletedIndex: number,
-): Record<string, unknown> => {
-  const next: Record<string, unknown> = {};
-  Object.entries(values).forEach(([key, value]) => {
-    const shifted = shiftSparePartsKey(key, deletedIndex);
-    if (shifted !== null) next[shifted] = value;
-  });
-  return next;
-};
+export function deriveSparePartsAreasAndFields(
+  templateArea: Area,
+  count: number,
+  sectionName: string,
+): { areas: Area[]; fields: Field[] } {
+  const areas: Area[] = [];
+  let fields: Field[] = [];
+  for (let i = 0; i < count; i++) {
+    const cloned = structuredClone(templateArea);
+    if (i !== 0) cloned.label = "";
+    const area = setDuplicatedArea(cloned, i, sectionName);
+    area.fields = area.fields.map((f) => mapFieldToFieldMapping(f));
+    areas.push(area);
+    fields = [...fields, ...area.fields];
+  }
+  return { areas, fields };
+}
 
 const syncMaterialsWithForm = (materials: MaterialItem[], formValues: Record<string, unknown>) => {
   const syncedMaterials = materials.map((materialItem, index) => {
@@ -796,6 +760,10 @@ export const useDiagnosticsManager = ({
   const archivedMaterialsRef = useRef(archivedMaterials);
   archivedMaterialsRef.current = archivedMaterials;
   const archivedTemplateRef = useRef<Area | null>(null);
+  // Cached once so every full derivation pass (see deriveSparePartsAreasAndFields) starts
+  // from a stable, pristine shape rather than re-reading whatever accumulated mutations
+  // sparePartsAreas[0] happens to carry from a previous render.
+  const sparePartsTemplateRef = useRef<Area | null>(null);
 
   const baretoolNumberField = allFields?.find((x) => x.subtype === "baretoolNumber");
   const baretoolNumber = baretoolNumberField
@@ -1071,6 +1039,9 @@ export const useDiagnosticsManager = ({
   }, [bareSalesData]);
 
   // ── Effect 3: materials[] → areas + allFields + initialFormValues ─────────
+  // Full recomputation on every materials change (see deriveSparePartsAreasAndFields) —
+  // not an incremental add-N/trim-N patch. A delete-from-the-middle is just "materials
+  // shrank by one"; this effect doesn't need to know or care which index disappeared.
   useEffect(() => {
     if (materials.length === 0) return;
 
@@ -1083,59 +1054,39 @@ export const useDiagnosticsManager = ({
     const sparePartsAreas = diagnosticTab.areas.filter(
       (a) => a.isMultiple && a.name.includes("diagnosticsSpareParts"),
     );
-
-    const templateArea = sparePartsAreas[0];
+    // Cache the pristine template once, mirroring archivedTemplateRef below — every
+    // derivation pass clones from this, never from whatever sparePartsAreas[0] currently is.
+    if (sparePartsAreas.length > 0) {
+      sparePartsTemplateRef.current ??= structuredClone(sparePartsAreas[0]);
+    }
+    const templateArea = sparePartsTemplateRef.current;
     if (!templateArea) return;
+
     const currentCount = sparePartsAreas.length;
     const targetCount = materials.length;
-    const needed = targetCount - currentCount;
+    const countChanged = currentCount !== targetCount;
 
-    // Hoisted so they're in scope for both the build phase and the functional setters below.
-    const newAreas: Area[] = [];
-    let removeAreaNames = new Set<string>();
-    let removeFieldNames = new Set<string>();
-
-    let updatedFields = [...currentFields];
-
-    if (needed > 0) {
-      const maxIndex = sparePartsAreas.reduce((max, a) => Math.max(max, a.index ?? 0), 0);
-
-      for (let i = 0; i < needed; i++) {
-        const cloned = structuredClone(templateArea);
-        cloned.label = "";
-        const area = setDuplicatedArea(cloned, maxIndex + 1 + i, diagnosticTab.name);
-        const areaFields = area.fields.map((f) => mapFieldToFieldMapping(f));
-        newAreas.push(area);
-        updatedFields = [...updatedFields, ...areaFields];
-      }
-    } else if (needed < 0) {
-      // Remove excess areas (from the end, beyond index 0)
-      const toRemove = sparePartsAreas.slice(targetCount);
-      removeAreaNames = new Set(toRemove.map((a) => a.name));
-      removeFieldNames = new Set(toRemove.flatMap((a) => a.fields.map((f) => f.name)));
-      updatedFields = currentFields.filter((f) => !removeFieldNames.has(f.name));
-    }
-
-    // Build form values from each MaterialItem mapped onto its area's fields.
-    // For the "needed > 0" case we need to know the final areas; build them inline
-    // from updatedFields (same data as before, just without the updatedTabs variable).
-    const finalSparePartsAreas = computeFinalSparePartsAreas(
-      needed,
-      sparePartsAreas,
-      newAreas,
-      removeAreaNames,
+    const { areas: derivedAreas, fields: derivedFields } = deriveSparePartsAreasAndFields(
+      templateArea,
+      targetCount,
+      diagnosticTab.name,
     );
+
+    const nonSparePartsFields = currentFields.filter(
+      (f) => !f.name.includes("diagnosticsSpareParts"),
+    );
+    let updatedFields = [...nonSparePartsFields, ...derivedFields];
 
     const rowValues = buildMaterialsRowValues({
       materials,
-      areas: finalSparePartsAreas,
+      areas: derivedAreas,
       fields: updatedFields,
       formValues: formValuesRef.current,
       currentCount,
       forceRebuild: forceRebuildRef.current,
     });
 
-    if (needed !== 0 || forceRebuildRef.current) {
+    if (countChanged || forceRebuildRef.current) {
       skipFormResetRef.current = true;
 
       updatedFields = withSpecialMaterialSpOption({
@@ -1145,25 +1096,50 @@ export const useDiagnosticsManager = ({
         addSpecialMaterialsAllowed: addSpecialMaterialsAllowedRef.current,
       });
 
+      const sparePartsFieldsFinal = updatedFields.filter((f) =>
+        f.name.includes("diagnosticsSpareParts"),
+      );
+
       // Use functional updaters so this composes correctly with any concurrent
       // functional setter from useClaimMaterialsManager (or any other hook)
       // that shares the same setAllFields / setTabs.
-      if (needed > 0) {
-        const addedFields = updatedFields.slice(currentFields.length);
-        setAllFields((prev) => [...(prev ?? []), ...addedFields]);
-        setTabs((prev) =>
-          prev.map((tab) =>
-            tab.name === "diagnosticData" ? { ...tab, areas: [...tab.areas, ...newAreas] } : tab,
-          ),
+      setAllFields((prev) => {
+        const prevWithoutSpareParts = (prev ?? []).filter(
+          (f) => !f.name.includes("diagnosticsSpareParts"),
         );
-      } else if (needed < 0) {
-        setAllFields((prev) => (prev ?? []).filter((f) => !removeFieldNames.has(f.name)));
-        setTabs((prev) => prev.map((tab) => removeDiagnosticsAreas(tab, removeAreaNames)));
-      }
+        return [...prevWithoutSpareParts, ...sparePartsFieldsFinal];
+      });
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.name === "diagnosticData"
+            ? {
+                ...tab,
+                areas: [
+                  ...tab.areas.filter(
+                    (a) => !(a.isMultiple && a.name.includes("diagnosticsSpareParts")),
+                  ),
+                  ...derivedAreas,
+                ],
+              }
+            : tab,
+        ),
+      );
     }
 
     if (forceRebuildRef.current) {
-      setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
+      // Strip every diagnosticsSpareParts-prefixed key from prev before merging in the
+      // freshly-derived rowValues (which only ever has entries for the current row count) —
+      // otherwise a row count decrease (e.g. deleting the last row) would leave that row's
+      // now-orphaned keys sitting in Formik state indefinitely. Full-derivation replaces
+      // what onDeleteRow used to guarantee via its own separate full-replace call.
+      setInitialFormValues((prev) => {
+        const prevWithoutRowFields = Object.fromEntries(
+          Object.entries(prev).filter(
+            ([k]) => !k.startsWith("diagnosticData_diagnosticsSpareParts"),
+          ),
+        );
+        return { ...prevWithoutRowFields, ...rowValues };
+      });
     } else {
       const currentFormWithoutRowFields = Object.fromEntries(
         Object.entries(formValuesRef.current).filter(
@@ -1375,12 +1351,9 @@ export const useDiagnosticsManager = ({
   const onDeleteRow = useCallback(
     (areaName: string) => {
       const currentTabs = tabsRef.current;
-      const currentFields = allFieldsRef.current ?? [];
-
       const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
       if (!diagnosticTab) return;
 
-      // ── Delete of an active spare-parts row ──────────────────────────────
       const sparePartsAreas = diagnosticTab.areas.filter(
         (a) => a.isMultiple && a.name.includes("diagnosticsSpareParts"),
       );
@@ -1398,63 +1371,20 @@ export const useDiagnosticsManager = ({
         }
       }
 
-      const areaToRemove = sparePartsAreas[areaIndex];
-      const fieldNamesToRemove = new Set(areaToRemove.fields.map((f) => f.name));
-
-      // Remove deleted row keys then compact #N → #(N-1) for all higher indices.
-      // This keeps form values, allFields names and area names in sync after deletion.
-      const valuesWithoutDeleted = { ...formValuesRef.current };
-      fieldNamesToRemove.forEach((name) => {
-        delete valuesWithoutDeleted[name];
-      });
-      const compactedValues = reindexSparePartsValues(valuesWithoutDeleted, areaIndex);
-      const compactedFields = currentFields
-        .filter((f) => !fieldNamesToRemove.has(f.name))
-        .map((f) => {
-          const shifted = shiftSparePartsKey(f.name, areaIndex);
-          if (shifted === null || shifted === f.name) return f;
-          return mapFieldToFieldMapping({ ...f, name: shifted });
-        });
-
-      const compactedTabs = currentTabs.map((tab) => {
-        if (tab.name !== "diagnosticData") return tab;
-        const compactedAreas = tab.areas.flatMap((area) => {
-          if (area.name === areaName) return [];
-          const shiftedAreaName = shiftSparePartsKey(area.name, areaIndex);
-          if (shiftedAreaName === null) return [];
-          return [shiftSparePartsArea(area, areaIndex)];
-        });
-        return { ...tab, areas: compactedAreas };
-      });
-
-      skipFormResetRef.current = true;
-      Object.keys(formValuesRef.current).forEach((key) => {
-        const shifted = shiftSparePartsKey(key, areaIndex);
-        if (shifted === null) {
-          delete formValuesRef.current[key];
-        } else if (shifted !== key) {
-          formValuesRef.current[shifted] = formValuesRef.current[key];
-          delete formValuesRef.current[key];
-        }
-      });
-      setInitialFormValues(compactedValues);
-      setAllFields(compactedFields);
-      setTabs(compactedTabs);
+      // Effect 3 fully recomputes every row's Area/Field/value set from `materials` on
+      // every change (see deriveSparePartsAreasAndFields) — this only needs to update
+      // materials itself; forceRebuildRef makes Effect 3 rebuild every row's values fresh
+      // from domain data rather than trying to reuse now-stale live form values for
+      // whichever row(s) shifted into a new position.
+      forceRebuildRef.current = true;
       setMaterials((prev) => {
-        const updatedMaterials = prev.filter((_, i) => i !== areaIndex);
-        const syncedMaterials = syncMaterialsWithForm(updatedMaterials, compactedValues);
-        return normalizeMaterialOrders(syncedMaterials);
+        const syncedMaterials = syncMaterialsWithForm(prev, formValuesRef.current);
+        const updatedMaterials = syncedMaterials.filter((_, i) => i !== areaIndex);
+        return normalizeMaterialOrders(updatedMaterials);
       });
       setArePricesValidated(false);
     },
-    [
-      setInitialFormValues,
-      setAllFields,
-      setTabs,
-      formValuesRef,
-      skipFormResetRef,
-      setArePricesValidated,
-    ],
+    [setArePricesValidated],
   );
 
   const onAddMaterials = useCallback(
