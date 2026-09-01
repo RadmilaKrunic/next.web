@@ -19,14 +19,14 @@ Item (spare-part/material) rendering and price computation for the diagnostics t
 2. The **backend as source of truth** for price validation — nothing rendered to the user that isn't already backend-confirmed.
 3. Concrete, typed **API calls** for every price change, at a sensible granularity.
 4. A rethought **`summary`/`summaryMaterial`** approach.
-5. Diagnostics items **out of (or much lighter inside) Formik**, to cut refs and re-renders.
+5. Cut the refs/effects/re-renders around diagnostics items — by fixing **row identity** (stable `rowId` instead of array index), not by pulling items out of Formik (see §7's revision).
 6. A simplified, unified, well-tested (**>80% coverage per changed file**) implementation shared between Job and Claim.
 
 ## 3. Guiding principles
 
 1. **Reuse the math, change the authority.** `priceCalculator.ts` is well-tested pure arithmetic — it becomes the **client preview engine**, not the source of truth. Nothing in it needs to be deleted; `PriceInputs`/`PriceResults`/`FieldName` become the shape of the *optimistic* layer only, and the same types are reused directly in the new backend contracts (see §5) so there is no parallel type family to keep in sync.
 2. **One config model, three consumers.** Job diagnostics, the read-only Claim diagnostic mirror, and editable Claim spare parts all need the *same* rule engine, parameterized by context (`jobType` / `claimStatus` / permissions), not three divergent hand-rolled tables.
-3. **Formik stays for the form shell, not for item rows.** `useDiagnosticsManager.ts`'s 17 refs / 9 effects exist largely *because* rows are Formik-backed (dynamic `diagnosticsSpareParts#N` Area/Field cloning, `formValuesRef`, reinit dance). Moving rows to dedicated state removes the reason for most of that machinery.
+3. **Formik stays for item rows too — fix row identity, not row ownership.** `useDiagnosticsManager.ts`'s 17 refs / 9 effects exist largely because rows are named by *array index* (`diagnosticsSpareParts#{index}_...`), so every add/delete forces an imperative reconciliation pass that clones/removes/reindexes Formik Area and Field definitions. Naming rows by a stable `rowId` instead, and deriving them via `materials.map()` at render time (§7), removes the reason for most of that machinery — without moving row state out of Formik or touching `GenericField`.
 4. **Backend confirms; client previews.** Every priced field carries a tri-state confidence: `pending` (optimistic, locally computed) → `confirmed` (backend-echoed, authoritative) → `error` (backend rejected). The UI always renders the authoritative value once it exists.
 
 ## 4. New item/price configuration model
@@ -140,14 +140,56 @@ Net effect: `SummaryArea.tsx` stops doing `useMemo`-driven `aggregateRowPrices` 
 
 Editing the summary discount/total directly (`onSummaryDiscountChange` et al., currently backed by `distributeGrossToRows`/`distributeNetToRows`) becomes a **request**, not client math: named via `changedSummary: { target: "priceSummaryMaterial", field: "discount", summary }` (see the companion spec's "Leaning out validate's request"), carrying the frontend's optimistic redistribution — the response's `diagnostic.materials[]`/`priceSummaryMaterial` then carries the backend-authoritative redistribution across the full row set. The existing distribution functions remain in `priceCalculator.ts` only for that optimistic preview while the request is in flight.
 
-## 7. Formik isolation strategy
+## 7. Row rendering strategy
 
-### 7.1 Recommendation: dedicated reducer-based row store, bridging into Formik only at submit time
+**Revision note**: §7 originally recommended extracting item rows entirely out of Formik into a dedicated reducer/store (kept below as §7.5, rejected). Reconsidered after tracing the actual current rendering path: the real complexity in `useDiagnosticsManager.ts` isn't that Formik owns the field values — it's that row **count** and per-row **field names** are produced by an imperative reconciler that clones/removes Formik `Area`/`Field` definitions to match `materials.length`, naming fields by **array index**. That index-based naming is what forces every delete to shift every subsequent row's names/values (`shiftSparePartsArea`/`shiftSparePartsKey`/`reindexSparePartsValues`), and it's the direct cause of the `areaIndex === 1` special-casing this session already had to work around a bug in (§14). **New recommendation: keep Formik and `GenericField` exactly as they are; derive rows via `materials.map()`, keyed by stable `rowId` instead of array index.**
+
+### 7.1 What actually happens today (traced, not assumed)
+
+- There is no `.map()` over materials anywhere. `GenericSection.tsx` sorts `section.areas` and maps each `Area` to a `<GenericArea>`; `CustomAreasMapper.tsx` routes any area named `diagnosticsSpareParts#N...` to `<SparePartsArea>`, which renders exactly **one** `<SparePartsRow>` using `area.fields`. Row count = number of distinct `Area` objects that exist in `tabs`, not a property of `materials` itself.
+- `useDiagnosticsManager.ts`'s Effect 3 (~`useDiagnosticsManager.ts:1074-1180`) is the reconciler: on every `materials` change, it computes `needed = materials.length - currentAreaCount` and clones (`structuredClone(templateArea)` + `setDuplicatedArea`) or removes trailing Areas/Fields to match. `materials: MaterialItem[]` (React state) and the Formik Area/Field list are **two parallel structures kept in lockstep by hand**, not one derived from the other.
+- Fields are named by position: `diagnosticData_diagnosticsSpareParts#{index}_{key}`. `onDeleteRow` therefore has to, in one call: remove the deleted Area, call `shiftSparePartsArea`/`shiftSparePartsKey` (regex-based) to rename every higher-index Area/Field down by one, reindex raw Formik values (`reindexSparePartsValues`), and reindex `materials` itself — four things touched together to delete one row.
+- `SparePartsRow.tsx` parses its own `areaIndex` out of `fields[0].fieldMapping.nameStartsWith` via a `#(\d+)_` regex, then uses that parsed index for every `setMaterials((prev) => prev.map((m, i) => i === areaIndex ? {...} : m))` call — the row writing back into `materials` is the other half of the manual lockstep.
+
+### 7.2 The fix: `materials.map()`, keyed by `rowId`
+
+```tsx
+// SparePartsArea.tsx (or its replacement) — the only thing that changes shape:
+materials.map((material) => (
+  <SparePartsRow
+    key={material.rowId}
+    fields={buildRowFieldNames(templateFields, material.rowId)}
+    material={material}
+  />
+))
+```
+
+- `buildRowFieldNames(templateFields, rowId)` is a **pure function**: given the UIConfiguration-sourced field template (same `diagnosticsSpareParts` Area/Field metadata as today, unchanged) and a row's stable `rowId`, it returns that row's field definitions named `diagnosticsSpareParts#{rowId}_{key}` — computed fresh at render time, not persisted into `tabs`/`allFields` state via an effect.
+- **`GenericField.tsx` is untouched.** It still calls `useFormikContext()`, still reads `values[field.name]`, still writes via `setFieldValue`. Formik remains the field-value store for every row, exactly as today — this is not a Formik-isolation change, it's a row-*identity* change.
+- **Naming by `rowId` instead of index is what actually removes the reindexing machinery.** A row's Formik field names never change for as long as that row exists. Deleting a row means removing *that row's* fields from Formik state; nobody else's names, values, or array position are touched — `shiftSparePartsArea`/`shiftSparePartsKey`/`reindexSparePartsValues` have nothing left to do.
+- This is the same `rowId` concept already introduced in the backend contract (companion spec's `MaterialRow.rowId`) — one stable identity, shared end-to-end between the wire format and the Formik field-naming scheme, instead of being reinvented per layer.
+
+### 7.3 What this eliminates from `useDiagnosticsManager.ts`
+
+- Effect 3's clone/remove-Area reconciliation on `materials` change — replaced by `.map()` at render time.
+- `shiftSparePartsArea`/`shiftSparePartsKey`/`reindexSparePartsValues` — deleting a row no longer requires touching any other row.
+- `SparePartsRow.tsx`'s `#(\d+)_` regex parsing of its own index — replaced by reading `material.rowId` directly, passed as a prop.
+- The `areaIndex === 1`-specific `isResyncingRef` special-casing (§14) — a symptom of index-based identity. With stable-id keying, adding a sibling row never shifts an existing row's identity, so there's no "second row specifically" case to guard against.
+- `syncMaterialsWithForm`'s "read live Formik values back into `materials` before archiving/reordering" is still conceptually needed (Formik may hold edits `materials` state hasn't caught up to) but keyed by `rowId` instead of array position, so it's no longer entangled with reindexing.
+
+**What stays unchanged**: `GenericField.tsx`, the UIConfiguration `diagnosticsSpareParts` field template, Formik as the field-value store, permission gating, price calculation. This is a rendering/identity fix scoped to `useDiagnosticsManager.ts` + `SparePartsArea.tsx` + `SparePartsRow.tsx`'s index-reading, not a state-ownership change — a much smaller blast radius than §7.5's rejected store extraction.
+
+### 7.4 Open items to resolve before implementation
+
+1. **Source of `materials` at render time**: today it's `DiagnosticsContext.materials` (client `MaterialItem[]` state, built from the API response at load, mutated locally on edits). Once the backend `/prices/validate`/validate-and-save alignment ships (companion spec), the natural source becomes `DiagnosticPricingResult.diagnostic.materials: MaterialRow[]` (or its client echo) — the row list genuinely becomes "map the backend's materials array." Until then, `materials` stays the same `DiagnosticsContext` state as today, just consumed via `.map()` instead of feeding Effect 3.
+2. **Formik `initialValues`/reinit on row add**: a brand-new row's field names don't exist in Formik until its `rowId` first appears in `materials`. Some seeding step is still needed the first time a `rowId` shows up — equivalent to today's `buildRowValues`, just scoped to the one new row instead of a full reindex. Needs a decision on mechanism (`setValues` patch vs. `enableReinitialize` vs. seeding inside `SparePartsRow` on mount) at implementation time.
+3. **`GenericFormContext.allFields`** (used today for cross-row lookups — sibling discount aggregation in `buildSiblingChargeableDiscounts`, position-count checks in `buildPositionCounts`) is currently populated by Effect 3 alongside the Area clones. Under `.map()`-derivation this needs an equivalent derived value — still computable as `materials.flatMap(m => buildRowFieldNames(templateFields, m.rowId))`, just derived declaratively rather than stored via effect.
+
+### 7.5 Rejected alternative: dedicated reducer-based row store (original §7 recommendation)
+
+The original recommendation was to move row state fully out of Formik into a `useReducer`-backed store (`ItemsState`/`ItemsAction` below), with `GenericField` replaced by a new store-aware row component. Rejected in favor of §7.2: it solves the same problem (row-identity/reindexing pain) but at much higher cost — it would touch `GenericField.tsx`, which every non-item field in the app also depends on, for a fix that `materials.map()` + stable-id keying achieves without touching Formik or `GenericField` at all. Kept here for reference in case a future phase (full Formik removal for item rows, not just fixing row identity) revisits it.
 
 ```ts
-// PriceSummary/DiagnosticPricingResult/MaterialRow are the wire types from the companion
-// spec's shared-types section — the store reuses them directly rather than inventing a
-// parallel FE-only shape.
 interface ItemsState {
   rows: Record<string /* rowId */, MaterialItem & RowPriceState>;
   archivedRows: Record<string, MaterialItem & RowPriceState>;
@@ -157,14 +199,9 @@ interface ItemsState {
 }
 
 interface RowPriceState {
-  // changeStatus, not status — MaterialItem.status is already the row's real approval status
-  // ("APPROVED"/"PENDING"/"REVISED"/"REJECTED"/...). Intersecting a field literally named
-  // `status` here (MaterialItem & RowPriceState) would silently shadow it — the same mistake
-  // the companion spec's MaterialRowResult originally made; named changeStatus here too so the
-  // wire type and the store type use the same name for the same concept.
   changeStatus: "pending" | "confirmed" | "error";
-  optimistic: PriceResults;        // instant, via existing calculatePrices()
-  confirmed?: Price;               // last BE-confirmed values (MaterialRow["price"]); rendered once present
+  optimistic: PriceResults;
+  confirmed?: Price;
   requestId?: string;
   errorMessage?: string;
 }
@@ -180,40 +217,20 @@ type ItemsAction =
   | { type: "REJECT_ROWS"; requestId: string; errors: (MaterialRow & { changeStatus: "error"; errorMessage?: string })[] };
 ```
 
-Paired with a React Query `useMutation` for `/prices/validate` (or `putClaimPrices`), debounced via the same 300–500ms pattern already proven in `useSparePartPriceCalculation.ts`. **Rows are keyed by stable client-generated `rowId`s (UUIDs), not by Formik field-name ordinals** — this is what eliminates the need for dynamic `diagnosticsSpareParts#N` Area/Field cloning entirely, since row identity no longer depends on Formik's field-naming scheme.
-
-Rendering rule: show `confirmed ?? optimistic`, with a subtle pending affordance while `changeStatus === "pending"`, and an inline error state on `"error"` that reverts the row to its last `confirmed` value (never leaves a value on screen the BE rejected). Race handling: each debounced batch call carries a `requestId`; a response whose `requestId` isn't the latest one issued for that row is discarded.
-
-`MaterialItem.isValidated`/`.isNew` already exist client-side today (optional, `useDiagnosticsManager.ts`) to distinguish a freshly-added row from one loaded/confirmed from the API. The wire-level `MaterialRow.isValidated` (required, companion spec) formalizes the same concept as part of the contract instead of an FE-only convention: `ADD_ROW`/`ADD_MATERIALS` initialize a row with `isValidated: false`, and only `CONFIRM_ROWS` flips it `true`. The debounce/mutation layer uses `RowPriceState.changeStatus !== "confirmed"` (i.e. dirty-since-last-save, whether or not it's ever been validated) to decide what belongs in an outgoing `validate` call's `changedRows` — every dirty row, new or edited, goes in; `isValidated` itself no longer gates that (see the companion spec's "Leaning out validate's request" for why), it only decides what the row renders while `changeStatus === "pending"`.
-
-### 7.2 What stays in Formik vs what moves out
-
-- **Stays in Formik**: everything driven by `UIConfiguration` Section→Area→Field metadata that isn't an item row — header fields, notes, documents, accessories, etc. `GenericForm`/`GenericSection`/`GenericArea`/`GenericField` are unchanged.
-- **Moves to the item store**: all `MaterialItem` row state, archived rows, summary/summaryMaterial, and the pending/confirmed/error status machinery. `SparePartsArea`/`SparePartsRow`/`ArchivedSparePartsRow`/`SummaryArea` (job) and the claim equivalents read/write through the store's context instead of `useFormikContext`/`DiagnosticsContext`/`ClaimContext`.
-- **Bridge at submit-time**: a single, testable `serializeItemsForSubmit(state: ItemsState): MaterialSubmitPayload` replaces the ad hoc `formValuesRef`/`setInitialFormValues` reinit dance in `useDiagnosticsManager.ts` and the hand-rolled payload builder in `ClaimOverview.tsx`'s `onValidateClaim`.
-
-### 7.3 Why not React 19 `useOptimistic`/`useActionState` as the primary mechanism
-
-Considered and rejected as the primary state owner: `useOptimistic` is scoped to a single async transition tied to one component's render, and this system needs cross-row batching, debouncing, and race-discarding by `requestId` — a reducer + mutation combo gives explicit control over exactly those three things. `useOptimistic` can still be used *locally* inside a single row component as an ergonomic wrapper around dispatching `OPTIMISTIC_UPDATE`/`CONFIRM_ROWS` during implementation, but the reducer/store stays the state-of-record.
-
-### 7.4 Expected effect
-
-`useDiagnosticsManager.ts` (1647 lines, 17 refs, 9 effects) shrinks substantially: row add/delete/restore become plain reducer actions (no Formik field cloning, no `formValuesRef` sync effect, no `isDistributingRef`/`isResyncingRef` guard refs — replaced by `requestId` comparison in the reducer). Remaining complexity is debounce/mutation wiring, not Formik reconciliation.
-
 ## 8. Unification plan for Job + Claim
 
 - **Shared hook + context**: replace `DiagnosticsContextValue`/`ClaimContextValue` (currently ~90% overlapping field sets) with one `useItemsContext(config: ItemsSurfaceConfig)`, where job/claim-specific behavior (goodwill flyout, warranty gating, `canArchiveOnDelete`, whole-claim decisioning) is expressed as config flags/callbacks, not separate context shapes.
-- **Shared row component**: one `ItemRow` replaces `SparePartsRow.tsx` + `ClaimSparePartsRow`, with editability resolved via `resolveEditability` (§4.3) instead of the row hardcoding `POSITION_PERMISSIONS` or the claim-only `isNewRow && !isClaimPending` rule — that rule becomes one `EditabilityRule` entry in `surfaceOverrides.claimSpareParts`. The existing presentational split (`SparePartsRow.shared.ts`'s `useSparePartsRowCommon`, `SparePartsRow.components.tsx`'s `SparePartsMainFields`/`SparePartsCollapsedSection`) survives underneath.
-- **Unify archived-row rendering**: `ClaimArchivedSparePartsArea` currently inlines its own near-duplicate row instead of reusing job's `ArchivedSparePartsRow`. Extract `ArchivedSparePartsRow` to a shared location (or fold it into `ItemRow` in a read-only/archived mode) and have both areas consume it.
-- **Replace claim's hand-rolled payload builder**: once rows are out of Formik, `onValidateClaim`'s manual `materials[]`/`claimPriceSummary` construction is replaced by the shared `serializeItemsForSubmit` feeding into `putClaimPrices`'s typed request — the same function the job side uses for `/prices/validate` requests.
+- **Shared row component**: one `ItemRow` replaces `SparePartsRow.tsx` + `ClaimSparePartsRow`, still Formik/`GenericField`-backed per §7.2, receiving `material`/`rowId` as a prop instead of parsing its index out of `fields[0]`. Editability resolved via `resolveEditability` (§4.3) instead of the row hardcoding `POSITION_PERMISSIONS` or the claim-only `isNewRow && !isClaimPending` rule — that rule becomes one `EditabilityRule` entry in `surfaceOverrides.claimSpareParts`. The existing presentational split (`SparePartsRow.shared.ts`'s `useSparePartsRowCommon`, `SparePartsRow.components.tsx`'s `SparePartsMainFields`/`SparePartsCollapsedSection`) survives underneath.
+- **Unify archived-row rendering**: `ClaimArchivedSparePartsArea` currently inlines its own near-duplicate row instead of reusing job's `ArchivedSparePartsRow`. Extract `ArchivedSparePartsRow` to a shared location (or fold it into `ItemRow` in a read-only/archived mode) and have both areas consume it, both driven by the same `archivedMaterials.map()` pattern as §7.2.
+- **Replace claim's hand-rolled payload builder**: `onValidateClaim`'s manual `materials[]`/`claimPriceSummary` construction is replaced by a shared `serializeItemsForSubmit(materials: MaterialItem[]): MaterialSubmitPayload` feeding into `putClaimPrices`'s typed request — the same function the job side uses for `/prices/validate` requests. This no longer depends on rows being out of Formik (per §7's revision) — it's a pure mapping function over whatever `materials` state already is.
 
 ## 9. Testing strategy (>80% per changed file)
 
 Reuse the two patterns already strong in this codebase:
 
-- **Pure-function tests** for anything with no I/O — `itemRulesResolver.ts`, `serializeItemsForSubmit`, the items reducer, and the unchanged parts of `priceCalculator.ts` — mirroring `priceCalculator.test.ts`'s table-driven style (per `FieldName`/mode combination).
-- **`vi.mock`-based hook/component tests** for the new BE-call hooks — mock `axiosClient`/the action functions exactly as `jobs/hooks.test.ts` and `claims/hooks.test.ts` already do; assert debounce timing, `requestId` race-discarding, and optimistic→confirmed→error transitions using `renderHook`/`act`/`waitFor` (the existing convention, e.g. `useSparePartPriceCalculation`'s test suite).
-- **New coverage specifically required**: `itemRulesResolver.test.ts` (every rule/branch, including `surfaceOverrides` merging), the item store's reducer tests (stale-`requestId` discard, archive/restore), a single parameterized `ItemRow.test.tsx` covering job/claim/read-only surfaces from one file (rather than the current two near-duplicate 1800+/700-line suites), and a rewritten `SummaryArea.test.tsx` asserting BE-confirmed rendering with preview fallback only while pending (the dirty-diff/`activeValueChangeFieldRef` guard tests become dead code and can be deleted).
+- **Pure-function tests** for anything with no I/O — `itemRulesResolver.ts`, `buildRowFieldNames` (§7.2), `serializeItemsForSubmit`, and the unchanged parts of `priceCalculator.ts` — mirroring `priceCalculator.test.ts`'s table-driven style (per `FieldName`/mode combination).
+- **`vi.mock`-based hook/component tests** for the new BE-call hooks — mock `axiosClient`/the action functions exactly as `jobs/hooks.test.ts` and `claims/hooks.test.ts` already do; assert debounce timing and `requestId` race-discarding using `renderHook`/`act`/`waitFor` (the existing convention, e.g. `useSparePartPriceCalculation`'s test suite).
+- **New coverage specifically required**: `itemRulesResolver.test.ts` (every rule/branch, including `surfaceOverrides` merging), `buildRowFieldNames.test.ts` (naming by `rowId`, stability across add/delete of sibling rows), a single parameterized `ItemRow.test.tsx` covering job/claim/read-only surfaces from one file (rather than the current two near-duplicate 1800+/700-line suites), and a rewritten `SummaryArea.test.tsx` asserting BE-confirmed rendering with preview fallback only while pending (the dirty-diff/`activeValueChangeFieldRef` guard tests become dead code and can be deleted once summary moves to backend-computed, §6).
 
 ## 10. Phasing / migration plan
 
@@ -222,11 +239,11 @@ Reuse the two patterns already strong in this codebase:
 | **1** | Type `putClaimPrices` contract + reconcile `Price` shape drift | Low | Small | Yes — pure typing, existing endpoint |
 | **2** | `ItemPolicyConfig` + resolver, wired into existing components, Formik untouched | Low-Medium | Medium | Mostly — resolver fully testable; config can be served from a local dev fixture (see §11) until BE ships it — **wired for `SparePartsRow.tsx` this session, see §12** |
 | **3** | New `/prices/validate` endpoint behind a feature flag; stop client re-derivation once trusted | Medium-High | Large | FE work yes (against a local simulator, §11); authoritative production behavior needs the real endpoint |
-| **4** | Extract item rows out of Formik into the reducer/store | High (touches `useDiagnosticsManager.ts`) | Large | Yes, in parallel with Phase 3, against the agreed contract |
+| **4** | Replace Effect 3's Area-cloning reconciliation with `materials.map()` keyed by stable `rowId` (§7) | Medium (touches `useDiagnosticsManager.ts`, `SparePartsArea.tsx`, `SparePartsRow.tsx`'s index-reading) — lower than the originally-planned store extraction, since Formik/`GenericField` stay untouched | Medium | Yes — pure FE rendering/identity fix, no backend dependency at all, can ship before Phase 3 |
 | **5** | Unify Job/Claim shared hook + context + row + archived-row | Medium | Large | Yes — FE-only structural consolidation |
 | **6** | Cleanup/dead-code removal, drop feature flag | Low | Small-Medium | Yes, final pass |
 
-Phases 1–2 are pure typing/config additions with no behavior change — safe to ship independently. Phase 3 is the one genuinely blocked on production backend availability; Phases 4–5 can proceed in parallel against the agreed, locally-simulated contract so the team isn't idle waiting on BE. Phase 3's feature flag lets its FE work ship dark before the real endpoint exists, then flip on once BE is ready.
+Phases 1–2 are pure typing/config additions with no behavior change — safe to ship independently. Phase 3 is the one genuinely blocked on production backend availability. **Phase 4 no longer depends on Phase 3 at all** (it doesn't touch pricing/validation, only row identity/rendering) — it can be scheduled any time, independently, once §7.4's open items are resolved. Phase 5 can proceed in parallel against the agreed, locally-simulated contract so the team isn't idle waiting on BE. Phase 3's feature flag lets its FE work ship dark before the real endpoint exists, then flip on once BE is ready.
 
 ## 11. Local BE-mocking strategy
 
