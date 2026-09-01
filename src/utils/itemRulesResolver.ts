@@ -64,7 +64,7 @@ const NOT_EDITABLE: PriceFieldEditability = {
 
 function findEditabilityRule(
   config: ItemPolicyConfig,
-  args: { position: string; context: "jobType" | "claimStatus"; contextValue: string },
+  args: { position: string; context: "jobType" | "claimStatus" | "isNewRow"; contextValue: string },
 ) {
   const isProtected = isPositionProtected(config, args.position);
   return config.editability.find(
@@ -83,7 +83,7 @@ function findEditabilityRule(
  */
 export function resolveEditability(
   config: ItemPolicyConfig,
-  args: { position: string; context: "jobType" | "claimStatus"; contextValue: string },
+  args: { position: string; context: "jobType" | "claimStatus" | "isNewRow"; contextValue: string },
   discountBase: DiscountBase = "GROSS_PRICE",
 ): PriceFieldEditability {
   const isEditable = findEditabilityRule(config, args)?.isEditable ?? false;
@@ -97,7 +97,7 @@ export function resolveEditability(
 
 export function isSummaryControlledRow(
   config: ItemPolicyConfig,
-  args: { position: string; context: "jobType" | "claimStatus"; contextValue: string },
+  args: { position: string; context: "jobType" | "claimStatus" | "isNewRow"; contextValue: string },
 ): boolean {
   return findEditabilityRule(config, args)?.controlledBySummary ?? false;
 }
