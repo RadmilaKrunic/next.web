@@ -9,6 +9,7 @@ import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import { useClaimContext } from "../ClaimContext";
+import { enrichArchivedFieldOptions } from "hooks/itemsManager/materialsDerivation";
 import "modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.scss";
 import "modules/JobManagement/JobOverview/ArchivedSparePartsArea/ArchivedSparePartsArea.scss";
 
@@ -109,13 +110,7 @@ function ClaimArchivedSparePartsArea({ area }: Readonly<{ area: Area }>) {
   const nameOfFirstField = area.fields[0]?.name || "";
   const isFirstArea = nameOfFirstField.includes("#0");
 
-  // Enrich area.fields with options from GenericFormContext (needed for position dropdown).
-  const enrichedFields = area.fields.map((f) => {
-    if (f.subtype !== "archivedPosition") return f;
-    const contextField = allFields?.find((cf) => cf.name === f.name);
-    if (!contextField?.options?.length) return f;
-    return { ...f, options: contextField.options };
-  });
+  const enrichedFields = enrichArchivedFieldOptions(area.fields, allFields);
 
   const handleDeleteRow = useCallback(() => {
     onDeleteArchivedRow(area.name);

@@ -284,7 +284,7 @@ Deliberately **not** ported over from the reference file: `SPARE_PARTS_EXCHANGE_
 
 Added two regression tests to `SparePartsRow.test.tsx` covering the `setMaterials` sync and the shared-ref guard directly (not just an end-to-end render assertion), since the previous test suite had no coverage for either.
 
-## 15. Phase 5: unifying Job/Claim item rows (in progress — steps 1–6 of 10 done)
+## 15. Phase 5: unifying Job/Claim item rows (in progress — steps 1–7 of 10 done)
 
 Two research passes (traced against the actual code, not assumed from this doc's earlier §8 sketch) found the real Job/Claim divergence is bigger than "two near-identical implementations":
 
@@ -304,4 +304,6 @@ Full step-by-step plan (10 steps, each individually verifiable): extend `Editabi
   - **One deliberate additional behavior change for claim**, in the same spirit as Step 4's full-recomputation switch: `ItemRow.tsx`'s dirty-tracking effect mirrors `arePricesValidated` into a ref (`arePricesValidatedRef`) before checking it, exactly as job's pre-merge `SparePartsRow.tsx` already did to avoid re-firing `markRowDirty` on the false→true transition right after a successful validate. Claim's pre-merge `ClaimSparePartsRow.tsx` read `arePricesValidated` directly (in the effect's own dependency array), which means claim had the same latent "immediately re-dirties the row right after validate succeeds" bug job had already fixed for itself — unifying on job's ref-based approach fixes it for claim too. Flagged for QA rather than silently folded in.
   - `ItemRow.test.tsx` is a **real but deliberately-scoped** verification pass (not a 1:1 port of `SparePartsRow.test.tsx`'s 2037 lines + `ClaimSparePartsRow.test.tsx`'s 691 lines). It covers every divergence point named in `ItemRowSurfaceConfig.ts` (full-row disablement, delete-icon visibility, field-permission resolution, position-field options, the `extraEffects` gates) for both surfaces. Full historical-parity porting of every named case from both old test files remains an explicit open task before Step 10 can delete `SparePartsRow.test.tsx`/`ClaimSparePartsRow.test.tsx` — deferred rather than rushed, given this sandbox has no `vitest` execution access to verify a ~2700-line mechanical port beyond syntax-checking it.
 
-- **Steps 7–10: not started.**
+- **Step 7: done** (`ArchivedSparePartsRow.tsx` + the inlined `ClaimArchivedSparePartsRow` function in `ClaimArchivedSparePartsArea.tsx` → `ArchivedItemRow.tsx`, driven by `ArchivedItemRowSurfaceConfig` — see `SparePartsRow/ArchivedItemRowSurfaceConfig.ts`, `jobArchivedItemRowSurfaceConfig.ts`, `ClaimSparePartsRow/claimArchivedItemRowSurfaceConfig.ts`). The two *area wrapper* components (`ArchivedSparePartsArea.tsx`, `ClaimArchivedSparePartsArea.tsx`) stay separate, as planned — only their confirmed-byte-identical `enrichArchivedFieldOptions` field-enrichment logic moved to `materialsDerivation.ts`, a genuine dedup with no behavior change. `ArchivedItemRow.test.tsx` is real but similarly scoped (not a full port of the three pre-existing test files, none of which are deleted yet).
+
+- **Steps 8–10: not started.**

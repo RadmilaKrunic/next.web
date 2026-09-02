@@ -337,3 +337,17 @@ export function deriveSparePartsAreasAndFields(
   }
   return { areas, fields };
 }
+
+// Confirmed byte-identical (Phase 5 unification, items-and-prices-refactor.md §15 step 7)
+// between ArchivedSparePartsArea.tsx (job) and ClaimArchivedSparePartsArea.tsx (claim) —
+// area.fields in tabs state are separate objects from allFields context; options are
+// stamped only on the allFields copies, so the archivedPosition dropdown's options must be
+// merged in here for the dropdown to render.
+export function enrichArchivedFieldOptions(areaFields: Field[], allFields: Field[] | undefined): Field[] {
+  return areaFields.map((f) => {
+    if (f.subtype !== "archivedPosition") return f;
+    const contextField = allFields?.find((cf) => cf.name === f.name);
+    if (!contextField?.options?.length) return f;
+    return { ...f, options: contextField.options };
+  });
+}
