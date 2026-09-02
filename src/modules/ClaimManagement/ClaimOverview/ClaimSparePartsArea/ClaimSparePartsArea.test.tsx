@@ -12,7 +12,7 @@ vi.mock("../ClaimContext", () => ({
   useClaimContext: () => ({ onDeleteRow: onDeleteRowMock }),
 }));
 
-vi.mock("../ClaimSparePartsRow/ClaimSparePartsRow", () => ({
+vi.mock("modules/JobManagement/JobOverview/SparePartsRow/ItemRow", () => ({
   default: ({ onDeleteRow }: { onDeleteRow: () => void }) => (
     <button type="button" onClick={onDeleteRow}>
       delete-row

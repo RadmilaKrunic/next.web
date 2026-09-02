@@ -509,7 +509,17 @@ describe("ItemRow — position field options divergence", () => {
         [siblingField.name]: "SP",
       },
       fields: [...buildFields("jobDiagnostics"), siblingField],
-      contextOverrides: { allowedPositions: [{ position: "SP", maxCount: 1, editable: true }] },
+      contextOverrides: {
+        allowedPositions: [
+          {
+            position: "SP",
+            minCount: 0,
+            maxCount: 1,
+            quantity: { quantitySource: null, defaultQuantity: null },
+            unitPriceSource: null,
+          },
+        ],
+      },
     });
     const select = screen.getByTestId(`field-${p}position`) as HTMLSelectElement;
     const spOption = Array.from(select.options).find((o) => o.value === "SP");

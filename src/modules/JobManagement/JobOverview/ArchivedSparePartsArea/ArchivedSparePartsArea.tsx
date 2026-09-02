@@ -5,7 +5,8 @@ import Area from "../../../../components/generics/Area/GenericArea.types";
 import "../SparePartsArea/SparePartsArea.scss";
 import "./ArchivedSparePartsArea.scss";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
-import ArchivedSparePartsRow from "../ArchivedSparePartsRow/ArchivedSparePartsRow";
+import ArchivedItemRow from "../SparePartsRow/ArchivedItemRow";
+import { jobArchivedItemRowSurfaceConfig } from "../SparePartsRow/jobArchivedItemRowSurfaceConfig";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import { enrichArchivedFieldOptions } from "hooks/itemsManager/materialsDerivation";
 
@@ -58,12 +59,11 @@ function ArchivedSparePartsArea({ area }: Readonly<{ area: Area }>) {
         </div>
       )}
       {isArchivedExpanded && (
-        <ArchivedSparePartsRow
+        <ArchivedItemRow
           key={nameOfFirstField}
           fields={enrichedFields}
-          onDeleteRow={handleDeleteRow}
           onRestoreRow={handleRestoreRow}
-          isDisabled={true}
+          config={jobArchivedItemRowSurfaceConfig}
         />
       )}
     </>

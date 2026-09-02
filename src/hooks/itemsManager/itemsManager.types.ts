@@ -146,6 +146,11 @@ export interface ItemsSurfaceConfig<TApiMaterial = unknown> {
 
 export interface UseItemsManagerReturn {
   materials: MaterialItem[];
+  /** Rows removed from the active list (archived, not yet permanently deleted). Job's own
+   *  archived-row UI derives everything from tabs/allFields (Effect 3b) and never reads this
+   *  field; claim needs it directly — both for ItemsContextValue.archivedMaterials and for
+   *  building the validate-and-save payload (see ClaimOverview.tsx's onValidateClaim). */
+  archivedMaterials: MaterialItem[];
   apiMaterialsLoaded: boolean;
   apiMaterialsEmpty: boolean;
   hasExistingDiagnostic: boolean;

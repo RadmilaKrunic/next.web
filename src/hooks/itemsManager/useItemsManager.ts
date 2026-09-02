@@ -1188,6 +1188,7 @@ export const useItemsManager = <TApiMaterial = unknown>({
 
   return {
     materials,
+    archivedMaterials,
     apiMaterialsLoaded,
     apiMaterialsEmpty,
     hasExistingDiagnostic,

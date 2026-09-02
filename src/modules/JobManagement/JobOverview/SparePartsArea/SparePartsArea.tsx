@@ -2,7 +2,8 @@ import { useTranslation } from "react-i18next";
 import { useCallback } from "react";
 import Area from "../../../../components/generics/Area/GenericArea.types";
 import "./SparePartsArea.scss";
-import SparePartsRow from "../SparePartsRow/SparePartsRow";
+import ItemRow from "../SparePartsRow/ItemRow";
+import { jobItemRowSurfaceConfig } from "../SparePartsRow/jobItemRowSurfaceConfig";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
 
 function SparePartsArea({ area }: Readonly<{ area: Area }>) {
@@ -40,11 +41,12 @@ function SparePartsArea({ area }: Readonly<{ area: Area }>) {
           <div className="spare-parts-empty-message">{t("diagnosticsNoItemsToShow")}</div>
         )
       ) : (
-        <SparePartsRow
+        <ItemRow
           key={nameOfFirstField}
           fields={area.fields}
           onDeleteRow={handleDeleteRow}
           isDisabled={area.isDisabled}
+          config={jobItemRowSurfaceConfig}
         />
       )}
     </>

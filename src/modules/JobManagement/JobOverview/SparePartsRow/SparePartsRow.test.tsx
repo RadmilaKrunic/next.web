@@ -384,6 +384,9 @@ const renderRow = (
     discountBase,
     automaticRows: [],
     isValidating: false,
+    canDeleteRows: false,
+    archivedMaterials: [],
+    isClaimPending: false,
     ...contextOverrides,
   };
 

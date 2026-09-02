@@ -90,10 +90,11 @@ import { PositionItem } from "./ExplosionDiagram/ExplosionDrawing.types";
 import { SpecialMaterial } from "./AddSpecialMaterialModal/SpecialMeterialItem/SpecialMaterialItem";
 import {
   getBoschInternalPending,
-  useDiagnosticsManager,
   getChargeablePendingInfo,
   hasWarrantyOrProServiceItems,
 } from "hooks/useDiagnosticsManager";
+import { useItemsManager } from "hooks/itemsManager/useItemsManager";
+import { buildJobItemsSurfaceConfig, type JobApiMaterial } from "./jobItemsSurfaceConfig";
 import { useFormInitialization } from "hooks/useFormInitialization";
 import {
   useActionWithValidation,
@@ -971,6 +972,18 @@ export default function JobOverview() {
     setCurrentJobType((initialFormValues?.jobType as string) || "");
   }, [initialFormValues]);
 
+  // Rebuilt fresh every render, deliberately not memoized — useItemsManager's own configRef
+  // pattern is designed to tolerate that (see its top-of-file comment).
+  const jobItemsSurfaceConfig = buildJobItemsSurfaceConfig(t, {
+    resetKey: tabs.length > 0 ? diagnosticData?.jobId : undefined,
+    apiMaterials: tabs.length > 0 ? (diagnosticData?.materials as JobApiMaterial[] | undefined) : undefined,
+    apiArchivedMaterials:
+      tabs.length > 0 ? (diagnosticData?.archivedMaterials as JobApiMaterial[] | undefined) : undefined,
+    currentActionType,
+    currentJobType,
+    jobStatus: currentStatus,
+  });
+
   const {
     materials,
     apiMaterialsLoaded,
@@ -994,10 +1007,8 @@ export default function JobOverview() {
     canArchiveOnDelete,
     discountBase,
     automaticRows,
-  } = useDiagnosticsManager({
-    diagnosticData: tabs.length > 0 ? diagnosticData : undefined,
-    currentActionType,
-    currentJobType,
+  } = useItemsManager({
+    config: jobItemsSurfaceConfig,
     tabs,
     setTabs,
     allFields,
@@ -1008,7 +1019,6 @@ export default function JobOverview() {
     arePricesValidated,
     setArePricesValidated,
     isResyncingRef,
-    jobStatus: currentStatus,
   });
 
   const { assetsAccessories, setAssetsAccessories } = useAccessoriesManager({
@@ -2375,6 +2385,12 @@ export default function JobOverview() {
       automaticRows,
       isValidating: validateAndSaveMutation.isPending,
       itemPolicy,
+      // Claim-only fields on the now-merged ItemsContextValue (Phase 5, items-and-prices-
+      // refactor.md §15) — job has no equivalent concept, inert defaults matching
+      // ItemsContext.tsx's baseDefaultItemsContextValue.
+      canDeleteRows: false,
+      archivedMaterials: [],
+      isClaimPending: false,
     }),
     [
       materials,
