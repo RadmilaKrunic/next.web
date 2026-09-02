@@ -25,6 +25,7 @@ import { calculatePrices } from "utils/priceCalculator";
 import { useItemsManager } from "./useItemsManager";
 import type { MaterialItem, ItemsSurfaceConfig } from "./itemsManager.types";
 import { getPositionAutofill } from "./materialsDerivation";
+import { resolveAllowedPositions, resolveAutomaticRows } from "utils/itemRulesResolver";
 import type Field from "components/generics/Field/GenericField.types";
 import type Area from "components/generics/Area/GenericArea.types";
 import type Section from "components/generics/Section/GenericSection.types";
@@ -363,6 +364,22 @@ const createHookProps = (overrides: HookOverride = {}) => {
   };
 };
 
+const makeItem = (overrides: Partial<MaterialItem> = {}): MaterialItem => ({
+  position: "SP",
+  partNumber: "12345",
+  description: "Spare Part",
+  type: "CHARGEABLE",
+  quantity: 2,
+  unitPrice: 50,
+  netAmount: 100,
+  tax: 19,
+  grossAmount: 119,
+  discount: 0,
+  taxAmount: 19,
+  totalAmount: 119,
+  ...overrides,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("localStorage", {
@@ -528,6 +545,399 @@ describe("useItemsManager — job-shaped config equivalence", () => {
     // this is the exact mechanism Step 4 relies on to preserve claim's current
     // no-auto-build behavior unchanged.
     expect(result.current.materials).toHaveLength(0);
+  });
+
+  // Remaining cases ported from useDiagnosticsManager.test.ts's hook-behavior section (Phase 5
+  // step 10, items-and-prices-refactor.md §15) — the old hook function is being deleted from
+  // useDiagnosticsManager.ts now that every case here is confirmed covered. (Tests of
+  // computeIsChargeable/hasWarrantyOrProServiceItems/getChargeablePendingInfo/
+  // getBoschInternalPending and of buildRowValues/materialsDerivation.ts's other pure exports
+  // are NOT ported here — those functions are untouched and stay tested in
+  // useDiagnosticsManager.test.ts, which still imports them from their real, live home.)
+
+  it("resolveAllowedPositions/resolveAutomaticRows match the hook's own inline lookup", () => {
+    const { props } = createHookProps({ permissions: [] });
+    const { result } = renderHook(() => useItemsManager(props));
+
+    const rules = [
+      {
+        actionType: "REPAIR",
+        jobType: "CHARGEABLE",
+        rule: {
+          automaticRows: ["PN"],
+          allowedPositions: [
+            makeAllowedPosition("SP", "USER", 1, 2),
+            makeAllowedPosition("PN", "DEFAULT", 4, 2),
+            makeAllowedPosition("LA", "FAULT_CODES", 2, 2),
+            makeAllowedPosition("FR", "DEFAULT", 1, 1),
+          ],
+          enforceSparepartExists: false,
+        },
+      },
+    ];
+
+    expect(resolveAllowedPositions(rules, "REPAIR", "CHARGEABLE")).toEqual(
+      rules[0].rule.allowedPositions,
+    );
+    expect(resolveAutomaticRows(rules, "REPAIR", "CHARGEABLE")).toEqual(["PN"]);
+    expect(resolveAllowedPositions(rules, "REPAIR", "CHARGEABLE").map((p) => p.position)).toEqual(
+      expect.arrayContaining(result.current.allowedPositions.map((p) => p.position)),
+    );
+  });
+
+  it("falls back to defaultQuantity when faultCodeValue has no ':' separator", () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.getQuantityForPosition("LA", "FC9", 0)).toBe(2);
+  });
+
+  it("falls back to defaultQuantity when faultCodeValue is empty", () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.getQuantityForPosition("LA", "", 0)).toBe(2);
+  });
+
+  it("falls back to defaultQuantity for an unrecognized quantitySource", () => {
+    const { props } = createHookProps({
+      allowedPositions: [makeAllowedPosition("AC", "UNKNOWN_SOURCE", 6, 1)],
+    });
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.getQuantityForPosition("AC")).toBe(6);
+  });
+
+  it("returns defaultQuantity when the parsed fault code number is NaN", () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.getQuantityForPosition("LA", "FC:abc", 0)).toBe(2);
+  });
+
+  it("returns undefined when the position has no matching allowed position config", () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.getQuantityForPosition("ZZ")).toBeUndefined();
+  });
+
+  it("derives a non-zero taxAmount from unitPrice+tax when the API returns only those as populated (validateAndSave contract)", async () => {
+    const { props } = createHookProps({
+      apiMaterials: [
+        {
+          id: "LA_1609888887_WARRANTY",
+          position: "LA",
+          partNumber: "1609888887",
+          description: "İşçilik",
+          jobType: "WARRANTY",
+          quantity: 6,
+          status: "PENDING",
+          price: {
+            unitPrice: 132.5,
+            netAmount: 0,
+            suggestedNetPrice: 0,
+            tax: 20.0,
+            taxAmount: 0,
+            grossAmount: 0,
+            discount: 0.0,
+            totalAmount: 0,
+            discountAmount: 0,
+          },
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useItemsManager(props));
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(1);
+    });
+
+    const row = result.current.materials[0];
+    expect(row.unitPrice).toBe(132.5);
+    expect(row.tax).toBe(20);
+    expect(row.quantity).toBe(6);
+    expect(row.suggestedNetPrice).toBe(795); // 6 * 132.5
+    expect(row.netAmount).toBe(795);
+    expect(row.taxAmount).toBe(159); // 795 * 20 / 100 — this was 0 before the original fix
+    expect(row.grossAmount).toBe(954);
+    expect(row.totalAmount).toBe(954);
+  });
+
+  it("recomputes from unitPrice+tax even when the response's downstream amounts are already populated but stale", async () => {
+    const { props } = createHookProps({
+      apiMaterials: [
+        {
+          id: "SP_1617000895_WARRANTY",
+          position: "SP",
+          partNumber: "1617000895",
+          description: "Uç Kovanı",
+          jobType: "WARRANTY",
+          quantity: 2,
+          status: "PENDING",
+          price: {
+            unitPrice: 50,
+            tax: 20,
+            suggestedNetPrice: 50,
+            netAmount: 50,
+            taxAmount: 10,
+            grossAmount: 60,
+            discount: 0,
+            discountAmount: 0,
+            totalAmount: 60,
+          },
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useItemsManager(props));
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(1);
+    });
+
+    const row = result.current.materials[0];
+    expect(row.unitPrice).toBe(50);
+    expect(row.suggestedNetPrice).toBe(100);
+    expect(row.netAmount).toBe(100);
+    expect(row.taxAmount).toBe(20); // 100 * 20 / 100
+    expect(row.grossAmount).toBe(120);
+    expect(row.totalAmount).toBe(120);
+  });
+
+  it("adds imported materials and skips duplicates", async () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.onAddMaterials([
+        { partNumber: "EXISTING-PN", position: "SP", quantity: 1, unitPrice: 10 },
+        { partNumber: "NEW-PN", position: "SP", quantity: 2, unitPrice: 15 },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials.some((m) => m.partNumber === "NEW-PN")).toBe(true);
+    });
+    expect(
+      result.current.materials.filter((m) => m.partNumber === "EXISTING-PN").length,
+    ).toBeLessThanOrEqual(1);
+  });
+
+  it("computes imported material prices using the configured discountBase, not the default", async () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.onAddMaterials([
+        { partNumber: "IMPORTED-PN", position: "SP", quantity: 3, unitPrice: 50 },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials.some((m) => m.partNumber === "IMPORTED-PN")).toBe(true);
+    });
+
+    const row = result.current.materials.find((m) => m.partNumber === "IMPORTED-PN")!;
+    expect(row.suggestedNetPrice).toBe(150); // 3 * 50 — computePricesForItem actually ran
+    expect(row.netAmount).toBe(150);
+  });
+
+  it("adds new empty row with blank type selection", async () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.onAddRow(props.formValuesRef.current);
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials.some((m) => m.type === "")).toBe(true);
+    });
+  });
+
+  it("collapses multiple SP rows to one when switching to spare parts exchange", async () => {
+    const { props } = createHookProps();
+    const { result, rerender } = renderHook(
+      (p) => useItemsManager(p),
+      { initialProps: props },
+    );
+
+    act(() => {
+      result.current.setMaterials([
+        makeItem({ position: "SP", partNumber: "SP-1", origin: "specialMaterial" }),
+        makeItem({ position: "SP", partNumber: "SP-2", origin: "explosionDrawing" }),
+        makeItem({ position: "PN", partNumber: "PN-1" }),
+      ]);
+    });
+
+    rerender({
+      ...props,
+      config: { ...props.config, currentActionType: "SPARE_PARTS_EXCHANGE" },
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials.filter((item) => item.position === "SP")).toHaveLength(1);
+    });
+  });
+
+  it("deletes row and disables validated prices", async () => {
+    const { props, mocks } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.setMaterials([makeItem({ status: "PENDING", partNumber: "ROW-1" })]);
+    });
+
+    act(() => {
+      result.current.onDeleteRow("diagnosticData_diagnosticsSpareParts#0");
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(0);
+    });
+
+    expect(mocks.setArePricesValidated).toHaveBeenCalledWith(false);
+    expect(mocks.setInitialFormValues).toHaveBeenCalled();
+  });
+
+  it("deleting the first of several rows preserves the order of the remaining rows", async () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.setMaterials([
+        makeItem({ position: "SP", partNumber: "ROW-0" }),
+        makeItem({ position: "SP", partNumber: "ROW-1" }),
+        makeItem({ position: "SP", partNumber: "ROW-2" }),
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(3);
+    });
+
+    act(() => {
+      result.current.onDeleteRow("diagnosticData_diagnosticsSpareParts#0");
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(2);
+    });
+    expect(result.current.materials.map((m) => m.partNumber)).toEqual(["ROW-1", "ROW-2"]);
+  });
+
+  it("forces a full rebuild of allFields/tabs after a delete, not just a values patch", async () => {
+    const { props, mocks } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.setMaterials([
+        makeItem({ partNumber: "ROW-0" }),
+        makeItem({ partNumber: "ROW-1" }),
+      ]);
+    });
+    await waitFor(() => expect(result.current.materials).toHaveLength(2));
+    mocks.setAllFields.mockClear();
+    mocks.setTabs.mockClear();
+
+    act(() => {
+      result.current.onDeleteRow("diagnosticData_diagnosticsSpareParts#0");
+    });
+
+    await waitFor(() => {
+      expect(mocks.setAllFields).toHaveBeenCalled();
+      expect(mocks.setTabs).toHaveBeenCalled();
+    });
+  });
+
+  it("restores archived row as pending and unvalidated", async () => {
+    const { props, mocks } = createHookProps({
+      apiArchivedMaterials: [
+        {
+          position: "SP",
+          partNumber: "ARCH-1",
+          description: "Old part",
+          jobType: "WARRANTY",
+          quantity: 1,
+          status: "ARCHIVED",
+          price: { unitPrice: 1, netAmount: 1, tax: 0, grossAmount: 1, totalAmount: 1 },
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useItemsManager(props));
+
+    await waitFor(() => {
+      expect(mocks.setInitialFormValues).toHaveBeenCalled();
+    });
+
+    act(() => {
+      result.current.onRestoreRow("diagnosticData_archivedSpareParts#0");
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials.some((m) => m.partNumber === "ARCH-1")).toBe(true);
+    });
+    const restored = result.current.materials.find((m) => m.partNumber === "ARCH-1");
+    expect(restored?.status).toBe("PENDING");
+    expect(restored?.isValidated).toBe(false);
+    expect(mocks.setArePricesValidated).toHaveBeenCalledWith(false);
+  });
+
+  it("marks rows validated then marks selected row dirty", async () => {
+    const { props, mocks } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.setMaterials([makeItem({ partNumber: "A" }), makeItem({ partNumber: "B" })]);
+    });
+    act(() => {
+      result.current.markAllValidated();
+      result.current.markRowDirty(1);
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials[0].isValidated).toBe(true);
+      expect(result.current.materials[1].isValidated).toBe(false);
+    });
+    expect(mocks.setArePricesValidated).toHaveBeenCalledWith(false);
+  });
+
+  it("resets rejected row status to pending after item edit", async () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.setMaterials([
+        makeItem({ partNumber: "A", status: "REJECTED" }),
+        makeItem({ partNumber: "B", status: "APPROVED" }),
+      ]);
+    });
+
+    act(() => {
+      result.current.setRevisedRejectedRowPending("diagnosticData_diagnosticsSpareParts#0");
+    });
+
+    await waitFor(() => {
+      expect(result.current.materials[0].status).toBe("PENDING");
+    });
+    expect(result.current.materials[1].status).toBe("APPROVED");
+  });
+
+  it("enableValidate reflects arePricesValidated and pending archived deletions", () => {
+    const { props } = createHookProps({ arePricesValidated: true });
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.enableValidate()).toBe(false);
+
+    act(() => {
+      result.current.setMaterials([makeItem({ partNumber: "Z" })]);
+      result.current.onDeleteRow("diagnosticData_diagnosticsSpareParts#0");
+    });
+
+    expect(result.current.enableValidate()).toBe(true);
   });
 });
 
@@ -782,5 +1192,130 @@ describe("useItemsManager — claim-shaped config (claimItemsSurfaceConfig)", ()
     );
     expect(item.netAmount).toBe(expected.netAmount);
     expect(item.totalAmount).toBe(expected.totalAmount);
+  });
+
+  // Remaining cases ported from useClaimMaterialsManager.test.ts (Phase 5 step 10,
+  // items-and-prices-refactor.md §15) — the old hook/test file is being deleted now that
+  // every case here is confirmed covered.
+
+  it("returns defaults when no country configuration is cached", () => {
+    const { props } = createClaimHookProps();
+    vi.mocked(useQueryClient).mockReturnValue({
+      getQueryData: vi.fn((key: unknown) => {
+        if (Array.isArray(key) && key[0] === "user") return makeUser([]);
+        return undefined;
+      }),
+    } as never);
+
+    const { result } = renderHook(() => useItemsManager(props));
+
+    expect(result.current.discountBase).toBe("NET_PRICE");
+    expect(result.current.allowedPositions).toEqual([]);
+    expect(result.current.addSpecialMaterialsAllowed).toBe(false);
+  });
+
+  it("onAddRow does nothing when readOnly is true (matches useClaimMaterialsManager.ts's original readOnly guard — see the useItemsManager.ts fix in this same step)", () => {
+    const { props } = createClaimHookProps();
+    const { result } = renderHook(() => useItemsManager({ ...props, readOnly: true }));
+
+    act(() => {
+      result.current.onAddRow({});
+    });
+
+    expect(result.current.materials).toHaveLength(0);
+  });
+
+  it("onAddMaterials appends only non-duplicate materials (by partNumber)", () => {
+    const { props } = createClaimHookProps();
+    props.formValuesRef.current = { "claims_claimSpareParts#0_sparePartNumber": "P-EXISTING" };
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.onAddMaterials([
+        { partNumber: "P-EXISTING", quantity: 1 },
+        { partNumber: "P-NEW", quantity: 2, description: "new part" },
+      ]);
+    });
+
+    expect(result.current.materials).toHaveLength(1);
+    expect(result.current.materials[0].partNumber).toBe("P-NEW");
+  });
+
+  it("getExistingPartNumbers returns part numbers from form values", () => {
+    const { props } = createClaimHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    const values = { "claims_claimSpareParts#0_sparePartNumber": "P-1" };
+    const existing = result.current.getExistingPartNumbers(values);
+    expect(existing.has("P-1")).toBe(true);
+  });
+
+  it("markAllValidated marks every material validated and sets arePricesValidated(true)", () => {
+    const { props, mocks } = createClaimHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.setMaterials([
+        {
+          partNumber: "P-1",
+          position: "SP",
+          description: "",
+          type: "WARRANTY",
+          quantity: 1,
+          unitPrice: 1,
+          suggestedNetPrice: 1,
+          netAmount: 1,
+          tax: 0,
+          taxAmount: 0,
+          grossAmount: 1,
+          discount: 0,
+          totalAmount: 1,
+          isValidated: false,
+        },
+      ] as never);
+    });
+
+    act(() => {
+      result.current.markAllValidated();
+    });
+
+    expect(result.current.materials[0].isValidated).toBe(true);
+    expect(mocks.setArePricesValidated).toHaveBeenCalledWith(true);
+  });
+
+  it("markRowDirty marks one row dirty and unsets arePricesValidated", () => {
+    const { props, mocks } = createClaimHookProps();
+    const { result } = renderHook(() => useItemsManager(props));
+
+    act(() => {
+      result.current.setMaterials([
+        { partNumber: "P-1", isValidated: true },
+        { partNumber: "P-2", isValidated: true },
+      ] as never);
+    });
+
+    act(() => {
+      result.current.markRowDirty(1);
+    });
+
+    expect(result.current.materials[0].isValidated).toBe(true);
+    expect(result.current.materials[1].isValidated).toBe(false);
+    expect(mocks.setArePricesValidated).toHaveBeenCalledWith(false);
+  });
+
+  it("preserves reimbursementPaymentMethod when archiving a loaded material (onDeleteRow)", async () => {
+    const { props } = createClaimHookProps({
+      apiMaterials: [makeClaimMaterial({ reimbursementPaymentMethod: "BANK_TRANSFER" })],
+    });
+    const { result } = renderHook(() => useItemsManager(props));
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(1));
+
+    act(() => {
+      result.current.onDeleteRow("claims_claimSpareParts#0");
+    });
+
+    await waitFor(() => expect(result.current.archivedMaterials).toHaveLength(1));
+    expect(result.current.archivedMaterials[0].reimbursementPaymentMethod).toBe("BANK_TRANSFER");
   });
 });

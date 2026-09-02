@@ -155,9 +155,28 @@ vi.mock("hooks/useSectionEditing", () => ({
     setEditingSections: vi.fn(),
   }),
 }));
+// getBoschInternalPending/getChargeablePendingInfo/hasWarrantyOrProServiceItems are still
+// live, job-diagnostic-tab-specific helpers JobOverview.tsx imports from here directly
+// (Phase 5 unification, items-and-prices-refactor.md §15 step 10) — the useDiagnosticsManager
+// hook itself was deleted from this module and is mocked separately below, matching
+// JobOverview.tsx's real step-8 switch to useItemsManager.
 vi.mock("hooks/useDiagnosticsManager", () => ({
-  useDiagnosticsManager: () => ({
+  getBoschInternalPending: () => ({ pendingTypeFields: [], hasBoschInternalPending: false }),
+  getChargeablePendingInfo: () => ({ pendingTypeFields: [], hasChargeablePending: false }),
+  hasWarrantyOrProServiceItems: (
+    _fields: Array<{ subtype?: string; name: string }>,
+    values: Record<string, unknown>,
+  ) =>
+    Object.entries(values).some(([key, value]) => {
+      if (!key.endsWith("_type")) return false;
+      return value === "WARRANTY" || value === "SERVICE_OFFERING";
+    }),
+}));
+
+vi.mock("hooks/itemsManager/useItemsManager", () => ({
+  useItemsManager: () => ({
     materials: [],
+    archivedMaterials: [],
     setMaterials: vi.fn(),
     positionDropdownOptions: [],
     allowedPositions: [],
@@ -165,8 +184,11 @@ vi.mock("hooks/useDiagnosticsManager", () => ({
     markAllValidated: vi.fn(),
     markRowDirty: vi.fn(),
     discountBase: discountBaseMock.value,
+    getPositionConfig: vi.fn(),
+    getQuantityForPosition: vi.fn(),
     onAddRow: onAddRowMock,
     onDeleteRow: vi.fn(),
+    onDeleteArchivedRow: undefined,
     onRestoreRow: vi.fn(),
     onAddMaterials: vi.fn(),
     getExistingPartNumbers: () => new Set<string>(),
@@ -179,16 +201,6 @@ vi.mock("hooks/useDiagnosticsManager", () => ({
     automaticRows: [],
     resyncMaterialsFromAPI: vi.fn(),
   }),
-  getBoschInternalPending: () => ({ pendingTypeFields: [], hasBoschInternalPending: false }),
-  getChargeablePendingInfo: () => ({ pendingTypeFields: [], hasChargeablePending: false }),
-  hasWarrantyOrProServiceItems: (
-    _fields: Array<{ subtype?: string; name: string }>,
-    values: Record<string, unknown>,
-  ) =>
-    Object.entries(values).some(([key, value]) => {
-      if (!key.endsWith("_type")) return false;
-      return value === "WARRANTY" || value === "SERVICE_OFFERING";
-    }),
 }));
 
 vi.mock("components/generics/Form/useFormValidation", () => ({

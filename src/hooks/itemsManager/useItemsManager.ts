@@ -325,6 +325,12 @@ export const useItemsManager = <TApiMaterial = unknown>({
   // needing config itself in their dependency arrays.
   const configRef = useRef(config);
   configRef.current = config;
+  // Claim's original onAddRow (useClaimMaterialsManager.ts) checked `if (readOnly) return;`
+  // as its first line; job's never needed to (job never calls this hook with readOnly: true
+  // for a config whose onAddRow is actually wired to a UI action). Ref'd for the same reason
+  // as configRef above — onAddRow is a stable useCallback([]).
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
 
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const tRef = useRef(t);
@@ -860,6 +866,7 @@ export const useItemsManager = <TApiMaterial = unknown>({
   // ── Public callbacks ──────────────────────────────────────────────────────
 
   const onAddRow = useCallback((formValues?: Record<string, unknown>) => {
+    if (readOnlyRef.current) return;
     if (!formValues) return;
     const perms = userPermissionsRef.current;
     const insertPermissions = configRef.current.positionInsertPermissions;
