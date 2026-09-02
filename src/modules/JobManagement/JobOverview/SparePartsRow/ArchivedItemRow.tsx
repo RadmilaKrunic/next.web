@@ -4,39 +4,39 @@ import GenericField from "components/generics/Field/GenericField";
 import { useContext, useState } from "react";
 import { useFormikContext } from "formik";
 import { useHasPermission } from "hooks/useHasPermission";
-import "../SparePartsRow/SparePartsRow.scss";
+import "./SparePartsRow.scss";
 import Field from "components/generics/Field/GenericField.types";
 import { PERMISSIONS } from "utils/Permissions";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
+import { useClaimContext } from "../../../ClaimManagement/ClaimOverview/ClaimContext";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
+import type { ArchivedItemRowSurfaceConfig } from "./ArchivedItemRowSurfaceConfig";
 
-const STATUSES_DISABLING_ROW = new Set([
-  "RETURN_UNASSEMBLY",
-  "RETURN_ASSEMBLY",
-  "REPAIR_DONE",
-  "IN_REPAIR",
-  "READY_FOR_REPAIR",
-  "EXCHANGE",
-  "SCRAP_TOOL",
-  "DELIVERED",
-]);
-
-function ArchivedSparePartsRow({
+function ArchivedItemRow({
   fields,
   onRestoreRow,
+  config,
 }: Readonly<{
   fields: Field[];
-  onDeleteRow?: () => void;
   onRestoreRow?: () => void;
-  isDisabled?: boolean;
+  config: ArchivedItemRowSurfaceConfig;
 }>) {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const hasPriceViewPermission = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES]);
+  // Both hooks are called unconditionally (rules of hooks) and one is selected by
+  // config.surface — safe even when this component isn't wrapped in the other surface's
+  // real provider, since DiagnosticsContext/ClaimContext each fall back to their own inert
+  // default value rather than throwing (see ItemRow.tsx for the same pattern).
   const { jobStatus } = useDiagnosticsContext();
+  const { canDeleteRows } = useClaimContext();
   const { isRepairAnswerLocked } = useContext(GenericFormContext);
   const [isRowCollapsed, setIsRowCollapsed] = useState(false);
   const { values } = useFormikContext<Record<string, unknown>>();
-  const showRevertButton = !STATUSES_DISABLING_ROW.has(jobStatus ?? "") && !isRepairAnswerLocked;
+  const showRevertButton = config.resolveShowRevertButton({
+    jobStatus,
+    isRepairAnswerLocked,
+    canDeleteRows: Boolean(canDeleteRows),
+  });
 
   const collapsableFieldNames = new Set(
     fields
@@ -75,22 +75,24 @@ function ArchivedSparePartsRow({
         )}
         {mainFields
           .toSorted((a, b) => (a.position || 0) - (b.position || 0))
-          .map((field) => {
-            return (
-              <GenericField
-                field={field}
-                key={field.name}
-                className={`spare-parts-field ${field?.size === "2" ? "small" : ""}`}
-              />
-            );
-          })}
-        {showRevertButton && (
+          .map((field) => (
+            <GenericField
+              field={field}
+              key={field.name}
+              className={`spare-parts-field ${field?.size === "2" ? "small" : ""}`}
+            />
+          ))}
+        {showRevertButton ? (
           <Icon
             className="spare-part-action"
             iconName="reset"
             title={t("revert")}
             onClick={() => onRestoreRow?.()}
           />
+        ) : (
+          config.renderPlaceholderWhenHidden && (
+            <div className="spare-part-action" aria-hidden="true" />
+          )
         )}
       </div>
       {isRowCollapsed && hasPriceViewPermission && (
@@ -113,4 +115,4 @@ function ArchivedSparePartsRow({
   );
 }
 
-export default ArchivedSparePartsRow;
+export default ArchivedItemRow;

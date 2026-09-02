@@ -64,6 +64,20 @@ const baseConfig: ItemPolicyConfig = {
       isEditable: false,
       controlledBySummary: true,
     },
+    {
+      contextType: "isNewRow",
+      contextValue: "true",
+      appliesToProtectedPositionsOnly: false,
+      isEditable: true,
+      controlledBySummary: false,
+    },
+    {
+      contextType: "isNewRow",
+      contextValue: "false",
+      appliesToProtectedPositionsOnly: false,
+      isEditable: false,
+      controlledBySummary: false,
+    },
   ],
   warrantyGating: { gatedTypes: ["WARRANTY"], disableTypeOptionsWhenInvalidSparePart: true },
   surfaceOverrides: {
@@ -180,6 +194,28 @@ describe("resolveEditability", () => {
         { position: "SP", context: "jobType", contextValue: "CHARGEABLE" },
         "NET_PRICE",
       ),
+    ).toEqual({ discount: false, totalAmount: false, netAmount: false });
+  });
+
+  // "isNewRow" backs claim spare parts' real editability rule (a new/not-yet-saved row has
+  // editable price fields; an existing row doesn't) — resolved the same way as jobType/
+  // claimStatus rules, just keyed on a different context dimension (see Phase 5 unification
+  // plan, items-and-prices-refactor.md §15).
+  it("resolves isNewRow context the same way as jobType/claimStatus", () => {
+    expect(
+      resolveEditability(baseConfig, {
+        position: "SP",
+        context: "isNewRow",
+        contextValue: "true",
+      }),
+    ).toEqual({ discount: true, totalAmount: true, netAmount: false });
+
+    expect(
+      resolveEditability(baseConfig, {
+        position: "SP",
+        context: "isNewRow",
+        contextValue: "false",
+      }),
     ).toEqual({ discount: false, totalAmount: false, netAmount: false });
   });
 });

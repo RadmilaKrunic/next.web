@@ -27,7 +27,7 @@ vi.mock("../DiagnosticsContext", () => ({
   useDiagnosticsContext: () => diagnosticsCtx,
 }));
 
-vi.mock("../ArchivedSparePartsRow/ArchivedSparePartsRow", () => ({
+vi.mock("../SparePartsRow/ArchivedItemRow", () => ({
   default: ({
     fields,
     onRestoreRow,

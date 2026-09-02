@@ -29,8 +29,17 @@ import {
 import GenericForm from "components/generics/Form/GenericForm.types";
 import { User } from "types/user.type";
 import { useClaimDecisionPermissions } from "hooks/useClaimDecisionPermissions";
-import { ImportedMaterial, useDiagnosticsManager } from "hooks/useDiagnosticsManager";
-import { useClaimMaterialsManager } from "hooks/useClaimMaterialsManager";
+import { ImportedMaterial } from "hooks/useDiagnosticsManager";
+import { useItemsManager } from "hooks/itemsManager/useItemsManager";
+import { buildClaimItemsSurfaceConfig, materialItemToMaterial } from "./claimItemsSurfaceConfig";
+import {
+  serializeItemsForSubmit,
+  aggregatePriceSummary,
+} from "hooks/itemsManager/serializeItemsForSubmit";
+import {
+  buildJobItemsSurfaceConfig,
+  type JobApiMaterial,
+} from "modules/JobManagement/JobOverview/jobItemsSurfaceConfig";
 import { DiagnosticsContext } from "modules/JobManagement/JobOverview/DiagnosticsContext";
 import { ClaimContext } from "./ClaimContext";
 import {
@@ -64,16 +73,6 @@ function FormikClaimSync({
 
   return null;
 }
-function makeFieldGetter(
-  fields: Field[],
-  formValues: Record<string, unknown>,
-): (subtype: string) => unknown {
-  return (subtype) => {
-    const field = fields.find((af) => af.subtype === subtype);
-    return field ? formValues[field.name] : undefined;
-  };
-}
-
 export default function ClaimOverview() {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const queryClient = useQueryClient();
@@ -177,10 +176,20 @@ export default function ClaimOverview() {
 
   const tabsReady = tabs.length > 0;
 
+  // Rebuilt fresh every render, deliberately not memoized — useItemsManager's own configRef
+  // pattern is designed to tolerate that (see its top-of-file comment).
+  const claimItemsSurfaceConfig = buildClaimItemsSurfaceConfig({
+    resetKey: claimId,
+    apiMaterials: tabsReady ? claimData?.materials : undefined,
+    apiArchivedMaterials: tabsReady ? claimData?.archivedMaterials : undefined,
+    currentActionType,
+    currentJobType,
+  });
+
   const {
     materials,
     setMaterials,
-    archivedMaterials,
+    archivedMaterials: archivedMaterialItems,
     positionDropdownOptions,
     allowedPositions,
     automaticRows,
@@ -194,14 +203,9 @@ export default function ClaimOverview() {
     onRestoreRow,
     onAddMaterials: addMaterialsToForm,
     getExistingPartNumbers,
-    forceRebuildRef: claimForceRebuildRef,
-    hasSyncedRef: claimHasSyncedRef,
-  } = useClaimMaterialsManager({
-    claimId,
-    claimMaterials: tabsReady ? claimData?.materials : undefined,
-    claimArchivedMaterials: tabsReady ? claimData?.archivedMaterials : undefined,
-    currentActionType,
-    currentJobType,
+    resyncMaterialsFromAPI: resyncClaimMaterialsFromAPI,
+  } = useItemsManager({
+    config: claimItemsSurfaceConfig,
     tabs: tabs || [],
     setTabs,
     allFields,
@@ -214,6 +218,16 @@ export default function ClaimOverview() {
     readOnly: !isClaimEditMode,
     isResyncingRef: claimIsResyncingRef,
   });
+
+  // useItemsManager's archivedMaterials is MaterialItem[] (the shared client-side row
+  // model) — claim's own ItemsContextValue.archivedMaterials field and the validate payload
+  // both expect claim's raw, untranslated API shape (Material[]), matching what
+  // useClaimMaterialsManager returned directly pre-merge. materialItemToMaterial is the
+  // same mapper claimItemsSurfaceConfig.ts's fromMaterialItem already uses.
+  const archivedMaterials = useMemo(
+    () => archivedMaterialItems.map(materialItemToMaterial),
+    [archivedMaterialItems],
+  );
 
   // Wrap markRowDirty to also flag that user has unsaved changes
   const markRowDirty = useCallback(
@@ -230,10 +244,19 @@ export default function ClaimOverview() {
 
   // Populate the diagnosticData tab (read-only) from the job's diagnostic
   const [diagArePricesValidated, setDiagArePricesValidated] = useState(false);
-  useDiagnosticsManager({
-    diagnosticData: tabsReady ? claimData?.jobDiagnostic : undefined,
+  const jobDiagnosticItemsSurfaceConfig = buildJobItemsSurfaceConfig(t, {
+    resetKey: tabsReady ? claimData?.jobDiagnostic?.jobId : undefined,
+    apiMaterials: tabsReady
+      ? (claimData?.jobDiagnostic?.materials as JobApiMaterial[] | undefined)
+      : undefined,
+    apiArchivedMaterials: tabsReady
+      ? (claimData?.jobDiagnostic?.archivedMaterials as JobApiMaterial[] | undefined)
+      : undefined,
     currentActionType,
     currentJobType,
+  });
+  useItemsManager({
+    config: jobDiagnosticItemsSurfaceConfig,
     tabs: tabs || [],
     setTabs,
     allFields,
@@ -363,59 +386,14 @@ export default function ClaimOverview() {
             !a.name.includes("claimArchivedSpareParts"),
         );
 
-        const updatedMaterials = sparePartsAreas.map((area, idx) => {
-          const get = makeFieldGetter(area.fields, formValues);
-
-          const original = claimData.materials?.[idx];
-
-          return {
-            ...original,
-            position: (get("diagnosticPosition") as string) ?? original?.position ?? "",
-            partNumber: (get("diagnosticPartNumber") as string) ?? original?.partNumber ?? "",
-            description: (get("diagnosticDescription") as string) ?? original?.description ?? "",
-            jobType: (get("diagnosticType") as string) ?? original?.jobType ?? "",
-            quantity: Number(get("diagnosticQuantity") ?? original?.quantity ?? 1),
-            order: Number(get("diagnosticOrder") ?? original?.order ?? idx + 1),
-            isPriceSetManually: false,
-            price: {
-              unitPrice: Number(get("diagnosticUnitPrice") ?? 0),
-              suggestedNetPrice: Number(get("diagnosticSuggestedNetPrice") ?? 0),
-              netAmount: Number(get("diagnosticNetAmount") ?? 0),
-              tax: Number(get("diagnosticTax") ?? original?.price?.tax ?? 0),
-              taxAmount: Number(get("diagnosticTaxAmount") ?? 0),
-              grossAmount: Number(get("diagnosticGrossAmount") ?? 0),
-              discount: original?.price?.discount ?? 0,
-              totalAmount: Number(get("diagnosticTotalAmount") ?? 0),
-            },
-          };
-        });
+        const updatedMaterials = serializeItemsForSubmit(sparePartsAreas, formValues, claimData.materials);
 
         const sortedMaterials = updatedMaterials.toSorted(
           (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0),
         );
 
         // Compute price summary by aggregating all material rows
-        const claimPriceSummary = sortedMaterials.reduce(
-          (acc, m) => {
-            const price = (m as { price?: Record<string, number> }).price ?? {};
-            return {
-              netAmount: acc.netAmount + (Number(price.netAmount) || 0),
-              suggestedNetPrice: acc.suggestedNetPrice + (Number(price.suggestedNetPrice) || 0),
-              grossAmount: acc.grossAmount + (Number(price.grossAmount) || 0),
-              discount: acc.discount + (Number(price.discount) || 0),
-              totalAmount: acc.totalAmount + (Number(price.totalAmount) || 0),
-              taxAmount: acc.taxAmount + (Number(price.taxAmount) || 0),
-            };
-          },
-          {
-            netAmount: 0,
-            suggestedNetPrice: 0,
-            grossAmount: 0,
-            discount: 0,
-            totalAmount: 0,
-            taxAmount: 0,
-          },
-        );
+        const claimPriceSummary = aggregatePriceSummary(sortedMaterials);
 
         // Send full claim payload
         const payload = {
@@ -444,16 +422,17 @@ export default function ClaimOverview() {
         };
 
         try {
-          // Force all rows to rebuild from server response — not just new ones.
-          // Also set skipFormReset=true so the data-mapping effect uses the skip branch
-          // (header fields only) and lets Effect 2 handle the row values from the server
-          // response. Setting it to false caused a full convertAPIDataToFormValues reset
-          // that overwrote rows with potentially wrong values before Effect 2 could correct.
-          claimForceRebuildRef.current = true;
-          skipFormResetRef.current = true;
-          // Allow Effect 1 to re-load materials from the new server response
-          // (invalidateQueries returns fresh claimMaterials with updated prices).
-          claimHasSyncedRef.current = false;
+          // Force all rows to rebuild from server response — not just new ones. Also skips
+          // the full convertAPIDataToFormValues reset so the row values come from Effect 2
+          // instead (see resyncMaterialsFromAPI's own comment). Phase 5 unification
+          // (items-and-prices-refactor.md §15 step 8) replaces the three separate ref-pokes
+          // this used to do by hand (claimForceRebuildRef/skipFormResetRef/claimHasSyncedRef)
+          // with useItemsManager's own resyncMaterialsFromAPI, which performs the equivalent
+          // flips internally — plus also resets the archived-materials sync flags (job's
+          // hook always did this; claim's hand-written pokes never touched them), so a
+          // validate response with changed archivedMaterials now re-syncs those too instead
+          // of only ever growing archivedMaterials locally. Deliberate, not incidental.
+          resyncClaimMaterialsFromAPI(false);
           await validateClaimPricesMutation.mutateAsync({ claimId, payload });
           suppressDirtyRef.current = true;
           markAllValidated();
@@ -489,8 +468,7 @@ export default function ClaimOverview() {
       setArePricesValidated,
       setMessages,
       t,
-      claimForceRebuildRef,
-      claimHasSyncedRef,
+      resyncClaimMaterialsFromAPI,
       archivedMaterials,
     ],
   );
@@ -817,6 +795,12 @@ export default function ClaimOverview() {
       apiMaterialsEmpty: false,
       hasExistingDiagnostic: false,
       isValidating: false,
+      // Claim-only fields on the now-merged ItemsContextValue (Phase 5, items-and-prices-
+      // refactor.md §15) — this stubbed job-diagnostic-mirror context has no claim concept
+      // at all, inert defaults matching ItemsContext.tsx's baseDefaultItemsContextValue.
+      canDeleteRows: false,
+      archivedMaterials: [],
+      isClaimPending: false,
     }),
     [discountBase],
   );
@@ -873,6 +857,16 @@ export default function ClaimOverview() {
       isArchivedExpanded,
       setIsArchivedExpanded,
       isClaimPending,
+      // Job-only fields on the now-merged ItemsContextValue (Phase 5, items-and-prices-
+      // refactor.md §15) — claim has no equivalent concept, inert defaults matching
+      // ItemsContext.tsx's baseDefaultItemsContextValue.
+      apiMaterialsLoaded: false,
+      apiMaterialsEmpty: false,
+      hasExistingDiagnostic: false,
+      setRevisedRejectedRowPending: noop,
+      canArchiveOnDelete: false,
+      resyncMaterialsFromAPI: noop,
+      isValidating: false,
     }),
     [
       materials,

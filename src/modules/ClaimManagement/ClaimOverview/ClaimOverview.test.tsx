@@ -90,30 +90,38 @@ vi.mock("hooks/useClaimDecisionPermissions", () => ({
     canProductDetails: true,
   }),
 }));
-vi.mock("hooks/useDiagnosticsManager", () => ({
-  useDiagnosticsManager: vi.fn(),
-}));
-
-vi.mock("hooks/useClaimMaterialsManager", () => ({
-  useClaimMaterialsManager: () => ({
+// ClaimOverview.tsx calls useItemsManager twice (the editable claims tab, and the read-only
+// job-diagnostic mirror) — same mock stub answers both calls; these tests don't assert on the
+// job-diagnostic-mirror instance's return values (Phase 5 unification, items-and-prices-
+// refactor.md §15 step 8 replaced the old separate useDiagnosticsManager/
+// useClaimMaterialsManager calls with this one hook).
+vi.mock("hooks/itemsManager/useItemsManager", () => ({
+  useItemsManager: () => ({
     materials: [],
-    setMaterials: vi.fn(),
-    positionDropdownOptions: [],
-    allowedPositions: [],
-    addSpecialMaterialsAllowed: false,
-    markAllValidated: vi.fn(),
-    markRowDirty: vi.fn(),
-    discountBase: "NET_PRICE",
     archivedMaterials: [],
+    apiMaterialsLoaded: true,
+    apiMaterialsEmpty: false,
+    hasExistingDiagnostic: false,
+    setMaterials: vi.fn(),
+    allowedPositions: [],
     automaticRows: [],
+    positionDropdownOptions: [],
+    addSpecialMaterialsAllowed: false,
+    discountBase: "NET_PRICE",
+    getPositionConfig: vi.fn(),
+    getQuantityForPosition: vi.fn(),
     onAddRow: onAddRowMock,
     onDeleteRow: vi.fn(),
     onDeleteArchivedRow: vi.fn(),
     onRestoreRow: vi.fn(),
     onAddMaterials: vi.fn(),
     getExistingPartNumbers: () => new Set<string>(),
-    forceRebuildRef: { current: false },
-    hasSyncedRef: { current: false },
+    markAllValidated: vi.fn(),
+    markRowDirty: vi.fn(),
+    enableValidate: vi.fn(() => true),
+    resyncMaterialsFromAPI: vi.fn(),
+    setRevisedRejectedRowPending: vi.fn(),
+    canArchiveOnDelete: false,
   }),
 }));
 

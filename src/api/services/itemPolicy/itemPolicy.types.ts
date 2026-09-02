@@ -27,7 +27,11 @@ export interface PositionPolicy {
 }
 
 export interface EditabilityRule {
-  contextType: "jobType" | "claimStatus";
+  /** "isNewRow" lets a surface gate editability on whether a row was just added
+   *  (contextValue: "true" | "false") rather than on jobType/claimStatus — needed by
+   *  claim spare parts, whose real rule is "row is new" (see items-and-prices-refactor.md
+   *  §15 / Phase 5 unification plan), not a job-type or claim-status lookup. */
+  contextType: "jobType" | "claimStatus" | "isNewRow";
   contextValue: string;
   appliesToProtectedPositionsOnly: boolean;
   /** Whether price fields are editable at all in this context. Which specific field

@@ -5,8 +5,10 @@ import Area from "../../../../components/generics/Area/GenericArea.types";
 import "../SparePartsArea/SparePartsArea.scss";
 import "./ArchivedSparePartsArea.scss";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
-import ArchivedSparePartsRow from "../ArchivedSparePartsRow/ArchivedSparePartsRow";
+import ArchivedItemRow from "../SparePartsRow/ArchivedItemRow";
+import { jobArchivedItemRowSurfaceConfig } from "../SparePartsRow/jobArchivedItemRowSurfaceConfig";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
+import { enrichArchivedFieldOptions } from "hooks/itemsManager/materialsDerivation";
 
 function ArchivedSparePartsArea({ area }: Readonly<{ area: Area }>) {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
@@ -17,15 +19,7 @@ function ArchivedSparePartsArea({ area }: Readonly<{ area: Area }>) {
   const nameOfFirstField = area.fields[0]?.name || "";
   const isFirstArea = nameOfFirstField.includes("#0");
 
-  // Enrich area.fields with options from allFields context.
-  // area.fields in tabs state are separate objects from allFields; options are stamped
-  // only on the allFields copies, so we must merge them here for the dropdown to render.
-  const enrichedFields = area.fields.map((f) => {
-    if (f.subtype !== "archivedPosition") return f;
-    const contextField = allFields?.find((cf) => cf.name === f.name);
-    if (!contextField?.options?.length) return f;
-    return { ...f, options: contextField.options };
-  });
+  const enrichedFields = enrichArchivedFieldOptions(area.fields, allFields);
 
   const handleDeleteRow = useCallback(() => {
     onDeleteRow(area.name);
@@ -65,12 +59,11 @@ function ArchivedSparePartsArea({ area }: Readonly<{ area: Area }>) {
         </div>
       )}
       {isArchivedExpanded && (
-        <ArchivedSparePartsRow
+        <ArchivedItemRow
           key={nameOfFirstField}
           fields={enrichedFields}
-          onDeleteRow={handleDeleteRow}
           onRestoreRow={handleRestoreRow}
-          isDisabled={true}
+          config={jobArchivedItemRowSurfaceConfig}
         />
       )}
     </>
