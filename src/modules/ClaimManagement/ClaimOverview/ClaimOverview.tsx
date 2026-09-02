@@ -33,6 +33,10 @@ import { ImportedMaterial } from "hooks/useDiagnosticsManager";
 import { useItemsManager } from "hooks/itemsManager/useItemsManager";
 import { buildClaimItemsSurfaceConfig, materialItemToMaterial } from "./claimItemsSurfaceConfig";
 import {
+  serializeItemsForSubmit,
+  aggregatePriceSummary,
+} from "hooks/itemsManager/serializeItemsForSubmit";
+import {
   buildJobItemsSurfaceConfig,
   type JobApiMaterial,
 } from "modules/JobManagement/JobOverview/jobItemsSurfaceConfig";
@@ -69,16 +73,6 @@ function FormikClaimSync({
 
   return null;
 }
-function makeFieldGetter(
-  fields: Field[],
-  formValues: Record<string, unknown>,
-): (subtype: string) => unknown {
-  return (subtype) => {
-    const field = fields.find((af) => af.subtype === subtype);
-    return field ? formValues[field.name] : undefined;
-  };
-}
-
 export default function ClaimOverview() {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const queryClient = useQueryClient();
@@ -392,59 +386,14 @@ export default function ClaimOverview() {
             !a.name.includes("claimArchivedSpareParts"),
         );
 
-        const updatedMaterials = sparePartsAreas.map((area, idx) => {
-          const get = makeFieldGetter(area.fields, formValues);
-
-          const original = claimData.materials?.[idx];
-
-          return {
-            ...original,
-            position: (get("diagnosticPosition") as string) ?? original?.position ?? "",
-            partNumber: (get("diagnosticPartNumber") as string) ?? original?.partNumber ?? "",
-            description: (get("diagnosticDescription") as string) ?? original?.description ?? "",
-            jobType: (get("diagnosticType") as string) ?? original?.jobType ?? "",
-            quantity: Number(get("diagnosticQuantity") ?? original?.quantity ?? 1),
-            order: Number(get("diagnosticOrder") ?? original?.order ?? idx + 1),
-            isPriceSetManually: false,
-            price: {
-              unitPrice: Number(get("diagnosticUnitPrice") ?? 0),
-              suggestedNetPrice: Number(get("diagnosticSuggestedNetPrice") ?? 0),
-              netAmount: Number(get("diagnosticNetAmount") ?? 0),
-              tax: Number(get("diagnosticTax") ?? original?.price?.tax ?? 0),
-              taxAmount: Number(get("diagnosticTaxAmount") ?? 0),
-              grossAmount: Number(get("diagnosticGrossAmount") ?? 0),
-              discount: original?.price?.discount ?? 0,
-              totalAmount: Number(get("diagnosticTotalAmount") ?? 0),
-            },
-          };
-        });
+        const updatedMaterials = serializeItemsForSubmit(sparePartsAreas, formValues, claimData.materials);
 
         const sortedMaterials = updatedMaterials.toSorted(
           (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0),
         );
 
         // Compute price summary by aggregating all material rows
-        const claimPriceSummary = sortedMaterials.reduce(
-          (acc, m) => {
-            const price = (m as { price?: Record<string, number> }).price ?? {};
-            return {
-              netAmount: acc.netAmount + (Number(price.netAmount) || 0),
-              suggestedNetPrice: acc.suggestedNetPrice + (Number(price.suggestedNetPrice) || 0),
-              grossAmount: acc.grossAmount + (Number(price.grossAmount) || 0),
-              discount: acc.discount + (Number(price.discount) || 0),
-              totalAmount: acc.totalAmount + (Number(price.totalAmount) || 0),
-              taxAmount: acc.taxAmount + (Number(price.taxAmount) || 0),
-            };
-          },
-          {
-            netAmount: 0,
-            suggestedNetPrice: 0,
-            grossAmount: 0,
-            discount: 0,
-            totalAmount: 0,
-            taxAmount: 0,
-          },
-        );
+        const claimPriceSummary = aggregatePriceSummary(sortedMaterials);
 
         // Send full claim payload
         const payload = {
