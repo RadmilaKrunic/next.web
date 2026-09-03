@@ -14,11 +14,17 @@ import {
   postBulkApproveClaims,
   postClaimDecision,
   putClaimPrices,
+  postValidateClaimPrices,
   patchClaimStatusPending,
   ClaimDecisionPayload,
   BulkApproveClaimsPayload,
+  ClaimPriceValidateMockContext,
 } from "./action";
 import { PutClaimPricesRequest, PutClaimPricesResponse } from "./claims.types";
+import type {
+  ClaimPriceValidateRequest,
+  ClaimPricingResult,
+} from "api/services/itemPolicy/itemPolicy.types";
 
 export const useClaimById = (
   claimId: string,
@@ -94,6 +100,38 @@ export const useUpdateClaimPrices = (
       void queryClient.invalidateQueries({ queryKey: ["claim", args[1].claimId] });
       options?.onSuccess?.(...args);
     },
+  });
+};
+
+/**
+ * Fires POST /v1/claims/{claimId}/prices/validate (DEV-mode via priceEngineSimulator.ts,
+ * see postValidateClaimPrices). No built-in onSuccess — the caller (the debounced validate
+ * effect in useItemsManager.ts, Phase 3) needs full control over merging the response into
+ * materials state, same reasoning as useUpdateClaimPrices does NOT apply here: this call
+ * never persists anything, so there's no claim cache to invalidate.
+ */
+export const useValidateClaimPrices = (
+  options?: UseMutationOptions<
+    ClaimPricingResult,
+    Error,
+    {
+      claimId: string;
+      request: ClaimPriceValidateRequest;
+      mockContext: ClaimPriceValidateMockContext;
+    }
+  >,
+) => {
+  return useMutation({
+    mutationFn: ({
+      claimId,
+      request,
+      mockContext,
+    }: {
+      claimId: string;
+      request: ClaimPriceValidateRequest;
+      mockContext: ClaimPriceValidateMockContext;
+    }) => postValidateClaimPrices(claimId, request, mockContext),
+    ...options,
   });
 };
 

@@ -9,6 +9,7 @@ vi.mock("./action", () => ({
   postBulkApproveClaims: vi.fn().mockResolvedValue(undefined),
   postClaimDecision: vi.fn().mockResolvedValue(undefined),
   putClaimPrices: vi.fn().mockResolvedValue({ updated: true }),
+  postValidateClaimPrices: vi.fn().mockResolvedValue({ requestId: "req-1", claim: {} }),
   patchClaimStatusPending: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -18,6 +19,7 @@ import {
   useClaimDecision,
   useBulkApproveClaims,
   useUpdateClaimPrices,
+  useValidateClaimPrices,
 } from "./hooks";
 import {
   fetchClaimById,
@@ -25,6 +27,7 @@ import {
   postClaimDecision,
   postBulkApproveClaims,
   putClaimPrices,
+  postValidateClaimPrices,
 } from "./action";
 import { PutClaimPricesRequest } from "./claims.types";
 
@@ -144,5 +147,26 @@ describe("useUpdateClaimPrices", () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toBe("put failed");
+  });
+});
+
+describe("useValidateClaimPrices", () => {
+  it("calls postValidateClaimPrices on mutate", async () => {
+    vi.mocked(postValidateClaimPrices).mockResolvedValue({
+      requestId: "req-1",
+      claim: {},
+    } as never);
+    const { result } = renderHook(() => useValidateClaimPrices(), { wrapper: makeWrapper() });
+    result.current.mutate({
+      claimId: "c1",
+      request: { requestId: "req-1", jobId: "j1", diagnosticId: "d1", changedRows: [] },
+      mockContext: { baseline: { materials: [] }, discountBase: "GROSS_PRICE" },
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(postValidateClaimPrices).toHaveBeenCalledWith(
+      "c1",
+      { requestId: "req-1", jobId: "j1", diagnosticId: "d1", changedRows: [] },
+      { baseline: { materials: [] }, discountBase: "GROSS_PRICE" },
+    );
   });
 });
