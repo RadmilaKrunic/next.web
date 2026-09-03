@@ -60,7 +60,7 @@ Today, row count is owned by an imperative reconciler in `useDiagnosticsManager.
 | 2 | `ItemPolicyConfig` + resolvers, wired into existing components behind a feature flag | **Shipped, flag off by default** |
 | 3 | New `/prices/validate` endpoint; stop client-side price re-derivation | Proposed — spec finalized, local dev simulator built; blocked on the real backend endpoint |
 | 4 | Replace the incremental Area-cloning row reconciler with full recomputation from the materials array on every change (Formik/`GenericField`/field naming untouched) | **Shipped** |
-| 5 | Unify Job/Claim shared hook, context, row component, archived-row rendering | In progress |
+| 5 | Unify Job/Claim shared hook, context, row component, archived-row rendering | **Shipped** |
 | 6 | Cleanup / remove the feature flag | Proposed, not started |
 
 Phases 1–2 are pure typing/config additions with no behavior change, shipped independently of backend work. Phase 3 is the one phase genuinely blocked on the backend team; phases 4–5 can proceed in parallel against the already-agreed contract, using the local mock/simulator described on the **Frontend** page, so frontend work isn't idle waiting on the backend.
