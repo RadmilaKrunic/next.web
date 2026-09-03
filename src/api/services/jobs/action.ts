@@ -10,6 +10,13 @@ import { JobColumnConfiguration } from "modules/JobManagement/JobList/JobListTab
 import { AxiosResponse } from "axios";
 import { Attachment } from "components/ui/DocumentsModal/DocumentsModal";
 import { SpecialMaterial } from "modules/JobManagement/JobOverview/AddSpecialMaterialModal/SpecialMeterialItem/SpecialMaterialItem";
+import { simulatePriceValidate } from "api/services/itemPolicy/priceEngineSimulator";
+import type {
+  DiagnosticPricingPayload,
+  DiagnosticPricingResult,
+  PriceValidateRequest,
+} from "api/services/itemPolicy/itemPolicy.types";
+import type { discountBase as DiscountBase } from "api/services/countryConfiguration/countryConfiguration";
 
 export const fetchJobs = async (): Promise<Job[]> => {
   try {
@@ -325,6 +332,48 @@ export const postValidateAndSave = async (
     return response.data;
   } catch (error) {
     console.error(`Error validating and saving job ${jobId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Backend-mock context a real POST /v1/diagnostic/{jobId}/prices/validate call wouldn't need
+ * (the real backend holds its own last-saved state, see the "Backend merge semantics" section
+ * of proposals/items-and-prices-backend-api-spec.md) — required only so the DEV-mode branch
+ * below can simulate that merge locally via priceEngineSimulator.ts's simulatePriceValidate.
+ */
+export interface PriceValidateMockContext {
+  baseline: DiagnosticPricingPayload;
+  discountBase: DiscountBase;
+  summaryType?: string;
+}
+
+/**
+ * POST /v1/diagnostic/{jobId}/prices/validate (proposals/items-and-prices-backend-api-spec.md
+ * API-2). Not called by any component yet — see items-and-prices-refactor.md §15/Phase 3,
+ * gated behind ENABLE_PRICE_VALIDATE_API (src/utils/itemRulesResolver.ts). In DEV mode, backed
+ * by the local price-engine simulator (same dev-local-mock convention as
+ * itemPolicy/action.ts's getItemPolicyConfig) since the real endpoint doesn't exist yet.
+ */
+export const postValidateDiagnosticPrices = async (
+  jobId: string,
+  request: PriceValidateRequest,
+  mockContext: PriceValidateMockContext,
+): Promise<DiagnosticPricingResult> => {
+  if (import.meta.env.DEV) {
+    return simulatePriceValidate(
+      mockContext.baseline,
+      request,
+      mockContext.discountBase,
+      mockContext.summaryType,
+    );
+  }
+
+  try {
+    const response = await axiosClient.post(`/v1/diagnostic/${jobId}/prices/validate`, request);
+    return response.data;
+  } catch (error) {
+    console.error(`Error validating diagnostic prices for job ${jobId}:`, error);
     throw error;
   }
 };

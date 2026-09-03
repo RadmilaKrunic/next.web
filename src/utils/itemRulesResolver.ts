@@ -20,6 +20,19 @@ export type ItemSurface = "jobDiagnostics" | "claimDiagnosticsReadOnly" | "claim
  */
 export const ENABLE_ITEM_RULES_RESOLVER = false;
 
+/**
+ * Single kill-switch for the Phase 3 backend-authoritative price-validate call (see
+ * proposals/items-and-prices-refactor.md §10/§15 and
+ * proposals/items-and-prices-backend-api-spec.md API-2/API-3). Defaults to false: every
+ * gated call site keeps today's purely client-side price calculation
+ * (useSparePartPriceCalculation.ts), with no debounced validate call and no dependency on
+ * priceEngineSimulator.ts. Flip to true only after a real test run (unavailable in the
+ * sandbox this flag was built in) confirms the debounce/stale-response-discard/merge logic
+ * end-to-end — this phase ships dark, same rollout discipline as
+ * ENABLE_ITEM_RULES_RESOLVER above.
+ */
+export const ENABLE_PRICE_VALIDATE_API = false;
+
 /** Merges a surface's override on top of the base policy config (shallow, per top-level key). */
 export function selectConfigForSurface(
   config: ItemPolicyConfig,

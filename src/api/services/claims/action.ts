@@ -7,6 +7,13 @@ import {
 } from "../../../modules/ClaimManagement/ClaimList/ClaimList.types";
 import { ClaimColumnConfiguration } from "modules/ClaimManagement/ClaimList/ClaimListTable/ClaimListColumns.config";
 import { PutClaimPricesRequest, PutClaimPricesResponse } from "./claims.types";
+import { simulateClaimPriceValidate } from "api/services/itemPolicy/priceEngineSimulator";
+import type {
+  ClaimPriceValidateRequest,
+  ClaimPricingResult,
+  DiagnosticPricingPayload,
+} from "api/services/itemPolicy/itemPolicy.types";
+import type { discountBase as DiscountBase } from "api/services/countryConfiguration/countryConfiguration";
 
 export const fetchClaimById = async (claimId: string): Promise<ClaimItem> => {
   try {
@@ -78,6 +85,49 @@ export const putClaimPrices = async (
     return response.data;
   } catch (error) {
     console.error(`Error updating prices for claim ${claimId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Backend-mock context a real POST /v1/claims/{claimId}/prices/validate call wouldn't need
+ * (see the "Backend merge semantics" section of proposals/items-and-prices-backend-api-spec.md)
+ * — required only so the DEV-mode branch below can simulate that merge locally via
+ * priceEngineSimulator.ts's simulateClaimPriceValidate.
+ */
+export interface ClaimPriceValidateMockContext {
+  baseline: Pick<DiagnosticPricingPayload, "materials" | "archivedMaterials">;
+  discountBase: DiscountBase;
+  summaryType?: string;
+}
+
+/**
+ * POST /v1/claims/{claimId}/prices/validate (proposals/items-and-prices-backend-api-spec.md
+ * API-3). Not called by any component yet — see items-and-prices-refactor.md §15/Phase 3,
+ * gated behind ENABLE_PRICE_VALIDATE_API (src/utils/itemRulesResolver.ts). In DEV mode, backed
+ * by the local price-engine simulator (same dev-local-mock convention as
+ * postValidateDiagnosticPrices/itemPolicy/action.ts's getItemPolicyConfig) since the real
+ * endpoint doesn't exist yet.
+ */
+export const postValidateClaimPrices = async (
+  claimId: string,
+  request: ClaimPriceValidateRequest,
+  mockContext: ClaimPriceValidateMockContext,
+): Promise<ClaimPricingResult> => {
+  if (import.meta.env.DEV) {
+    return simulateClaimPriceValidate(
+      mockContext.baseline,
+      request,
+      mockContext.discountBase,
+      mockContext.summaryType,
+    );
+  }
+
+  try {
+    const response = await axiosClient.post(`/v1/claims/${claimId}/prices/validate`, request);
+    return response.data;
+  } catch (error) {
+    console.error(`Error validating claim prices for claim ${claimId}:`, error);
     throw error;
   }
 };
