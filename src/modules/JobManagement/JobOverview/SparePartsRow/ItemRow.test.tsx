@@ -580,6 +580,11 @@ describe("ItemRow (claimSpareParts) — full-row disablement divergence", () => 
       initialValues: baseValues("claimSpareParts"),
       contextOverrides: { isClaimPending: true },
     });
+    // isRowFullyDisabled takes priority over the type field's "stays editable" special case
+    // (see claimItemRowSurfaceConfig.ts's resolveFieldPermissions) — type must be disabled
+    // here too, not just the price field.
+    expect(screen.getByTestId(`field-${p}type`)).toBeDisabled();
+    expect(screen.getByTestId(`field-${p}partNumber`)).toBeDisabled();
     expect(screen.getByTestId(`field-${p}unitPrice`)).toBeDisabled();
   });
 
@@ -605,60 +610,81 @@ describe("ItemRow (claimSpareParts) — full-row disablement divergence", () => 
 });
 
 describe("ItemRow (jobDiagnostics) — delete icon visibility", () => {
+  // Every test here must call denyApproveCommercialGoodwill() and grant a real delete
+  // permission via userPermissions: with the default mocks (useHasPermission -> true,
+  // userPermissions -> ["ALL"]), renderRowActions' `hasApprovalFlyout &&
+  // hasApproveCommercialGoodwillPermission` branch unconditionally returns (the flyout or
+  // null) before canShowDeleteIcon() is ever reached, and canDeleteRow's own hasPermission
+  // check never matches the literal string "ALL" — both would mask (or, for the two
+  // "shows the icon" tests, outright break) what each test is actually meant to exercise.
+  // Mirrors SparePartsRow.test.tsx's "SparePartsRow delete icon visibility" describe, which
+  // does the same in every one of its tests.
   it("shows the delete icon and invokes onDeleteRow when clicked", () => {
+    denyApproveCommercialGoodwill();
     const onDeleteRow = vi.fn();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: baseValues("jobDiagnostics"),
       onDeleteRow,
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
     });
     const icon = screen.getByTestId("icon-delete");
     fireEvent.click(icon);
     expect(onDeleteRow).toHaveBeenCalledTimes(1);
   });
 
-  it("never shows a delete icon for the LA position", () => {
+  it("never shows a delete icon for the LA position, even with delete permission", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: baseValues("jobDiagnostics", {
         [`${NAME_STARTS_WITH.jobDiagnostics}position`]: "LA",
       }),
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_LABOUR_ITEMS],
     });
     expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
   });
 
   it("hides the delete icon while the job is on hold", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: { ...baseValues("jobDiagnostics"), isOnHold: true },
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
     });
     expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
   });
 
   it("hides the delete icon when the row is disabled and archiving on delete is not allowed", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: baseValues("jobDiagnostics"),
       isDisabled: true,
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
       contextOverrides: { canArchiveOnDelete: false },
     });
     expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
   });
 
   it("shows the delete icon when the row is disabled but archiving on delete is allowed", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: baseValues("jobDiagnostics"),
       isDisabled: true,
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
       contextOverrides: { canArchiveOnDelete: true },
     });
     expect(screen.getByTestId("icon-delete")).toBeInTheDocument();
   });
 
   it("hides row actions entirely for an automatic exchange row", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: { ...baseValues("jobDiagnostics"), actionType: "SPARE_PARTS_EXCHANGE" },
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
       contextOverrides: { automaticRows: ["SP"] },
     });
     expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
@@ -719,6 +745,10 @@ describe("ItemRow — position field options divergence", () => {
         [siblingField.name]: "SP",
       },
       fields: [...buildFields("jobDiagnostics"), siblingField],
+      // Grants SP's own hardcoded canDelete permission so computePositionOption's earlier
+      // permission check doesn't ALSO disable this option (for the wrong reason) — this
+      // test's own point is isolating the maxCount-based disabling.
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
       contextOverrides: {
         allowedPositions: [
           {
@@ -745,6 +775,7 @@ describe("ItemRow — position field options divergence", () => {
     const select = screen.getByTestId(`field-${NAME_STARTS_WITH.claimSpareParts}position`) as HTMLSelectElement;
     expect(select.options[0].value).toBe("");
     expect(select.options[0].disabled).toBe(true);
+    expect(select.options[0].text).toBe("SelectAnOption");
   });
 });
 
@@ -1887,9 +1918,11 @@ describe("ItemRow (claimSpareParts) — collapse behavior (ported)", () => {
   });
 
   it("does not toggle collapse when there are no expandable (populated) prices", () => {
+    // unitPrice must be genuinely absent (not 0) — Number(0) is finite, so a 0 value would
+    // still count as "populated" per hasPricesPopulated's own Number.isFinite check.
     renderItemRow({
       surface: "claimSpareParts",
-      initialValues: baseValues("claimSpareParts", { [`${p}unitPrice`]: "" }),
+      initialValues: baseValues("claimSpareParts", { [`${p}unitPrice`]: undefined }),
     });
     fireEvent.click(screen.getByTestId("icon-up"));
     expect(screen.getByTestId("icon-up")).toBeInTheDocument();
@@ -2249,17 +2282,22 @@ describe("ItemRow (claimSpareParts) — markRowDirty effect (ported)", () => {
 describe("ItemRow (claimSpareParts) — collapsed-state sync with arePricesValidated (ported)", () => {
   const p = NAME_STARTS_WITH.claimSpareParts;
 
+  // unitPrice (type "price") is only rendered by SparePartsCollapsedSection, and only when
+  // isRowCollapsed && hasPriceViewPermission — used here as the DOM-observable proxy for
+  // isRowCollapsed, since (unlike the original ClaimSparePartsRow.test.tsx, which mocked
+  // SparePartsCollapsedSection to expose isRowCollapsed directly as text) this file renders
+  // the real component tree.
   it("follows arePricesValidated when the user has price-view permission", () => {
     const view = renderItemRowRerenderable({
       surface: "claimSpareParts",
       initialValues: baseValues("claimSpareParts", { [`${p}unitPrice`]: 10 }),
       contextOverrides: { arePricesValidated: false },
     });
-    expect(screen.getByTestId("icon-down")).toBeInTheDocument();
+    expect(screen.queryByTestId(`field-${p}unitPrice`)).not.toBeInTheDocument();
 
     view.rerenderWithContext({ arePricesValidated: true });
 
-    expect(screen.getByTestId("icon-up")).toBeInTheDocument();
+    expect(screen.getByTestId(`field-${p}unitPrice`)).toBeInTheDocument();
   });
 
   it("does not sync collapsed state when the user lacks price-view permission", () => {
@@ -2269,12 +2307,13 @@ describe("ItemRow (claimSpareParts) — collapsed-state sync with arePricesValid
       initialValues: baseValues("claimSpareParts", { [`${p}unitPrice`]: 10 }),
       contextOverrides: { arePricesValidated: false },
     });
+    expect(screen.queryByTestId(`field-${p}unitPrice`)).not.toBeInTheDocument();
 
     view.rerenderWithContext({ arePricesValidated: true });
 
-    // Effect bails out early without permission, so state should not follow — no arrow icon
-    // renders at all when hasPriceViewPermission is false.
-    expect(screen.queryByTestId("icon-up")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("icon-down")).not.toBeInTheDocument();
+    // Effect bails out early without permission (isRowCollapsed never follows
+    // arePricesValidated), and SparePartsCollapsedSection itself also gates on
+    // hasPriceViewPermission — either way, the price field must stay hidden.
+    expect(screen.queryByTestId(`field-${p}unitPrice`)).not.toBeInTheDocument();
   });
 });
