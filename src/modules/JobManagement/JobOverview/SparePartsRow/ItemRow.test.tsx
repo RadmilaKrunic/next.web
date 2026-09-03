@@ -1887,9 +1887,11 @@ describe("ItemRow (claimSpareParts) — collapse behavior (ported)", () => {
   });
 
   it("does not toggle collapse when there are no expandable (populated) prices", () => {
+    // unitPrice must be genuinely absent (not 0) — Number(0) is finite, so a 0 value would
+    // still count as "populated" per hasPricesPopulated's own Number.isFinite check.
     renderItemRow({
       surface: "claimSpareParts",
-      initialValues: baseValues("claimSpareParts", { [`${p}unitPrice`]: "" }),
+      initialValues: baseValues("claimSpareParts", { [`${p}unitPrice`]: undefined }),
     });
     fireEvent.click(screen.getByTestId("icon-up"));
     expect(screen.getByTestId("icon-up")).toBeInTheDocument();
@@ -2249,17 +2251,22 @@ describe("ItemRow (claimSpareParts) — markRowDirty effect (ported)", () => {
 describe("ItemRow (claimSpareParts) — collapsed-state sync with arePricesValidated (ported)", () => {
   const p = NAME_STARTS_WITH.claimSpareParts;
 
+  // unitPrice (type "price") is only rendered by SparePartsCollapsedSection, and only when
+  // isRowCollapsed && hasPriceViewPermission — used here as the DOM-observable proxy for
+  // isRowCollapsed, since (unlike the original ClaimSparePartsRow.test.tsx, which mocked
+  // SparePartsCollapsedSection to expose isRowCollapsed directly as text) this file renders
+  // the real component tree.
   it("follows arePricesValidated when the user has price-view permission", () => {
     const view = renderItemRowRerenderable({
       surface: "claimSpareParts",
       initialValues: baseValues("claimSpareParts", { [`${p}unitPrice`]: 10 }),
       contextOverrides: { arePricesValidated: false },
     });
-    expect(screen.getByTestId("icon-down")).toBeInTheDocument();
+    expect(screen.queryByTestId(`field-${p}unitPrice`)).not.toBeInTheDocument();
 
     view.rerenderWithContext({ arePricesValidated: true });
 
-    expect(screen.getByTestId("icon-up")).toBeInTheDocument();
+    expect(screen.getByTestId(`field-${p}unitPrice`)).toBeInTheDocument();
   });
 
   it("does not sync collapsed state when the user lacks price-view permission", () => {
@@ -2269,12 +2276,13 @@ describe("ItemRow (claimSpareParts) — collapsed-state sync with arePricesValid
       initialValues: baseValues("claimSpareParts", { [`${p}unitPrice`]: 10 }),
       contextOverrides: { arePricesValidated: false },
     });
+    expect(screen.queryByTestId(`field-${p}unitPrice`)).not.toBeInTheDocument();
 
     view.rerenderWithContext({ arePricesValidated: true });
 
-    // Effect bails out early without permission, so state should not follow — no arrow icon
-    // renders at all when hasPriceViewPermission is false.
-    expect(screen.queryByTestId("icon-up")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("icon-down")).not.toBeInTheDocument();
+    // Effect bails out early without permission (isRowCollapsed never follows
+    // arePricesValidated), and SparePartsCollapsedSection itself also gates on
+    // hasPriceViewPermission — either way, the price field must stay hidden.
+    expect(screen.queryByTestId(`field-${p}unitPrice`)).not.toBeInTheDocument();
   });
 });
