@@ -25,9 +25,16 @@ import {
   postCustomerAnswer,
   postToggleJobHold,
   postValidateAndSave,
+  postValidateDiagnosticPrices,
   postDiagnostic,
   updateJobAttachments,
 } from "./action";
+
+vi.mock("api/services/itemPolicy/priceEngineSimulator", () => ({
+  simulatePriceValidate: vi.fn(),
+}));
+import { simulatePriceValidate } from "api/services/itemPolicy/priceEngineSimulator";
+const mockSimulatePriceValidate = vi.mocked(simulatePriceValidate);
 
 vi.mock("api/axios-client/axiosClient", () => ({
   default: {
@@ -342,5 +349,81 @@ describe("updateJobAttachments", () => {
   it("throws on error", async () => {
     mockPut.mockRejectedValueOnce(new Error("fail"));
     await expect(updateJobAttachments("J001", [])).rejects.toThrow("fail");
+  });
+});
+
+describe("postValidateDiagnosticPrices", () => {
+  const baseline = {
+    jobId: "J001",
+    actionType: "REPAIR",
+    jobType: "CHARGEABLE",
+    status: "IN_DIAGNOSTICS",
+    typeOfUsage: "PRIVATE",
+    faultCode: "F1",
+    faultCodeDescription: "desc",
+    faultCodeLabourQuantity: 1,
+    materials: [],
+    priceSummary: {
+      suggestedNetPrice: 0,
+      netAmount: 0,
+      taxAmount: 0,
+      grossAmount: 0,
+      discount: 0,
+      discountAmount: 0,
+      totalAmount: 0,
+    },
+  };
+  const request = { requestId: "req-1", changedRows: [] };
+
+  it("calls the price-engine simulator in DEV mode, without hitting the network", async () => {
+    const simulatedResult = { requestId: "req-1", diagnostic: { ...baseline, materials: [] } };
+    mockSimulatePriceValidate.mockReturnValueOnce(simulatedResult as never);
+
+    const result = await postValidateDiagnosticPrices("J001", request, {
+      baseline: baseline as never,
+      discountBase: "GROSS_PRICE",
+    });
+
+    expect(mockSimulatePriceValidate).toHaveBeenCalledWith(
+      baseline,
+      request,
+      "GROSS_PRICE",
+      undefined,
+    );
+    expect(mockPost).not.toHaveBeenCalled();
+    expect(result).toBe(simulatedResult);
+  });
+
+  it("posts to the real endpoint when not in DEV mode", async () => {
+    vi.stubEnv("DEV", false);
+    try {
+      mockPost.mockResolvedValueOnce({ data: { requestId: "req-1", diagnostic: baseline } });
+
+      const result = await postValidateDiagnosticPrices("J001", request, {
+        baseline: baseline as never,
+        discountBase: "GROSS_PRICE",
+      });
+
+      expect(mockPost).toHaveBeenCalledWith("/v1/diagnostic/J001/prices/validate", request);
+      expect(mockSimulatePriceValidate).not.toHaveBeenCalled();
+      expect(result).toEqual({ requestId: "req-1", diagnostic: baseline });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("throws on API error when not in DEV mode", async () => {
+    vi.stubEnv("DEV", false);
+    try {
+      mockPost.mockRejectedValueOnce(new Error("fail"));
+      await expect(
+        postValidateDiagnosticPrices("J001", request, {
+          baseline: baseline as never,
+          discountBase: "GROSS_PRICE",
+        }),
+      ).rejects.toThrow("fail");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

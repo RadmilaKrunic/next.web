@@ -22,6 +22,7 @@ vi.mock("./action", () => ({
   postFinishRepair: vi.fn().mockResolvedValue(undefined),
   postToolDelivered: vi.fn().mockResolvedValue(undefined),
   postValidateAndSave: vi.fn().mockResolvedValue({ valid: true }),
+  postValidateDiagnosticPrices: vi.fn().mockResolvedValue({ requestId: "req-1", diagnostic: {} }),
   postDiagnostic: vi.fn().mockResolvedValue(undefined),
   postCreateCostEstimate: vi.fn().mockResolvedValue(undefined),
   postCustomerAnswer: vi.fn().mockResolvedValue(undefined),
@@ -46,6 +47,7 @@ import {
   usePostFinishRepair,
   usePostToolDelivered,
   usePostValidateAndSave,
+  usePostValidateDiagnosticPrices,
   usePostDiagnostic,
   usePostCreateCostEstimate,
   usePostCustomerAnswer,
@@ -66,6 +68,7 @@ import {
   postFinishRepair,
   postToolDelivered,
   postValidateAndSave,
+  postValidateDiagnosticPrices,
   postDiagnostic,
   postCreateCostEstimate,
   postCustomerAnswer,
@@ -244,6 +247,29 @@ describe("usePostValidateAndSave", () => {
     const { result } = renderHook(() => usePostValidateAndSave(), { wrapper: makeWrapper() });
     result.current.mutate({ jobId: "j1", payload: {} });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+});
+
+describe("usePostValidateDiagnosticPrices", () => {
+  it("calls postValidateDiagnosticPrices on mutate", async () => {
+    vi.mocked(postValidateDiagnosticPrices).mockResolvedValue({
+      requestId: "req-1",
+      diagnostic: {},
+    } as never);
+    const { result } = renderHook(() => usePostValidateDiagnosticPrices(), {
+      wrapper: makeWrapper(),
+    });
+    result.current.mutate({
+      jobId: "j1",
+      request: { requestId: "req-1", changedRows: [] },
+      mockContext: { baseline: {} as never, discountBase: "GROSS_PRICE" },
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(postValidateDiagnosticPrices).toHaveBeenCalledWith(
+      "j1",
+      { requestId: "req-1", changedRows: [] },
+      { baseline: {}, discountBase: "GROSS_PRICE" },
+    );
   });
 });
 

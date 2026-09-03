@@ -20,8 +20,10 @@ import {
   postJobStatusStartDiagnostic,
   postToggleJobHold,
   postValidateAndSave,
+  postValidateDiagnosticPrices,
   postDiagnostic,
   type ValidateAndSaveResponse,
+  type PriceValidateMockContext,
   postRepairApproval,
   postInternalApprovalRequest,
   postStartReview,
@@ -34,6 +36,10 @@ import {
   postPurchaseDate,
 } from "./action";
 import { SpecialMaterial } from "modules/JobManagement/JobOverview/AddSpecialMaterialModal/SpecialMeterialItem/SpecialMaterialItem";
+import type {
+  DiagnosticPricingResult,
+  PriceValidateRequest,
+} from "api/services/itemPolicy/itemPolicy.types";
 
 export const useJobs = (options?: UseQueryOptions<Job[], Error>) => {
   return useQuery({
@@ -227,6 +233,33 @@ export const usePostValidateAndSave = (
   return useMutation({
     mutationFn: ({ jobId, payload }: { jobId: string; payload: Record<string, unknown> }) =>
       postValidateAndSave(jobId, payload),
+    ...options,
+  });
+};
+
+/**
+ * Fires POST /v1/diagnostic/{jobId}/prices/validate (DEV-mode via priceEngineSimulator.ts,
+ * see postValidateDiagnosticPrices). No built-in onSuccess — the caller (the debounced
+ * validate effect in useItemsManager.ts, Phase 3) needs full control over merging the
+ * response into materials state, same reasoning as usePostValidateAndSave above.
+ */
+export const usePostValidateDiagnosticPrices = (
+  options?: UseMutationOptions<
+    DiagnosticPricingResult,
+    Error,
+    { jobId: string; request: PriceValidateRequest; mockContext: PriceValidateMockContext }
+  >,
+) => {
+  return useMutation({
+    mutationFn: ({
+      jobId,
+      request,
+      mockContext,
+    }: {
+      jobId: string;
+      request: PriceValidateRequest;
+      mockContext: PriceValidateMockContext;
+    }) => postValidateDiagnosticPrices(jobId, request, mockContext),
     ...options,
   });
 };
