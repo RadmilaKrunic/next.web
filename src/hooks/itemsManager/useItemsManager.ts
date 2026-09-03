@@ -8,9 +8,18 @@ import type {
 import type { GenericOptionProps } from "components/generics/Field/GenericField.types";
 import {
   ENABLE_ITEM_RULES_RESOLVER,
+  ENABLE_PRICE_VALIDATE_API,
   resolveAllowedPositions,
   resolveAutomaticRows,
 } from "utils/itemRulesResolver";
+import { useDebouncedValue } from "hooks/useDebouncedValue";
+import { usePostValidateDiagnosticPrices } from "api/services/jobs/hooks";
+import { useValidateClaimPrices } from "api/services/claims/hooks";
+import type {
+  ChangedMaterialRow,
+  DiagnosticPricingPayload,
+  PriceSummary,
+} from "api/services/itemPolicy/itemPolicy.types";
 import Field from "components/generics/Field/GenericField.types";
 import Section from "components/generics/Section/GenericSection.types";
 import Area from "components/generics/Area/GenericArea.types";
@@ -36,6 +45,8 @@ import {
   buildMaterialsRowValues,
   withSpecialMaterialSpOption,
   deriveSparePartsAreasAndFields,
+  materialItemToMaterialRow,
+  applyMaterialRowResultsToMaterials,
 } from "./materialsDerivation";
 import type {
   MaterialItem,
@@ -1192,6 +1203,125 @@ export const useItemsManager = <TApiMaterial = unknown>({
     archivedForceRebuildRef.current = true;
     setArchivedMaterials((prev) => prev.filter((_, i) => i !== areaIndex));
   }, []);
+
+  // ── Phase 3: backend-authoritative price validation (mocked), off by default ─────────────
+  // See items-and-prices-refactor.md §15/§10 and proposals/items-and-prices-backend-api-spec.md
+  // API-2/API-3. Watches for any row marked dirty (isValidated: false — the same signal
+  // markRowDirty above already flips, and the exact semantic the wire contract's changedRows
+  // models), debounces 500ms (the spec's stated validate cadence, separate from
+  // useSparePartPriceCalculation.ts's own 300ms per-row optimistic-preview debounce — that hook
+  // is untouched by this phase and keeps doing local client math for instant feedback), then
+  // calls the surface-appropriate mock-backed validate endpoint and overwrites `materials` with
+  // the backend-confirmed response. Never fires for the claimDiagnosticsReadOnly surface (the
+  // read-only job-diagnostic mirror ClaimOverview.tsx embeds) — it has no editable rows and
+  // isn't the surface that owns saving/validating them.
+  const validateDiagnosticPricesMutation = usePostValidateDiagnosticPrices();
+  const validateClaimPricesMutation = useValidateClaimPrices();
+  const latestPriceValidateRequestIdRef = useRef<string>("");
+
+  const dirtyMaterialsSnapshot = JSON.stringify(
+    materials
+      .map((m, i) =>
+        m.isValidated === false
+          ? [i, m.position, m.quantity, m.unitPrice, m.tax, m.discount, m.netAmount, m.grossAmount, m.totalAmount]
+          : null,
+      )
+      .filter((entry) => entry !== null),
+  );
+  const debouncedDirtyMaterialsSnapshot = useDebouncedValue(dirtyMaterialsSnapshot, 500);
+
+  useEffect(() => {
+    if (!ENABLE_PRICE_VALIDATE_API) return;
+    const surface = configRef.current.identity.surface;
+    if (surface === "claimDiagnosticsReadOnly") return;
+    if (debouncedDirtyMaterialsSnapshot === "[]") return;
+
+    const currentMaterials = materialsRef.current;
+    const dirtyIndexes = currentMaterials
+      .map((m, i) => (m.isValidated === false ? i : -1))
+      .filter((i) => i !== -1);
+    if (dirtyIndexes.length === 0) return;
+
+    const id = configRef.current.resetKey;
+    if (!id) return;
+
+    const baselineMaterials = currentMaterials.map((m, i) => materialItemToMaterialRow(m, i));
+    const baselineArchived = archivedMaterialsRef.current.map((m, i) =>
+      materialItemToMaterialRow(m, i),
+    );
+    const changedRows: ChangedMaterialRow[] = dirtyIndexes.map((i) => ({
+      rowId: `row-${i}`,
+      row: baselineMaterials[i],
+    }));
+
+    const requestId = crypto.randomUUID();
+    latestPriceValidateRequestIdRef.current = requestId;
+
+    if (surface === "jobDiagnostics") {
+      const zeroSummary: PriceSummary = {
+        suggestedNetPrice: 0,
+        netAmount: 0,
+        taxAmount: 0,
+        grossAmount: 0,
+        discount: 0,
+        discountAmount: 0,
+        totalAmount: 0,
+      };
+      const baseline: DiagnosticPricingPayload = {
+        jobId: id,
+        actionType: configRef.current.currentActionType,
+        jobType: configRef.current.currentJobType,
+        status: configRef.current.jobStatus ?? "",
+        typeOfUsage: "",
+        faultCode: "",
+        faultCodeDescription: "",
+        faultCodeLabourQuantity: 0,
+        materials: baselineMaterials,
+        archivedMaterials: baselineArchived,
+        priceSummary: zeroSummary,
+      };
+      validateDiagnosticPricesMutation.mutate(
+        {
+          jobId: id,
+          request: { requestId, changedRows },
+          mockContext: { baseline, discountBase: discountBaseRef.current },
+        },
+        {
+          onSuccess: (result) => {
+            if (result.requestId !== latestPriceValidateRequestIdRef.current) return;
+            setMaterials((prev) =>
+              applyMaterialRowResultsToMaterials(prev, result.diagnostic.materials),
+            );
+          },
+        },
+      );
+    } else if (surface === "claimSpareParts") {
+      // jobId/diagnosticId are placeholders: the mock simulator never reads them (only
+      // changedRows/changedSummary drive simulateClaimPriceValidate's computation) — a real
+      // backend integration would need this hook's config to carry the claim's real jobId/
+      // diagnosticId, which isn't plumbed through ItemsSurfaceConfig today.
+      validateClaimPricesMutation.mutate(
+        {
+          claimId: id,
+          request: { requestId, jobId: "", diagnosticId: "", changedRows },
+          mockContext: {
+            baseline: { materials: baselineMaterials, archivedMaterials: baselineArchived },
+            discountBase: discountBaseRef.current,
+          },
+        },
+        {
+          onSuccess: (result) => {
+            if (result.requestId !== latestPriceValidateRequestIdRef.current) return;
+            setMaterials((prev) => applyMaterialRowResultsToMaterials(prev, result.claim.materials));
+          },
+        },
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: fires only when the
+    // debounced dirty-rows snapshot settles (mirroring useSparePartPriceCalculation.ts's own
+    // debounced-trigger-only dependency array); everything else is read fresh from refs at fire
+    // time, same pattern the rest of this hook's stable callbacks already use.
+  }, [debouncedDirtyMaterialsSnapshot]);
 
   return {
     materials,

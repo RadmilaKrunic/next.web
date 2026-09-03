@@ -3,6 +3,11 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: vi.fn(),
+  // usePostValidateDiagnosticPrices/useValidateClaimPrices (Phase 3, gated behind
+  // ENABLE_PRICE_VALIDATE_API, default false — see useItemsManager.priceValidate.test.ts for
+  // the dedicated flag-on suite) are called unconditionally by useItemsManager now, so
+  // useMutation needs a safe default here even though this file never exercises that path.
+  useMutation: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
 vi.mock("api/services/bareSalesRelation/hooks", () => ({

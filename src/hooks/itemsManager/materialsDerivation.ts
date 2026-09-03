@@ -9,6 +9,7 @@ import { setDuplicatedArea, mapFieldToFieldMapping } from "components/generics/u
 import { calculatePrices } from "utils/priceCalculator";
 import type { TFunction } from "i18next";
 import type { MaterialItem } from "./itemsManager.types";
+import type { MaterialRow, MaterialRowResult } from "api/services/itemPolicy/itemPolicy.types";
 
 // Pure material-row derivation helpers shared by the job (useDiagnosticsManager.ts) and
 // claim (useClaimMaterialsManager.ts, Phase 5) item-row managers. Moved out of
@@ -351,3 +352,74 @@ export function enrichArchivedFieldOptions(areaFields: Field[], allFields: Field
     return { ...f, options: contextField.options };
   });
 }
+
+// Phase 3 (items-and-prices-refactor.md §15/§10, backend-authoritative price validation,
+// gated behind ENABLE_PRICE_VALIDATE_API) — pure MaterialItem <-> wire-contract MaterialRow
+// conversion, shared by job and claim since both already reduce to the same client-side
+// MaterialItem shape (Phase 5 unification). rowId is synthesized per-call from the row's
+// current array index (never stored on MaterialItem) — this codebase's rows are deliberately
+// positional/index-based throughout (see items-and-prices-refactor.md's row-rendering notes),
+// same convention priceEngineSimulator.ts's own simulateClaimPricesSave already uses.
+
+/** unitPrice <= 0 means "not yet priced" — mirrors computePricesForItem's own gate above and
+ *  the wire contract's stated meaning for MaterialRow.price === null ("not yet priced, please
+ *  calculate"). */
+export const materialItemToMaterialRow = (item: MaterialItem, index: number): MaterialRow => ({
+  rowId: `row-${index}`,
+  position: item.position,
+  partNumber: item.partNumber,
+  description: item.description,
+  type: item.type,
+  quantity: item.quantity,
+  status: item.status,
+  isPriceSetManually: item.isPriceSetManually ?? false,
+  isValidated: item.isValidated ?? false,
+  price:
+    item.unitPrice > 0
+      ? {
+          unitPrice: item.unitPrice,
+          netAmount: item.netAmount,
+          tax: item.tax,
+          grossAmount: item.grossAmount,
+          discount: item.discount,
+          discountAmount: item.discountAmount,
+          taxAmount: item.taxAmount,
+          totalAmount: item.totalAmount,
+          suggestedNetPrice: item.suggestedNetPrice ?? 0,
+        }
+      : null,
+});
+
+/** Merges a validate response's MaterialRowResult[] back onto the current MaterialItem[] by
+ *  positional index — safe because the merge that produced the response preserves the
+ *  baseline's original row order (see priceEngineSimulator.ts's computeMergedRows: baseline
+ *  rows are inserted into the merge Map first, and re-setting an existing Map key never moves
+ *  its iteration position), and every call sends the FULL current materials[] as the baseline,
+ *  so response.length === materials.length. A row missing from the response (shouldn't happen,
+ *  but the API contract doesn't guarantee array identity) is left untouched rather than dropped. */
+export const applyMaterialRowResultsToMaterials = (
+  materials: MaterialItem[],
+  results: MaterialRowResult[],
+): MaterialItem[] =>
+  materials.map((item, index) => {
+    const result = results[index];
+    if (!result) return item;
+    const price = result.price;
+    return {
+      ...item,
+      isValidated: result.changeStatus === "confirmed",
+      ...(price
+        ? {
+            unitPrice: price.unitPrice,
+            netAmount: price.netAmount,
+            tax: price.tax,
+            grossAmount: price.grossAmount,
+            discount: price.discount,
+            discountAmount: price.discountAmount,
+            taxAmount: price.taxAmount,
+            totalAmount: price.totalAmount,
+            suggestedNetPrice: price.suggestedNetPrice,
+          }
+        : {}),
+    };
+  });
