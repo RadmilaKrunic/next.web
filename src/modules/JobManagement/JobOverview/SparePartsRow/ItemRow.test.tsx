@@ -580,6 +580,11 @@ describe("ItemRow (claimSpareParts) — full-row disablement divergence", () => 
       initialValues: baseValues("claimSpareParts"),
       contextOverrides: { isClaimPending: true },
     });
+    // isRowFullyDisabled takes priority over the type field's "stays editable" special case
+    // (see claimItemRowSurfaceConfig.ts's resolveFieldPermissions) — type must be disabled
+    // here too, not just the price field.
+    expect(screen.getByTestId(`field-${p}type`)).toBeDisabled();
+    expect(screen.getByTestId(`field-${p}partNumber`)).toBeDisabled();
     expect(screen.getByTestId(`field-${p}unitPrice`)).toBeDisabled();
   });
 
@@ -605,60 +610,81 @@ describe("ItemRow (claimSpareParts) — full-row disablement divergence", () => 
 });
 
 describe("ItemRow (jobDiagnostics) — delete icon visibility", () => {
+  // Every test here must call denyApproveCommercialGoodwill() and grant a real delete
+  // permission via userPermissions: with the default mocks (useHasPermission -> true,
+  // userPermissions -> ["ALL"]), renderRowActions' `hasApprovalFlyout &&
+  // hasApproveCommercialGoodwillPermission` branch unconditionally returns (the flyout or
+  // null) before canShowDeleteIcon() is ever reached, and canDeleteRow's own hasPermission
+  // check never matches the literal string "ALL" — both would mask (or, for the two
+  // "shows the icon" tests, outright break) what each test is actually meant to exercise.
+  // Mirrors SparePartsRow.test.tsx's "SparePartsRow delete icon visibility" describe, which
+  // does the same in every one of its tests.
   it("shows the delete icon and invokes onDeleteRow when clicked", () => {
+    denyApproveCommercialGoodwill();
     const onDeleteRow = vi.fn();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: baseValues("jobDiagnostics"),
       onDeleteRow,
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
     });
     const icon = screen.getByTestId("icon-delete");
     fireEvent.click(icon);
     expect(onDeleteRow).toHaveBeenCalledTimes(1);
   });
 
-  it("never shows a delete icon for the LA position", () => {
+  it("never shows a delete icon for the LA position, even with delete permission", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: baseValues("jobDiagnostics", {
         [`${NAME_STARTS_WITH.jobDiagnostics}position`]: "LA",
       }),
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_LABOUR_ITEMS],
     });
     expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
   });
 
   it("hides the delete icon while the job is on hold", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: { ...baseValues("jobDiagnostics"), isOnHold: true },
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
     });
     expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
   });
 
   it("hides the delete icon when the row is disabled and archiving on delete is not allowed", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: baseValues("jobDiagnostics"),
       isDisabled: true,
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
       contextOverrides: { canArchiveOnDelete: false },
     });
     expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
   });
 
   it("shows the delete icon when the row is disabled but archiving on delete is allowed", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: baseValues("jobDiagnostics"),
       isDisabled: true,
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
       contextOverrides: { canArchiveOnDelete: true },
     });
     expect(screen.getByTestId("icon-delete")).toBeInTheDocument();
   });
 
   it("hides row actions entirely for an automatic exchange row", () => {
+    denyApproveCommercialGoodwill();
     renderItemRow({
       surface: "jobDiagnostics",
       initialValues: { ...baseValues("jobDiagnostics"), actionType: "SPARE_PARTS_EXCHANGE" },
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
       contextOverrides: { automaticRows: ["SP"] },
     });
     expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
@@ -719,6 +745,10 @@ describe("ItemRow — position field options divergence", () => {
         [siblingField.name]: "SP",
       },
       fields: [...buildFields("jobDiagnostics"), siblingField],
+      // Grants SP's own hardcoded canDelete permission so computePositionOption's earlier
+      // permission check doesn't ALSO disable this option (for the wrong reason) — this
+      // test's own point is isolating the maxCount-based disabling.
+      userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
       contextOverrides: {
         allowedPositions: [
           {
@@ -745,6 +775,7 @@ describe("ItemRow — position field options divergence", () => {
     const select = screen.getByTestId(`field-${NAME_STARTS_WITH.claimSpareParts}position`) as HTMLSelectElement;
     expect(select.options[0].value).toBe("");
     expect(select.options[0].disabled).toBe(true);
+    expect(select.options[0].text).toBe("SelectAnOption");
   });
 });
 
