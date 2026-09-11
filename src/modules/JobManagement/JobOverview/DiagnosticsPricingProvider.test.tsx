@@ -52,6 +52,9 @@ function Probe() {
       <button type="button" onClick={() => void setFieldValue(`${PREFIX}_diagnosticQuantity`, 3)}>
         change qty
       </button>
+      <button type="button" onClick={() => void setFieldValue(`${PREFIX}_diagnosticPosition`, "PN")}>
+        change position
+      </button>
     </div>
   );
 }
@@ -92,7 +95,7 @@ describe("DiagnosticsPricingProvider", () => {
     renderProvider(false);
     expect(screen.getByTestId("enabled")).toHaveTextContent("false");
     settle();
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "change qty" }));
     settle();
     expect(mutate).not.toHaveBeenCalled();
   });
@@ -103,18 +106,31 @@ describe("DiagnosticsPricingProvider", () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
-  it("requests a recalculation after a price input settles", () => {
+  it("requests a recalculation after a price input settles, with the field-specific trigger", () => {
     renderProvider(true);
     settle();
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "change qty" }));
     settle();
 
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(mutate.mock.calls[0][0]).toMatchObject({
       actionType: "REPAIR",
       jobType: "CHARGEABLE",
+      trigger: "quantity",
+      triggeredByOrder: 0,
       materials: [{ order: 0, position: "SP", quantity: 3, unitPrice: 10 }],
     });
+  });
+
+  it("falls back to the load trigger for a non-price-field change (e.g. position)", () => {
+    renderProvider(true);
+    settle();
+    fireEvent.click(screen.getByRole("button", { name: "change position" }));
+    settle();
+
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate.mock.calls[0][0]).toMatchObject({ trigger: "load" });
+    expect(mutate.mock.calls[0][0].triggeredByOrder).toBeUndefined();
   });
 
   it("writes backend prices back into Formik", () => {

@@ -4,11 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 vi.mock("./action", () => ({
-  getItemPolicyConfig: vi.fn().mockResolvedValue({ countryCode: "TR" }),
+  getItemPolicy: vi.fn().mockResolvedValue({ countryCode: "TR" }),
 }));
 
-import { useItemPolicyConfig } from "./hooks";
-import { getItemPolicyConfig } from "./action";
+import { useItemPolicyQuery } from "./hooks";
+import { getItemPolicy } from "./action";
 
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -16,16 +16,23 @@ function makeWrapper() {
     React.createElement(QueryClientProvider, { client: qc }, children);
 }
 
-describe("useItemPolicyConfig", () => {
-  it("fetches item policy config for the given country code", async () => {
-    const { result } = renderHook(() => useItemPolicyConfig("TR"), { wrapper: makeWrapper() });
+describe("useItemPolicyQuery", () => {
+  it("fetches item policy for the given country code", async () => {
+    const { result } = renderHook(() => useItemPolicyQuery("TR"), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(getItemPolicyConfig).toHaveBeenCalledWith("TR");
+    expect(getItemPolicy).toHaveBeenCalledWith("TR");
     expect(result.current.data).toEqual({ countryCode: "TR" });
   });
 
   it("is disabled when countryCode is empty", () => {
-    const { result } = renderHook(() => useItemPolicyConfig(""), { wrapper: makeWrapper() });
+    const { result } = renderHook(() => useItemPolicyQuery(""), { wrapper: makeWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("is disabled when enabled=false is passed explicitly", () => {
+    const { result } = renderHook(() => useItemPolicyQuery("TR", false), {
+      wrapper: makeWrapper(),
+    });
     expect(result.current.fetchStatus).toBe("idle");
   });
 });

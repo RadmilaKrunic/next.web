@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Field from "components/generics/Field/GenericField.types";
 import Section from "components/generics/Section/GenericSection.types";
 import { useClaimMaterialsManager } from "./useClaimMaterialsManager";
+import { buildMaterialsRowValues } from "hooks/useDiagnosticsManager";
 
 vi.mock("components/generics/utils", () => ({
   setDuplicatedArea: vi.fn((area, index, tabName) => ({
@@ -25,6 +26,9 @@ vi.mock("components/generics/utils", () => ({
 
 vi.mock("hooks/useDiagnosticsManager", () => ({
   buildRowValues: vi.fn(() => ({
+    "claims_claimSpareParts#0_sparePartNumber": "PN-1",
+  })),
+  buildMaterialsRowValues: vi.fn(() => ({
     "claims_claimSpareParts#0_sparePartNumber": "PN-1",
   })),
 }));
@@ -395,6 +399,48 @@ describe("useClaimMaterialsManager", () => {
     expect(result.current.materials[0].isValidated).toBe(true);
     expect(result.current.materials[1].isValidated).toBe(false);
     expect(setArePricesValidated).toHaveBeenCalledWith(false);
+  });
+
+  it("derives row values via the shared full-recomputation helper, not an inline incremental reuse", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(["user"], { countryCode: "ZA", permissions: [] });
+    const setInitialFormValues = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useClaimMaterialsManager({
+          claimId: "C1",
+          claimMaterials: loadedClaimMaterials as never,
+          currentActionType: "REPAIR",
+          currentJobType: "WARRANTY",
+          tabs: [claimsTab],
+          setTabs: vi.fn(),
+          allFields,
+          setAllFields: vi.fn(),
+          setInitialFormValues,
+          skipFormResetRef: { current: false },
+          formValuesRef: { current: {} },
+          arePricesValidated: false,
+          setArePricesValidated: vi.fn(),
+          readOnly: false,
+          isResyncingRef: { current: false },
+        }),
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(1));
+
+    // Every row 0..N-1 is re-derived from `materials` on each change (job's Phase 4 fix,
+    // ported here) rather than claim's own hand-rolled "reuse form values when idx <
+    // currentCount" logic, which left stale values in place after a row shifted position.
+    expect(buildMaterialsRowValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        materials: expect.arrayContaining([expect.objectContaining({ partNumber: "P-1" })]),
+        currentCount: expect.any(Number),
+        forceRebuild: expect.any(Boolean),
+      }),
+    );
+    expect(setInitialFormValues).toHaveBeenCalled();
   });
 
   it("preserves reimbursement payment method when archiving a loaded material", async () => {

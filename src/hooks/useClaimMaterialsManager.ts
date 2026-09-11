@@ -15,6 +15,7 @@ import {
   type MaterialItem,
   type ImportedMaterial,
   buildRowValues,
+  buildMaterialsRowValues,
 } from "hooks/useDiagnosticsManager";
 import type { Material } from "modules/ClaimManagement/ClaimOverview/Claims.types";
 import { calculatePrices } from "utils/priceCalculator";
@@ -381,22 +382,17 @@ export const useClaimMaterialsManager = ({
       removeNames,
     );
 
-    let rowValues: Record<string, unknown> = {};
-    materials.forEach((item, idx) => {
-      const area = finalClaimsAreas[idx];
-      if (!area) return;
-      const areaFieldNames = new Set(area.fields.map((af) => af.name));
-      const areaFields = allUpdatedFields.filter((f) => areaFieldNames.has(f.name));
-      if (idx < currentCount && !forceRebuildRef.current) {
-        const existingValues = Object.fromEntries(
-          areaFields
-            .filter((f) => f.name in formValuesRef.current)
-            .map((f) => [f.name, formValuesRef.current[f.name]]),
-        );
-        rowValues = { ...rowValues, ...existingValues };
-      } else {
-        rowValues = { ...rowValues, ...buildRowValues(areaFields, item) };
-      }
+    // Full recomputation, not incremental patching: every row 0..N-1 is rebuilt from the
+    // current `materials` on every change (shared with job's useDiagnosticsManager, see its
+    // Effect 3) so a row that "moved" after a delete/reorder gets *its* material's values,
+    // not whatever stale form values happened to be sitting at that row index.
+    const rowValues = buildMaterialsRowValues({
+      materials,
+      areas: finalClaimsAreas,
+      fields: allUpdatedFields,
+      formValues: formValuesRef.current,
+      currentCount,
+      forceRebuild: forceRebuildRef.current,
     });
 
     const keepClaimArea = (a: Area) => !removeNames.has(a.name);
