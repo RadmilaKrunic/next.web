@@ -55,11 +55,8 @@ import {
 } from "hooks/diagnostics/rowValues";
 import {
   RESETTABLE_MATERIAL_STATUSES,
-  shiftSparePartsKey,
-  shiftSparePartsArea,
-  reindexSparePartsValues,
   syncMaterialsWithForm,
-} from "hooks/diagnostics/rowReindexing";
+} from "hooks/diagnostics/materialsFormSync";
 
 // Re-exported for external consumers (SparePartsRow, ClaimSparePartsRow, SummaryArea,
 // JobOverview, ClaimContext, DiagnosticsContext, this file's own test suite) — the
@@ -912,87 +909,59 @@ export const useDiagnosticsManager = ({
 
   const onDeleteRow = useCallback(
     (areaName: string) => {
-      const currentTabs = tabsRef.current;
-      const currentFields = allFieldsRef.current ?? [];
-
-      const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
+      const diagnosticTab = tabsRef.current.find((t) => t.name === "diagnosticData");
       if (!diagnosticTab) return;
 
-      // ── Delete of an active spare-parts row ──────────────────────────────
       const sparePartsAreas = diagnosticTab.areas.filter(
         (a) => a.isMultiple && a.name.includes("diagnosticsSpareParts"),
       );
       const areaIndex = sparePartsAreas.findIndex((a) => a.name === areaName);
       if (areaIndex === -1) return;
 
+      // Sync every row's latest form edits into `materials` before removing one, so
+      // Effect 3's forced full recomputation below has accurate values for every
+      // surviving row — not just the ones whose position happens to stay unchanged.
+      const syncedMaterials = syncMaterialsWithForm(materialsRef.current, formValuesRef.current);
+
       // Archive the row when the current status is not in the permanent-delete set
-      if (!isPermanentDeleteStatus(itemPolicyRef.current, jobStatusRef.current)) {
-        const syncedMaterials = syncMaterialsWithForm(materialsRef.current, formValuesRef.current);
-        const deletedMaterial = syncedMaterials[areaIndex];
-        if (deletedMaterial) {
-          archivedForceRebuildRef.current = true;
-          pendingArchivedDeletionsRef.current += 1;
-          setArchivedMaterials((prev) => [...prev, deletedMaterial]);
-        }
+      const deletedMaterial = syncedMaterials[areaIndex];
+      if (deletedMaterial && !isPermanentDeleteStatus(itemPolicyRef.current, jobStatusRef.current)) {
+        archivedForceRebuildRef.current = true;
+        pendingArchivedDeletionsRef.current += 1;
+        setArchivedMaterials((prev) => [...prev, deletedMaterial]);
       }
 
-      const areaToRemove = sparePartsAreas[areaIndex];
-      const fieldNamesToRemove = new Set(areaToRemove.fields.map((f) => f.name));
+      const remainingMaterials = syncedMaterials.filter((_, i) => i !== areaIndex);
 
-      // Remove deleted row keys then compact #N → #(N-1) for all higher indices.
-      // This keeps form values, allFields names and area names in sync after deletion.
-      const valuesWithoutDeleted = { ...formValuesRef.current };
-      fieldNamesToRemove.forEach((name) => {
-        delete valuesWithoutDeleted[name];
-      });
-      const compactedValues = reindexSparePartsValues(valuesWithoutDeleted, areaIndex);
-      const compactedFields = currentFields
-        .filter((f) => !fieldNamesToRemove.has(f.name))
-        .map((f) => {
-          const shifted = shiftSparePartsKey(f.name, areaIndex);
-          if (shifted === null || shifted === f.name) return f;
-          return mapFieldToFieldMapping({ ...f, name: shifted });
+      // Effect 3 owns deriving areas/allFields/initialFormValues from `materials` for any
+      // nonzero row count — but it always bails out immediately when `materials.length ===
+      // 0` (that guard also protects the still-empty template area on initial mount, before
+      // Effect 2 has populated any row, so it can't be loosened just for this case). Deleting
+      // the very last row is the one transition Effect 3 can never react to on its own —
+      // handle it directly here, a plain wholesale clear since nothing survives to reindex.
+      if (remainingMaterials.length === 0) {
+        const fieldNamesToRemove = new Set(
+          sparePartsAreas.flatMap((a) => a.fields.map((f) => f.name)),
+        );
+        const removeAreaNames = new Set(sparePartsAreas.map((a) => a.name));
+        skipFormResetRef.current = true;
+        setAllFields((prev) => (prev ?? []).filter((f) => !fieldNamesToRemove.has(f.name)));
+        setTabs((prev) => prev.map((tab) => removeDiagnosticsAreas(tab, removeAreaNames)));
+        setInitialFormValues?.((prev) => {
+          const next = { ...prev };
+          fieldNamesToRemove.forEach((name) => delete next[name]);
+          return next;
         });
-
-      const compactedTabs = currentTabs.map((tab) => {
-        if (tab.name !== "diagnosticData") return tab;
-        const compactedAreas = tab.areas.flatMap((area) => {
-          if (area.name === areaName) return [];
-          const shiftedAreaName = shiftSparePartsKey(area.name, areaIndex);
-          if (shiftedAreaName === null) return [];
-          return [shiftSparePartsArea(area, areaIndex)];
-        });
-        return { ...tab, areas: compactedAreas };
-      });
-
-      skipFormResetRef.current = true;
-      Object.keys(formValuesRef.current).forEach((key) => {
-        const shifted = shiftSparePartsKey(key, areaIndex);
-        if (shifted === null) {
-          delete formValuesRef.current[key];
-        } else if (shifted !== key) {
-          formValuesRef.current[shifted] = formValuesRef.current[key];
-          delete formValuesRef.current[key];
-        }
-      });
-      setInitialFormValues?.(compactedValues);
-      setAllFields(compactedFields);
-      setTabs(compactedTabs);
-      setMaterials((prev) => {
-        const updatedMaterials = prev.filter((_, i) => i !== areaIndex);
-        const syncedMaterials = syncMaterialsWithForm(updatedMaterials, compactedValues);
-        return normalizeMaterialOrders(syncedMaterials);
-      });
+      } else {
+        // Row identities are shifting by one — Effect 3's normal "reuse existing values
+        // when position matches" heuristic isn't safe to rely on here, so force it to
+        // rebuild every row fresh from `materials` instead.
+        forceRebuildRef.current = true;
+      }
+      setMaterials(normalizeMaterialOrders(remainingMaterials));
       setArePricesValidated(false);
     },
-    [
-      setInitialFormValues,
-      setAllFields,
-      setTabs,
-      formValuesRef,
-      skipFormResetRef,
-      setArePricesValidated,
-    ],
+    [setAllFields, setTabs, setInitialFormValues, formValuesRef, skipFormResetRef, setArePricesValidated],
   );
 
   const onAddMaterials = useCallback(
