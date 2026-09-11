@@ -46,6 +46,9 @@ import { Message } from "contexts/messagescontext";
 import { useAccessoriesManager } from "hooks/useAccessoriesManager";
 import { useBreadcrumbs } from "hooks/useBreadcrumbs";
 import { useDiagnosticData } from "hooks/useDiagnosticData";
+import { useFeatureFlag } from "hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "utils/featureFlags";
+import { DiagnosticsPricingProvider } from "./DiagnosticsPricingProvider";
 import {
   postMessage,
   getCostEstimationPdf,
@@ -90,11 +93,10 @@ import { PositionItem } from "./ExplosionDiagram/ExplosionDrawing.types";
 import { SpecialMaterial } from "./AddSpecialMaterialModal/SpecialMeterialItem/SpecialMaterialItem";
 import {
   getBoschInternalPending,
+  useDiagnosticsManager,
   getChargeablePendingInfo,
   hasWarrantyOrProServiceItems,
 } from "hooks/useDiagnosticsManager";
-import { useItemsManager } from "hooks/itemsManager/useItemsManager";
-import { buildJobItemsSurfaceConfig, type JobApiMaterial } from "./jobItemsSurfaceConfig";
 import { useFormInitialization } from "hooks/useFormInitialization";
 import {
   useActionWithValidation,
@@ -102,8 +104,6 @@ import {
 } from "hooks/useActionWithValidation";
 import { usePositionDropdownSync } from "hooks/usePositionDropdownSync";
 import { useSectionEditing } from "hooks/useSectionEditing";
-import { useItemPolicyConfig } from "api/services/itemPolicy/hooks";
-import { selectConfigForSurface } from "utils/itemRulesResolver";
 import { DiagnosticsContext } from "./DiagnosticsContext";
 import {
   SUMMARY_TYPE_FILTER,
@@ -150,6 +150,18 @@ function patchPayloadFromCache(
   if (cached.diagnosticId && !payload.diagnosticId) {
     payload.diagnosticId = cached.diagnosticId;
   }
+}
+
+function cleanArchivedMaterials(payload: Record<string, unknown>): Record<string, unknown> {
+  if (Array.isArray(payload.archivedMaterials)) {
+    payload.archivedMaterials = (payload.archivedMaterials as Record<string, unknown>[]).filter(
+      (m) => m !== null && m !== undefined && Boolean(m.partNumber),
+    );
+  }
+  if (!Array.isArray(payload.archivedMaterials) || payload.archivedMaterials.length === 0) {
+    delete payload.archivedMaterials;
+  }
+  return payload;
 }
 
 const buildJobOverviewWarrantyCheckPayload = (
@@ -241,18 +253,6 @@ export default function JobOverview() {
   ]);
   const jobOverviewForm =
     uiConfigurationForms?.forms.find((form) => form.name === "JobOverview") ?? null;
-  // Frontend-policy overlay (see proposals/items-and-prices-refactor.md §4). The backing
-  // endpoint doesn't exist in production yet, so this is intentionally resilient to
-  // failure: `retry: false` avoids hammering a 404, and consumers (SparePartsRow) fall
-  // back to their prior hardcoded defaults whenever `itemPolicy` is undefined.
-  const itemPolicyQuery = useItemPolicyConfig(userData?.countryCode ?? "", { retry: false });
-  const itemPolicy = useMemo(
-    () =>
-      itemPolicyQuery.data
-        ? selectConfigForSurface(itemPolicyQuery.data, "jobDiagnostics")
-        : undefined,
-    [itemPolicyQuery.data],
-  );
   const { jobId } = useParams<{ jobId: string }>();
   // Invalidate on every open so stale cache does not serve outdated job/diagnostic data.
   useEffect(() => {
@@ -262,6 +262,9 @@ export default function JobOverview() {
   }, [jobId, queryClient]);
   const analytics = useAnalytics();
   const tabFromHash = globalThis.location.hash.substring(1);
+  const isBackendDiagnosticsEnabled = useFeatureFlag(FEATURE_FLAGS.DIAGNOSTICS_BACKEND_DRIVEN);
+  const isBackendDiagnosticsEnabledRef = useRef(isBackendDiagnosticsEnabled);
+  isBackendDiagnosticsEnabledRef.current = isBackendDiagnosticsEnabled;
 
   const postMessageMutation = useMutation({
     mutationFn: postMessage,
@@ -359,7 +362,11 @@ export default function JobOverview() {
       const supportedWarrantyType = checkResult.supportedWarrantyType || "NONE";
       const reasonKey = checkResult.reasonKey || "";
       const unavailableMessage = isIneligible ? getWarrantyUnavailableMessage(reasonKey, t) : "";
-      const recommendation = getWarrantyRecommendationText(checkResult.proServiceType, t);
+      const recommendation = getWarrantyRecommendationText(
+        checkResult.proServiceType,
+        checkResult.extendedType,
+        t,
+      );
       const typedReasonKey = WARRANTY_REASON_KEYS.has(reasonKey)
         ? (reasonKey as WarrantyReasonKey)
         : undefined;
@@ -392,7 +399,11 @@ export default function JobOverview() {
     if (isIneligible) {
       unavailableMessage = getWarrantyUnavailableMessage(reasonKey, t);
     }
-    const recommendation = getWarrantyRecommendationText(warrantyInfo?.proServiceType, t);
+    const recommendation = getWarrantyRecommendationText(
+      warrantyInfo?.proServiceType,
+      warrantyInfo?.extendedType,
+      t,
+    );
 
     const typedReasonKey = WARRANTY_REASON_KEYS.has(reasonKey)
       ? (reasonKey as WarrantyReasonKey)
@@ -814,7 +825,7 @@ export default function JobOverview() {
       isResyncingRef.current = true;
 
       const validatedDiagnostic = getDiagnosticFromValidateResponse(data);
-      if (validatedDiagnostic && jobId) {
+      if (!isBackendDiagnosticsEnabledRef.current && validatedDiagnostic && jobId) {
         // Merge with the existing cached diagnostic so any fields not returned by the
         // validate API (e.g. technicianNote) are preserved from the previous cache entry.
         // Fields present in validatedDiagnostic always override.
@@ -825,11 +836,10 @@ export default function JobOverview() {
         });
       }
 
-      if (data.errorMessages && data.errorMessages.length > 0) {
+      const errorMessages = validatedDiagnostic?.errorMessages ?? data.errorMessages ?? [];
+      if (errorMessages.length > 0) {
         const uniqueErrorKeys = [
-          ...new Set(
-            data.errorMessages.filter((item) => item.key !== "2004").map((item) => item.key),
-          ),
+          ...new Set(errorMessages.filter((item) => item.key !== "2004").map((item) => item.key)),
         ];
         const errorText =
           uniqueErrorKeys.length > 0
@@ -843,9 +853,18 @@ export default function JobOverview() {
 
       markAllValidated();
       resyncMaterialsFromAPI(true);
-      // Keep pricing flow FE-driven: use validate response merged into diagnostic cache
-      // and let diagnostics manager recalculate row/summary values from that local data.
-      await queryClient.refetchQueries({ queryKey: ["job", jobId] });
+      if (isBackendDiagnosticsEnabledRef.current) {
+        // Backend is the source of truth — reload the saved diagnostic instead of
+        // reusing locally calculated values.
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey: ["job", jobId] }),
+          queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
+        ]);
+      } else {
+        // Keep pricing flow FE-driven: use validate response merged into diagnostic cache
+        // and let diagnostics manager recalculate row/summary values from that local data.
+        await queryClient.refetchQueries({ queryKey: ["job", jobId] });
+      }
       // Bug 8 fix: defer setArePricesValidated until after double-RAF completes to eliminate flicker
       onResyncCompleteRef.current = () => setArePricesValidated(true);
       // Bug 3 fix: fallback timeout if RAF never fires (empty materials or no form changes)
@@ -867,6 +886,7 @@ export default function JobOverview() {
           duration: 3000,
         },
       ]);
+      void queryClient.invalidateQueries({ queryKey: ["job", jobId] });
       emitJobFlowEvent((payload) => analytics.trackDiagnosticValidated(payload));
     },
     onError: (error) => {
@@ -972,18 +992,6 @@ export default function JobOverview() {
     setCurrentJobType((initialFormValues?.jobType as string) || "");
   }, [initialFormValues]);
 
-  // Rebuilt fresh every render, deliberately not memoized — useItemsManager's own configRef
-  // pattern is designed to tolerate that (see its top-of-file comment).
-  const jobItemsSurfaceConfig = buildJobItemsSurfaceConfig(t, {
-    resetKey: tabs.length > 0 ? diagnosticData?.jobId : undefined,
-    apiMaterials: tabs.length > 0 ? (diagnosticData?.materials as JobApiMaterial[] | undefined) : undefined,
-    apiArchivedMaterials:
-      tabs.length > 0 ? (diagnosticData?.archivedMaterials as JobApiMaterial[] | undefined) : undefined,
-    currentActionType,
-    currentJobType,
-    jobStatus: currentStatus,
-  });
-
   const {
     materials,
     apiMaterialsLoaded,
@@ -1007,8 +1015,10 @@ export default function JobOverview() {
     canArchiveOnDelete,
     discountBase,
     automaticRows,
-  } = useItemsManager({
-    config: jobItemsSurfaceConfig,
+  } = useDiagnosticsManager({
+    diagnosticData: tabs.length > 0 ? diagnosticData : undefined,
+    currentActionType,
+    currentJobType,
     tabs,
     setTabs,
     allFields,
@@ -1019,6 +1029,7 @@ export default function JobOverview() {
     arePricesValidated,
     setArePricesValidated,
     isResyncingRef,
+    jobStatus: currentStatus,
   });
 
   const { assetsAccessories, setAssetsAccessories } = useAccessoriesManager({
@@ -1460,6 +1471,8 @@ export default function JobOverview() {
             m.price = null;
           }
         });
+        // Backend owns pricing: send the full form state untouched.
+        if (isBackendDiagnosticsEnabled) return cleanArchivedMaterials(payload);
         const withoutIds = (payload.materials as unknown[]).some((m) => {
           const id = (m as Record<string, unknown>)["id"];
           return !id;
@@ -1513,17 +1526,9 @@ export default function JobOverview() {
         }
       }
 
-      if (Array.isArray(payload.archivedMaterials)) {
-        payload.archivedMaterials = (payload.archivedMaterials as Record<string, unknown>[]).filter(
-          (m) => m !== null && m !== undefined && Boolean(m.partNumber),
-        );
-      }
-      if (!Array.isArray(payload.archivedMaterials) || payload.archivedMaterials.length === 0) {
-        delete payload.archivedMaterials;
-      }
-      return payload;
+      return cleanArchivedMaterials(payload);
     },
-    [discountBase, queryClient, jobId],
+    [discountBase, queryClient, jobId, isBackendDiagnosticsEnabled],
   );
 
   const onApproveForRepair = useCallback(async () => {
@@ -2384,13 +2389,6 @@ export default function JobOverview() {
       discountBase,
       automaticRows,
       isValidating: validateAndSaveMutation.isPending,
-      itemPolicy,
-      // Claim-only fields on the now-merged ItemsContextValue (Phase 5, items-and-prices-
-      // refactor.md §15) — job has no equivalent concept, inert defaults matching
-      // ItemsContext.tsx's baseDefaultItemsContextValue.
-      canDeleteRows: false,
-      archivedMaterials: [],
-      isClaimPending: false,
     }),
     [
       materials,
@@ -2422,7 +2420,6 @@ export default function JobOverview() {
       discountBase,
       automaticRows,
       validateAndSaveMutation.isPending,
-      itemPolicy,
     ],
   );
 
@@ -2556,7 +2553,7 @@ export default function JobOverview() {
               ))}
             </TabNavigation>
             <Formik
-              initialValues={initialFormValues}
+              initialValues={initialFormValues ?? {}}
               validate={validate}
               onSubmit={() => {}}
               enableReinitialize={true}
@@ -2598,7 +2595,15 @@ export default function JobOverview() {
                       setCurrentActionType={setCurrentActionType}
                       setCurrentJobType={setCurrentJobType}
                     />
-                    {renderTabContent(isFormReadOnly)}
+                    <DiagnosticsPricingProvider
+                      enabled={isBackendDiagnosticsEnabled}
+                      jobId={jobId || ""}
+                      actionType={currentActionType}
+                      jobType={currentJobType}
+                      areaNameContains="diagnosticsSpareParts"
+                    >
+                      {renderTabContent(isFormReadOnly)}
+                    </DiagnosticsPricingProvider>
                     <GenericAction
                       actions={jobOverviewForm?.actions || []}
                       onActionClick={(actionName) => {

@@ -151,3 +151,9 @@
   justify-content: center;
   height: 100%;
 }
+
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}

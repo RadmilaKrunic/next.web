@@ -74,7 +74,7 @@ export default function AutoComplete({
   const isSelectionRef = useRef(false);
   const isExternalUpdateRef = useRef(!!value);
   const isUserEditingRef = useRef(false);
-  const lastValidValueRef = useRef<string>("");
+  const lastValidValueRef = useRef<string>(value);
 
   const isToolLookupField =
     name?.toLowerCase().includes("baretoolnumber") ||
@@ -260,24 +260,32 @@ export default function AutoComplete({
     const isBareToolNumber = name?.toLowerCase().includes("baretoolnumber");
     const isToolModelName = name?.toLowerCase().includes("toolmodelname");
     const isSparePartNumber = name?.toLowerCase().includes("sparepartnumber");
-
+    const isLookupField = isBareToolNumber || isToolModelName || isSparePartNumber;
     if (
-      (isBareToolNumber || isToolModelName || isSparePartNumber) &&
-      input.trim().length >= minLength &&
-      !isSelectionRef.current
+      isLookupField &&
+      input.trim().length > 0 &&
+      input.trim() === lastValidValueRef.current.trim()
     ) {
+      onClearFieldError?.(name);
+      onValidation?.(true);
+      return;
+    }
+
+    if (isLookupField && input.trim().length >= minLength && !isSelectionRef.current) {
       const currentValue = input.trim();
 
       let errorMessage: string;
-      if (isBareToolNumber) {
-        errorMessage = t("bareToolNumberNotFound", { id: currentValue });
-      } else if (isToolModelName) {
-        errorMessage = t("toolModelNameNotFound", { name: currentValue });
-      } else {
-        errorMessage = t("sparePartNumberNotFound", { id: currentValue });
+      if (!isExchange) {
+        if (isBareToolNumber) {
+          errorMessage = t("bareToolNumberNotFound", { id: currentValue });
+        } else if (isToolModelName) {
+          errorMessage = t("toolModelNameNotFound", { name: currentValue });
+        } else {
+          errorMessage = t("sparePartNumberNotFound", { id: currentValue });
+        }
+        onSetFieldError?.(name, errorMessage);
+        onSetFieldTouched?.(name, true);
       }
-      onSetFieldError?.(name, errorMessage);
-      onSetFieldTouched?.(name, true);
     }
   };
 

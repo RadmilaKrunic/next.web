@@ -3,10 +3,11 @@ import "./Footer.scss";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { CountryConfig } from "../../../api/services/countryConfiguration/countryConfiguration";
+import { getDockElement, toDockLocale } from "../../../utils/dockLocale";
 
 function Footer() {
   const currentYear = new Date().getFullYear();
-  const { t } = useTranslation("translation", { keyPrefix: "app" });
+  const { t, i18n } = useTranslation("translation", { keyPrefix: "app" });
   const queryClient = useQueryClient();
   const userData = queryClient.getQueryData<{ countryCode?: string }>(["user"]);
   const countryConfiguration = queryClient.getQueryData<CountryConfig>([
@@ -16,7 +17,9 @@ function Footer() {
   const footerLinks = countryConfiguration?.links?.footer || [];
 
   const handlePrivacySettingsClick = () => {
-    document.querySelector("dock-privacy-settings")?.setAttribute("visible", "true");
+    const dock = getDockElement();
+    dock?.setAttribute("locale", toDockLocale(i18n.language));
+    dock?.setAttribute("visible", "true");
   };
 
   let copyrightPartOne = "";

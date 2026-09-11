@@ -33,16 +33,19 @@ export const getWarrantyUnavailableMessage = (
 
 export const getWarrantyRecommendationText = (
   proServiceType: string | null | undefined,
+  extendedType: string | null | undefined,
   t: TranslateFn,
 ): string | undefined => {
-  const normalizedType = proServiceType?.trim();
-  if (!normalizedType) return undefined;
+  for (const warrantyType of [proServiceType, extendedType]) {
+    const normalizedType = warrantyType?.trim();
+    if (!normalizedType) continue;
 
-  const translationKey =
-    KNOWN_PRO_SERVICE_TYPE_LABELS[normalizedType as keyof typeof KNOWN_PRO_SERVICE_TYPE_LABELS];
-  if (!translationKey) return undefined;
+    const translationKey =
+      KNOWN_PRO_SERVICE_TYPE_LABELS[normalizedType as keyof typeof KNOWN_PRO_SERVICE_TYPE_LABELS];
+    if (translationKey) return t("warrantyProServiceAvailable", { type: t(translationKey) });
+  }
 
-  return t("warrantyProServiceAvailable", { type: t(translationKey) });
+  return undefined;
 };
 
 export const formatWarrantyDate = (value?: string | null): string | undefined => {
@@ -66,7 +69,11 @@ export const buildWarrantyInfoContent = (
   if (response.evaluationStatus !== "INELIGIBLE") return null;
 
   const reasonKey = response.reasonKey;
-  const recommendation = getWarrantyRecommendationText(response.proServiceType, t);
+  const recommendation = getWarrantyRecommendationText(
+    response.proServiceType,
+    response.extendedType,
+    t,
+  );
 
   if (reasonKey === "WARRANTY_EXPIRED") {
     return {

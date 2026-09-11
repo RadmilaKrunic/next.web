@@ -196,7 +196,7 @@ function AppRoutes() {
       <Route
         path="/add-asc"
         element={
-          <ProtectedRoute requiredPermissions={[PERMISSIONS.ACCESS.CAN_ACCESS_ASC_GLOBALLY]}>
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.ACCOUNT_MANAGEMENT.CAN_VIEW_PROFILES]}>
             <ErrorBoundaryWrapper>
               <AddASC />
             </ErrorBoundaryWrapper>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useFormikContext } from "formik";
-import { format, addDays, setMonth, setYear } from "date-fns";
+import { format, addDays, addMonths, setMonth, setYear } from "date-fns";
 import { CalendarConfig } from "../DatePicker.types";
 import { parseDate } from "./DatePicker.utils";
 
@@ -126,6 +126,24 @@ export function useCalendarState({
     }
   };
 
+  const handleMonthNavigation = (monthOffset: number) => {
+    const newMonth = addMonths(currentMonth, monthOffset);
+    setCurrentMonth(newMonth);
+
+    if (updateDateOnMonthYearChange && (displayDate || selectedDate)) {
+      const baseDate = displayDate || selectedDate;
+      if (baseDate) {
+        const updatedDate = setYear(
+          setMonth(baseDate, newMonth.getMonth()),
+          newMonth.getFullYear(),
+        );
+        if (isDateValid(updatedDate)) {
+          updateDateOnMonthYearChange(updatedDate);
+        }
+      }
+    }
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     const currentDate = displayDate || selectedDate;
     if (!currentDate) return;
@@ -148,6 +166,8 @@ export function useCalendarState({
     toggleCalendar,
     handleMonthChange,
     handleYearChange,
+    handlePreviousMonth: () => handleMonthNavigation(-1),
+    handleNextMonth: () => handleMonthNavigation(1),
     handleKeyDown,
   };
 }

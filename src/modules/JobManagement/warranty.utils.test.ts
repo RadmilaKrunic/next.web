@@ -25,19 +25,31 @@ const t = (key: string, options?: Record<string, unknown>) => {
 
 describe("getWarrantyRecommendationText", () => {
   it("builds recommendation for known pro service types", () => {
-    expect(getWarrantyRecommendationText("INDIVIDUAL_PRO", t)).toBe(
+    expect(getWarrantyRecommendationText("INDIVIDUAL_PRO", null, t)).toBe(
       "PRO Service is available: Individual pro",
     );
   });
 
   it("trims known values before mapping", () => {
-    expect(getWarrantyRecommendationText(" individualPro ", t)).toBe(
+    expect(getWarrantyRecommendationText(" individualPro ", null, t)).toBe(
       "PRO Service is available: Individual pro",
     );
   });
 
-  it("hides recommendation for unknown backend values", () => {
-    expect(getWarrantyRecommendationText("SOME_NEW_API_VALUE", t)).toBeUndefined();
+  it("builds recommendation for known extended warranty types", () => {
+    expect(getWarrantyRecommendationText(null, "INDIVIDUAL_PRO", t)).toBe(
+      "PRO Service is available: Individual pro",
+    );
+  });
+
+  it("uses extended warranty type when pro service type is unknown", () => {
+    expect(getWarrantyRecommendationText("SOME_NEW_API_VALUE", "individualPro", t)).toBe(
+      "PRO Service is available: Individual pro",
+    );
+  });
+
+  it("hides recommendation when both backend values are unknown", () => {
+    expect(getWarrantyRecommendationText("SOME_NEW_API_VALUE", "TYPE_A", t)).toBeUndefined();
   });
 });
 
@@ -222,6 +234,7 @@ describe("buildWarrantyInfoContent", () => {
       usedWarrantyRepairCount: 0,
       allowedWarrantyRepairCount: 0,
       proServiceType: "INDIVIDUAL_PRO",
+      extendedType: null,
     };
 
     const result = buildWarrantyInfoContent(response as never, t, formatWarrantyDate);

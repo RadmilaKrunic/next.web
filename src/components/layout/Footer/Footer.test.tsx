@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import Footer from "./Footer";
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "tr-TR" } }),
 }));
 
 function renderFooter(queryClient: QueryClient) {
@@ -67,6 +67,7 @@ describe("Footer", () => {
     await userEvent.click(screen.getByRole("button", { name: "privacySettings" }));
 
     expect(dock).toHaveAttribute("visible", "true");
+    expect(dock).toHaveAttribute("locale", "tr-tr");
     dock.remove();
   });
 

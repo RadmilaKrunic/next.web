@@ -146,6 +146,8 @@
     line-height: 1.5rem;
     cursor: pointer;
     color: var(--neutral__enabled__front__default);
+    background-color: inherit;
+    width: 100%;
 
     &:hover {
       background-color: var(--bosch-blue-50);

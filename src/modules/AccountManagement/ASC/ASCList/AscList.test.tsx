@@ -143,7 +143,6 @@ const baseAsc = (
 
 function renderAscList() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(["user"], { permissions: ["AG_M"] });
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -184,25 +183,6 @@ describe("AscList", () => {
     fireEvent.click(screen.getByTestId("add-asc-btn"));
 
     expect(navigateMock).toHaveBeenCalledWith("/add-asc");
-  });
-
-  it("hides add ASC button without AG_M permission", async () => {
-    getAllASCsMock.mockResolvedValue([baseAsc("a1", "John", "2026-01-01T00:00:00Z")]);
-
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    queryClient.setQueryData(["user"], { permissions: [] });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <AscList />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-
-    await screen.findByTestId("filters");
-
-    expect(screen.queryByTestId("add-asc-btn")).not.toBeInTheDocument();
   });
 
   it("navigates to edit route when clicked row is draft", async () => {

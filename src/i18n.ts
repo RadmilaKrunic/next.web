@@ -1,5 +1,6 @@
 import i18n, { type Resource } from "i18next";
 import { initReactI18next } from "react-i18next";
+import { syncDockLocale } from "./utils/dockLocale";
 
 type JsonObject = Record<string, unknown>;
 type LocaleModule = { default: JsonObject };
@@ -29,5 +30,7 @@ void i18n.use(initReactI18next).init({
   supportedLngs: Object.keys(resources),
   interpolation: { escapeValue: false },
 });
+
+i18n.on("languageChanged", syncDockLocale);
 
 export default i18n;

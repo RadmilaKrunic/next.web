@@ -133,6 +133,7 @@ function AddEmployee() {
         type: "ASC",
         ascId: user?.ascId,
         language: user?.language || "en",
+        locale: user?.locale || "en_US",
         accountRoles: mapAccountRolesToAPIFormat(formValues.accountRoles as string[]),
       });
     },

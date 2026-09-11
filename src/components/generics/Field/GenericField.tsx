@@ -530,13 +530,14 @@ function renderAutocompleteField(ctx: FieldRenderCtx): ReactElement {
   let bareTool = "";
 
   const isSparePart = name?.toLowerCase().includes("sparepartnumber");
+  const actionType = (values["actionType"] as string) || "";
   if (isSparePart) {
     // Extract position from the same row (e.g., diagnosticMaterials#0.position)
     const positionFieldName = name.replace(/sparepartnumber/i, "position");
     position = (values[positionFieldName] as string) || "";
 
     // Extract actionType to determine isExchange
-    const actionType = (values["actionType"] as string) || "";
+
     isExchange = ["NEW_TOOL_EXCHANGE", "SPARE_PARTS_EXCHANGE", "ACCESSORIES_EXCHANGE"].includes(
       actionType,
     );
@@ -555,7 +556,7 @@ function renderAutocompleteField(ctx: FieldRenderCtx): ReactElement {
       "";
     bareTool = bareToolValue;
   }
-
+  const isSPExchange = actionType === "SPARE_PARTS_EXCHANGE";
   const incompatibleSelectionMessage = getSparePartCompatibilityMessage(
     field,
     name,
@@ -578,7 +579,7 @@ function renderAutocompleteField(ctx: FieldRenderCtx): ReactElement {
         incompatibleSelectionMessage={incompatibleSelectionMessage}
         onChange={(value: string) => {
           const isSparePartNumberField = name?.toLowerCase().includes("sparepartnumber");
-          if (isSparePartNumberField && sparePartNotBelongsToTool) {
+          if (isSparePartNumberField && sparePartNotBelongsToTool && !isSPExchange) {
             sparePartNotBelongsToTool.current[name] = true;
           }
 

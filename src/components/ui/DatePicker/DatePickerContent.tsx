@@ -1,5 +1,5 @@
 import { isSameMonth, isSameDay, format } from "date-fns";
-import { Dropdown, Button } from "@bosch/react-frok";
+import { Dropdown, Button, Icon } from "@bosch/react-frok";
 import { useTranslation } from "react-i18next";
 import "./DatePickerContent.scss";
 
@@ -12,6 +12,8 @@ interface DatePickerContentProps {
   isRangeEnd: (day: Date) => boolean;
   onMonthChange: (month: number) => void;
   onYearChange: (year: number) => void;
+  onPreviousMonth: () => void;
+  onNextMonth: () => void;
   onDateClick: (date: Date) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   onCancel: () => void;
@@ -31,6 +33,8 @@ export default function DatePickerContent({
   isRangeEnd,
   onMonthChange,
   onYearChange,
+  onPreviousMonth,
+  onNextMonth,
   onDateClick,
   onKeyDown,
   onCancel,
@@ -47,6 +51,14 @@ export default function DatePickerContent({
       <div>
         <div className="date-label">{t("date")}</div>
         <div className="datepicker-header">
+          <button
+            type="button"
+            className="datepicker-month-button"
+            aria-label={t("previousMonth")}
+            onClick={onPreviousMonth}
+          >
+            <Icon iconName="arrow-left" aria-hidden="true" />
+          </button>
           <Dropdown
             label={t("month")}
             className="a-dropdown"
@@ -67,6 +79,14 @@ export default function DatePickerContent({
             value={currentMonth?.getFullYear()?.toString()}
             options={yearOptions}
           />
+          <button
+            type="button"
+            className="datepicker-month-button"
+            aria-label={t("nextMonth")}
+            onClick={onNextMonth}
+          >
+            <Icon iconName="arrow-right" aria-hidden="true" />
+          </button>
         </div>
       </div>
       <div className="datepicker-grid">

@@ -11,6 +11,16 @@ import {
 } from "utils/priceCalculator";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
+import { useDiagnosticsPricingContext } from "../DiagnosticsPricingContext";
+import {
+  applyPricePatch,
+  buildSummaryPricePatch,
+  findSummary,
+  toBackendSummaryType,
+} from "utils/diagnosticsFormSync";
+import { TOTAL_SUMMARY_TYPE } from "api/services/diagnosticPricing/diagnosticPricing.types";
+import { useItemPolicy } from "contexts/itemPolicyContext";
+import { getDistributablePositions } from "utils/itemPolicy";
 import { useHasPermission } from "hooks/useHasPermission";
 import { getChargeablePendingInfo } from "hooks/useDiagnosticsManager";
 import { PERMISSIONS } from "utils/Permissions";
@@ -44,6 +54,12 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     jobStatus,
   } = useDiagnosticsContext();
   const hasPriceViewPermission = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES]);
+  const { enabled: isBackendPricing, pricing } = useDiagnosticsPricingContext();
+  const itemPolicy = useItemPolicy();
+  const distributablePositions = useMemo(() => {
+    const fromPolicy = isBackendPricing ? getDistributablePositions(itemPolicy) : new Set<string>();
+    return fromPolicy.size > 0 ? fromPolicy : DISTRIBUTABLE_POSITIONS;
+  }, [isBackendPricing, itemPolicy]);
   const canEditdiscount = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_DISCOUNT]);
   const canEditTotalAmount = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_AMOUNT]);
   const isWaitingForApproval = jobStatus === "WAITING_FOR_APPROVAL";
@@ -175,19 +191,25 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     const seen = new Map<string, { label: string; value: string }>();
     const templateTypeField = scopedFields.find((f) => f.subtype === "diagnosticType");
     const typeFieldOptions = templateTypeField?.options ?? [];
-    scopedFields
-      .filter((f) => f.subtype === "diagnosticType")
-      .forEach((field) => {
-        const value = values[field.name] as string;
-        if (!value) return;
-        const option = typeFieldOptions.find((o) => o.value === value);
-        if (!option) return;
-        const summaryValue = toCamelCase(String(option.value));
-        if (!seen.has(summaryValue))
-          seen.set(summaryValue, { value: summaryValue, label: option.name });
-      });
+    const addType = (value: string) => {
+      const option = typeFieldOptions.find((o) => o.value === value);
+      if (!option) return;
+      const summaryValue = toCamelCase(String(option.value));
+      if (!seen.has(summaryValue))
+        seen.set(summaryValue, { value: summaryValue, label: option.name });
+    };
+
+    if (isBackendPricing && pricing) {
+      pricing.summaries
+        .filter((s) => s.type.toUpperCase() !== TOTAL_SUMMARY_TYPE)
+        .forEach((s) => addType(s.type));
+    } else {
+      scopedFields
+        .filter((f) => f.subtype === "diagnosticType")
+        .forEach((field) => addType(values[field.name] as string));
+    }
     return [{ value: "totalSummary", label: "totalSummary" }, ...seen.values()];
-  }, [scopedFields, values]);
+  }, [scopedFields, values, isBackendPricing, pricing]);
 
   useEffect(() => {
     if (!summaryTypeField) return;
@@ -256,7 +278,7 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     discountAmount: -1,
   });
   const rowAggregatesMaterial = useMemo(() => {
-    const positionFilter = (pos: string) => DISTRIBUTABLE_POSITIONS.has(pos);
+    const positionFilter = (pos: string) => distributablePositions.has(pos.toUpperCase());
     const raw = aggregateRowPrices(
       values,
       scopedFields,
@@ -277,7 +299,7 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     }
     prevRowAggMaterialRef.current = raw;
     return raw;
-  }, [values, scopedFields, discountBase, currentSummaryType]);
+  }, [values, scopedFields, discountBase, currentSummaryType, distributablePositions]);
 
   const summaryTotalAmountValue = rowAggregates.totalAmount;
 
@@ -294,6 +316,7 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
   const skipAggCyclesRef = useRef(0);
 
   useEffect(() => {
+    if (isBackendPricing) return;
     if (isDistributingRef.current) {
       isDistributingRef.current = false;
       skipAggCyclesRef.current = 1; // skip one more cycle
@@ -366,13 +389,25 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     area.fields,
     hasChargeablePending,
     currentSummaryType,
+    isBackendPricing,
   ]);
+
+  // Backend-driven summaries: the API returns one price block per cost-allocation type.
+  useEffect(() => {
+    if (!isBackendPricing || !pricing) return;
+    const summary = findSummary(pricing, toBackendSummaryType(currentSummaryType));
+    const patch = buildSummaryPricePatch(area.fields, summary);
+    applyPricePatch(patch, valuesRef.current, (field, value) => {
+      void setFieldValueRef.current(field, value);
+    });
+  }, [isBackendPricing, pricing, currentSummaryType, area.fields]);
 
   // On first load: sync active visible summary discount from hidden field.
   // Hidden has attributeMapping; visible does not. Guard with hasPricesPopulated
   // (proxy for "API data has arrived") to avoid false syncs from zeros.
   const prevSummaryHiddenRef = useRef<number>(0);
   useEffect(() => {
+    if (isBackendPricing) return;
     if (!discountBase || !summaryDiscountHiddenField || !activeSummaryDiscountField) return;
     // Don't overwrite a field the user is actively editing
     if (activeValueChangeFieldRef?.current === activeSummaryDiscountField.name) return;
@@ -390,10 +425,12 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     values,
     setFieldValue,
     activeValueChangeFieldRef,
+    isBackendPricing,
   ]);
 
   const prevMaterialHiddenRef = useRef<number>(0);
   useEffect(() => {
+    if (isBackendPricing) return;
     if (!discountBase || !summaryDiscountMaterialHiddenField || !activeMaterialDiscountField)
       return;
     // Don't overwrite a field the user is actively editing
@@ -412,6 +449,7 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     values,
     setFieldValue,
     activeValueChangeFieldRef,
+    isBackendPricing,
   ]);
 
   if (hasPriceViewPermission && !hasPricesPopulated) return null;

@@ -46,7 +46,7 @@ export const createTestAnalytics = (
   options: CreateTestAnalyticsOptions = {},
 ): TestAnalyticsHarness => {
   const transport = new InMemoryAnalyticsTransport();
-  const snapshot = options.snapshot === undefined ? DEFAULT_TEST_SNAPSHOT : options.snapshot;
+  const snapshot = options.snapshot ?? DEFAULT_TEST_SNAPSHOT;
   const config: AnalyticsConfig = {
     environment: AnalyticsEnvironment.DEV,
     enabled: true,

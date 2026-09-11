@@ -37,6 +37,8 @@ interface SparePartFieldNames {
   discountBase?: discountBase;
   /** When true, skip onUserEdit to prevent dirty-marking during validation API in-flight. */
   isValidating?: boolean;
+  /** When true, all frontend price math is skipped — prices come from the backend. */
+  isDisabled?: boolean;
 }
 
 interface SparePartValues {
@@ -254,6 +256,7 @@ export const useSparePartPriceCalculation = (fieldNames: SparePartFieldNames) =>
     return inputs;
   };
   useEffect(() => {
+    if (fieldNames.isDisabled) return;
     if (isCalculatingRef.current) return;
 
     const prev = prevValuesRef.current;

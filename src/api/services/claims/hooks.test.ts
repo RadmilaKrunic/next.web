@@ -8,60 +8,12 @@ vi.mock("./action", () => ({
   fetchClaims: vi.fn().mockResolvedValue([]),
   postBulkApproveClaims: vi.fn().mockResolvedValue(undefined),
   postClaimDecision: vi.fn().mockResolvedValue(undefined),
-  putClaimPrices: vi.fn().mockResolvedValue({ updated: true }),
-  postValidateClaimPrices: vi.fn().mockResolvedValue({ requestId: "req-1", claim: {} }),
+  putClaimPrices: vi.fn().mockResolvedValue(undefined),
   patchClaimStatusPending: vi.fn().mockResolvedValue(undefined),
 }));
 
-import {
-  useClaimById,
-  useClaims,
-  useClaimDecision,
-  useBulkApproveClaims,
-  useUpdateClaimPrices,
-  useValidateClaimPrices,
-} from "./hooks";
-import {
-  fetchClaimById,
-  fetchClaims,
-  postClaimDecision,
-  postBulkApproveClaims,
-  putClaimPrices,
-  postValidateClaimPrices,
-} from "./action";
-import { PutClaimPricesRequest } from "./claims.types";
-
-const putClaimPricesRequestFixture = {
-  id: "c1",
-  jobId: "j1",
-  ascId: "asc1",
-  customerId: "cust1",
-  ascName: "Test ASC",
-  diagnosticId: "d1",
-  countryCode: "TR",
-  actionType: "REPAIR",
-  jobType: "CHARGEABLE",
-  typeOfUsage: "PRIVATE",
-  faultCode: "F001",
-  faultCodeDescription: "Fault",
-  faultCodeLabourQuantity: 1,
-  exchangeReason: null,
-  claimStatus: "REVISED",
-  claimNotes: "note",
-  customer: {},
-  job: {},
-  materials: [],
-  archivedMaterials: [],
-  claimPriceSummary: {
-    netAmount: 0,
-    suggestedNetPrice: 0,
-    grossAmount: 0,
-    discount: 0,
-    totalAmount: 0,
-    taxAmount: 0,
-  },
-  jobDiagnostic: undefined,
-} satisfies PutClaimPricesRequest;
+import { useClaimById, useClaims, useClaimDecision, useBulkApproveClaims } from "./hooks";
+import { fetchClaimById, fetchClaims, postClaimDecision, postBulkApproveClaims } from "./action";
 
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -121,52 +73,5 @@ describe("useBulkApproveClaims", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(postBulkApproveClaims).toHaveBeenCalled();
-  });
-});
-
-describe("useUpdateClaimPrices", () => {
-  it("calls putClaimPrices on mutate and invalidates the claim cache on success", async () => {
-    vi.mocked(putClaimPrices).mockResolvedValue({ updated: true });
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
-    const wrapper = ({ children }: { children: React.ReactNode }) =>
-      React.createElement(QueryClientProvider, { client: qc }, children);
-
-    const { result } = renderHook(() => useUpdateClaimPrices(), { wrapper });
-    result.current.mutate({ claimId: "c1", payload: putClaimPricesRequestFixture });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(putClaimPrices).toHaveBeenCalledWith("c1", putClaimPricesRequestFixture);
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["claim", "c1"] });
-  });
-
-  it("propagates errors without invalidating the cache", async () => {
-    vi.mocked(putClaimPrices).mockRejectedValueOnce(new Error("put failed"));
-    const { result } = renderHook(() => useUpdateClaimPrices(), { wrapper: makeWrapper() });
-    result.current.mutate({ claimId: "c1", payload: putClaimPricesRequestFixture });
-
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toBe("put failed");
-  });
-});
-
-describe("useValidateClaimPrices", () => {
-  it("calls postValidateClaimPrices on mutate", async () => {
-    vi.mocked(postValidateClaimPrices).mockResolvedValue({
-      requestId: "req-1",
-      claim: {},
-    } as never);
-    const { result } = renderHook(() => useValidateClaimPrices(), { wrapper: makeWrapper() });
-    result.current.mutate({
-      claimId: "c1",
-      request: { requestId: "req-1", jobId: "j1", diagnosticId: "d1", changedRows: [] },
-      mockContext: { baseline: { materials: [] }, discountBase: "GROSS_PRICE" },
-    });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(postValidateClaimPrices).toHaveBeenCalledWith(
-      "c1",
-      { requestId: "req-1", jobId: "j1", diagnosticId: "d1", changedRows: [] },
-      { baseline: { materials: [] }, discountBase: "GROSS_PRICE" },
-    );
   });
 });

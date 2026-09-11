@@ -43,21 +43,10 @@ describe("getPriceFieldEditability", () => {
       },
     );
 
-    it.each(["LA", "FR", "PC"])(
-      "COMMERCIAL_GOODWILL on %s: discount + totalAmount editable in GROSS_PRICE",
-      (position) => {
-        const result = getPriceFieldEditability(position, "COMMERCIAL_GOODWILL", "GROSS_PRICE");
-        expect(result).toEqual({ discount: true, totalAmount: true, netAmount: false });
-      },
-    );
-
-    it.each(["LA", "FR", "PC"])(
-      "COMMERCIAL_GOODWILL on %s: discount + netAmount editable in NET_PRICE",
-      (position) => {
-        const result = getPriceFieldEditability(position, "COMMERCIAL_GOODWILL", "NET_PRICE");
-        expect(result).toEqual({ discount: true, totalAmount: false, netAmount: true });
-      },
-    );
+    it.each(["LA", "FR", "PC"])("COMMERCIAL_GOODWILL on %s: nothing editable", (position) => {
+      const result = getPriceFieldEditability(position, "COMMERCIAL_GOODWILL", "GROSS_PRICE");
+      expect(result).toEqual({ discount: false, totalAmount: false, netAmount: false });
+    });
 
     it.each(["WARRANTY", "SERVICE_OFFERING", "SPECIAL_CONTRACT", ""])(
       "%s on a protected position: nothing editable",
@@ -69,21 +58,10 @@ describe("getPriceFieldEditability", () => {
   });
 
   describe("material positions (PN / SP / AC)", () => {
-    it.each(["PN", "SP", "AC"])(
-      "COMMERCIAL_GOODWILL on %s: discount + totalAmount editable in GROSS_PRICE",
-      (position) => {
-        const result = getPriceFieldEditability(position, "COMMERCIAL_GOODWILL", "GROSS_PRICE");
-        expect(result).toEqual({ discount: true, totalAmount: true, netAmount: false });
-      },
-    );
-
-    it.each(["PN", "SP", "AC"])(
-      "COMMERCIAL_GOODWILL on %s: discount + netAmount editable in NET_PRICE",
-      (position) => {
-        const result = getPriceFieldEditability(position, "COMMERCIAL_GOODWILL", "NET_PRICE");
-        expect(result).toEqual({ discount: true, totalAmount: false, netAmount: true });
-      },
-    );
+    it.each(["PN", "SP", "AC"])("COMMERCIAL_GOODWILL on %s: nothing editable", (position) => {
+      const result = getPriceFieldEditability(position, "COMMERCIAL_GOODWILL", "GROSS_PRICE");
+      expect(result).toEqual({ discount: false, totalAmount: false, netAmount: false });
+    });
 
     // The key rule this module exists to make explicit and testable: CHARGEABLE material
     // rows are NOT row-editable, regardless of mode — the summary panel owns the discount
@@ -114,7 +92,7 @@ describe("getPriceFieldEditability", () => {
   });
 
   it("is case-insensitive on jobType", () => {
-    const result = getPriceFieldEditability("SP", "commercial_goodwill", "GROSS_PRICE");
+    const result = getPriceFieldEditability("LA", "chargeable", "GROSS_PRICE");
     expect(result.discount).toBe(true);
   });
 

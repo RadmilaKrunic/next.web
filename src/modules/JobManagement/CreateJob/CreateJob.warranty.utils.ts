@@ -102,6 +102,13 @@ export const getAllowedWarrantyTypes = (response: WarrantyCheckResponse): Set<st
     allowed.add("BOSCH_PRO_SERVICE");
   }
 
+  if (
+    response.supportedWarrantyType === "EXTENDED_WARRANTY" ||
+    (response.extendedType && response.extendedType.trim() !== "")
+  ) {
+    allowed.add("EXTENDED_WARRANTY");
+  }
+
   return allowed;
 };
 

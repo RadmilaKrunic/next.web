@@ -41,10 +41,13 @@ export const useVirtualPageViews = ({
   }, [location.pathname, location.hash, track]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return undefined;
+    if (globalThis.window === undefined) return undefined;
     const handleHashChange = (): void =>
-      track({ pathname: window.location.pathname, hash: window.location.hash });
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
+      track({
+        pathname: globalThis.window.location.pathname,
+        hash: globalThis.window.location.hash,
+      });
+    globalThis.window.addEventListener("hashchange", handleHashChange);
+    return () => globalThis.window.removeEventListener("hashchange", handleHashChange);
   }, [track]);
 };

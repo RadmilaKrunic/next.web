@@ -1,6 +1,9 @@
 import Area from "../Area/GenericArea.types";
 import { GenericActions } from "../Action/GenericAction.types";
 import { DependentField } from "../Field/GenericField.types";
+interface SectionMapping {
+  originalName: string;
+}
 
 interface Section {
   name: string;
@@ -20,6 +23,7 @@ interface Section {
   permissions?: string[];
   //calculated prop - all fields in section are disabled
   isDisabled?: boolean;
+  mapping?: SectionMapping;
 }
 
 export default Section;

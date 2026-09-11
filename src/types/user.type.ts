@@ -19,6 +19,7 @@ export interface AscUser {
   phoneNumber: string;
   boschId: string;
   language: string | null;
+  locale: string | null;
   isActive: boolean;
   accountRoles: { id: string; name: string }[];
   permissions: string[];

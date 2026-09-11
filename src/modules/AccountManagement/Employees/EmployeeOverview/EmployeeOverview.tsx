@@ -204,6 +204,7 @@ function EmployeeOverview() {
             type: "ASC",
             ascId: user?.ascId,
             language: user?.language || "en",
+            locale: user?.locale || "en_US",
             userId: employeeId,
             accountRoles: mapAccountRolesToAPIFormat(formValues.accountRoles as string[]),
           });

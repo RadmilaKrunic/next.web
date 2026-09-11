@@ -135,9 +135,7 @@ function CreateReimbursement() {
   );
 
   const status =
-    !!formValues["ascDetails"] && !!formValues["dateRange"]?.split(",")[1] && !!approvedClaimCount
-      ? "ENABLED"
-      : "DISABLED";
+    !!formValues["ascDetails"] && !!formValues["dateRange"]?.split(",")[1] ? "ENABLED" : "DISABLED";
 
   if (!isInitialized) {
     return (

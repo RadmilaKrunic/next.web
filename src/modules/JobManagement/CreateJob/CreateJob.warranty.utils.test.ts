@@ -205,6 +205,23 @@ describe("getAllowedWarrantyTypes", () => {
     expect(result.has("BOSCH_PRO_SERVICE")).toBe(false);
   });
 
+  it("adds EXTENDED_WARRANTY when extendedType is non-empty", () => {
+    const result = getAllowedWarrantyTypes({
+      supportedWarrantyType: "STANDARD_WARRANTY",
+      extendedType: "TYPE_A",
+    } as WarrantyCheckResponse);
+    expect(result.has("STANDARD_WARRANTY")).toBe(true);
+    expect(result.has("EXTENDED_WARRANTY")).toBe(true);
+  });
+
+  it("does not add EXTENDED_WARRANTY when extendedType is blank", () => {
+    const result = getAllowedWarrantyTypes({
+      supportedWarrantyType: "STANDARD_WARRANTY",
+      extendedType: "   ",
+    } as WarrantyCheckResponse);
+    expect(result.has("EXTENDED_WARRANTY")).toBe(false);
+  });
+
   it("returns empty set when no supportedWarrantyType or proServiceType", () => {
     const result = getAllowedWarrantyTypes({} as WarrantyCheckResponse);
     expect(result.size).toBe(0);

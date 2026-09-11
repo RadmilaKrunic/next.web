@@ -2,8 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useCallback } from "react";
 import Area from "components/generics/Area/GenericArea.types";
 import "modules/JobManagement/JobOverview/SparePartsArea/SparePartsArea.scss";
-import ItemRow from "modules/JobManagement/JobOverview/SparePartsRow/ItemRow";
-import { claimItemRowSurfaceConfig } from "../ClaimSparePartsRow/claimItemRowSurfaceConfig";
+import ClaimSparePartsRow from "../ClaimSparePartsRow/ClaimSparePartsRow";
 import { useClaimContext } from "../ClaimContext";
 
 function ClaimSparePartsArea({ area }: Readonly<{ area: Area }>) {
@@ -23,12 +22,11 @@ function ClaimSparePartsArea({ area }: Readonly<{ area: Area }>) {
           {title && <div className="area-title">{t(title)}</div>}
         </div>
       )}
-      <ItemRow
+      <ClaimSparePartsRow
         key={nameOfFirstField}
         fields={area.fields}
         onDeleteRow={handleDeleteRow}
         isDisabled={area.isDisabled}
-        config={claimItemRowSurfaceConfig}
       />
     </>
   );

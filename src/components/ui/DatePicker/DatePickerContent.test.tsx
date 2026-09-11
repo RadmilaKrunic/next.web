@@ -7,6 +7,8 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@bosch/react-frok", () => ({
+  Icon: ({ iconName }: { iconName: string }) =>
+    React.createElement("span", { "data-testid": `icon-${iconName}` }),
   Dropdown: ({
     label,
     value,
@@ -50,6 +52,8 @@ const baseProps = {
   isRangeEnd: () => false,
   onMonthChange: vi.fn(),
   onYearChange: vi.fn(),
+  onPreviousMonth: vi.fn(),
+  onNextMonth: vi.fn(),
   onDateClick: vi.fn(),
   onKeyDown: vi.fn(),
   onCancel: vi.fn(),
@@ -76,6 +80,16 @@ describe("DatePickerContent", () => {
 
     expect(baseProps.onMonthChange).toHaveBeenCalledWith(0);
     expect(baseProps.onYearChange).toHaveBeenCalledWith(2024);
+  });
+
+  it("calls month navigation handlers", () => {
+    render(React.createElement(DatePickerContent, baseProps));
+
+    fireEvent.click(screen.getByRole("button", { name: "previousMonth" }));
+    fireEvent.click(screen.getByRole("button", { name: "nextMonth" }));
+
+    expect(baseProps.onPreviousMonth).toHaveBeenCalled();
+    expect(baseProps.onNextMonth).toHaveBeenCalled();
   });
 
   it("handles cancel and confirm clicks", () => {

@@ -32,7 +32,8 @@ export const fetchReimbursementASCs = async (
     if (size !== undefined) {
       params.append("size", String(size));
     }
-    const url = `/v1/reimbursements/service-centers${params.toString() ? `?${params.toString()}` : ""}`;
+    const query = params.toString();
+    const url = `/v1/reimbursements/service-centers${query ? "?" + query : ""}`;
     const response: AxiosResponse<ReimbursementAscResponse> =
       await axiosClient.get<ReimbursementAscResponse>(url);
     return response.data;

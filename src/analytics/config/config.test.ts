@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { resolveAnalyticsConfig, ValidationMode } from "./config";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { resolveAnalyticsConfig, readDebugOverride, ValidationMode } from "./config";
 import { AnalyticsEnvironment } from "../domain/enums";
 
 describe("resolveAnalyticsConfig", () => {
@@ -71,5 +71,78 @@ describe("resolveAnalyticsConfig", () => {
     const config = resolveAnalyticsConfig({ MODE: "qa", VITE_GTM_ID: "GTM-TEST" });
     expect(config.gtmId).toBe("GTM-TEST");
     expect(Object.isFrozen(config)).toBe(true);
+  });
+});
+
+describe("readDebugOverride", () => {
+  const STORAGE_KEY = "bass.analytics.debug";
+
+  // jsdom 27 delegates to Node webstorage, which is unusable without --localstorage-file.
+  const store = new Map<string, string>();
+  const storageStub = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+    clear: () => store.clear(),
+    key: (index: number) => [...store.keys()][index] ?? null,
+    get length() {
+      return store.size;
+    },
+  } as Storage;
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis.window, "localStorage");
+
+  beforeEach(() => {
+    Object.defineProperty(globalThis.window, "localStorage", {
+      get: () => storageStub,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    store.clear();
+    if (originalDescriptor) {
+      Object.defineProperty(globalThis.window, "localStorage", originalDescriptor);
+    }
+  });
+
+  it("returns false when the key is absent", () => {
+    window.localStorage.removeItem(STORAGE_KEY);
+    expect(readDebugOverride()).toBe(false);
+  });
+
+  it("returns true when the key is set to 'true'", () => {
+    window.localStorage.setItem(STORAGE_KEY, "true");
+    expect(readDebugOverride()).toBe(true);
+  });
+
+  it("returns false when the key is set to any other value", () => {
+    window.localStorage.setItem(STORAGE_KEY, "false");
+    expect(readDebugOverride()).toBe(false);
+
+    window.localStorage.setItem(STORAGE_KEY, "1");
+    expect(readDebugOverride()).toBe(false);
+
+    window.localStorage.setItem(STORAGE_KEY, "yes");
+    expect(readDebugOverride()).toBe(false);
+  });
+
+  it("returns false when localStorage throws (e.g. storage access denied)", () => {
+    const realLocalStorage = globalThis.window.localStorage;
+    Object.defineProperty(globalThis.window, "localStorage", {
+      get() {
+        throw new Error("SecurityError");
+      },
+      configurable: true,
+    });
+    try {
+      expect(readDebugOverride()).toBe(false);
+    } finally {
+      Object.defineProperty(globalThis.window, "localStorage", {
+        get() {
+          return realLocalStorage;
+        },
+        configurable: true,
+      });
+    }
   });
 });

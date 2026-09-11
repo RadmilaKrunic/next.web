@@ -81,8 +81,8 @@ const DEBUG_STORAGE_KEY = "bass.analytics.debug";
 
 export const readDebugOverride = (): boolean => {
   try {
-    if (typeof window === "undefined" || !window.localStorage) return false;
-    return window.localStorage.getItem(DEBUG_STORAGE_KEY) === "true";
+    if (!globalThis.window?.localStorage) return false;
+    return globalThis.window.localStorage.getItem(DEBUG_STORAGE_KEY) === "true";
   } catch {
     return false;
   }

@@ -210,6 +210,8 @@ export function useDatePicker({ name, calendar }: UseDatePickerProps) {
     toggleCalendar: calendarState.toggleCalendar,
     handleMonthChange: calendarState.handleMonthChange,
     handleYearChange: calendarState.handleYearChange,
+    handlePreviousMonth: calendarState.handlePreviousMonth,
+    handleNextMonth: calendarState.handleNextMonth,
     handleDateClick,
     handleCancel,
     handleConfirm,

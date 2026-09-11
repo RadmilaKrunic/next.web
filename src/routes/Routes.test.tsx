@@ -57,7 +57,6 @@ vi.mock("hooks/useHasPermission", () => ({ useHasPermission: vi.fn().mockReturnV
 
 import AppRoutes from "./Routes";
 import { useHasPermission } from "hooks/useHasPermission";
-import { PERMISSIONS } from "utils/Permissions";
 
 function renderRoutes(path: string) {
   const qc = new QueryClient();
@@ -110,16 +109,5 @@ describe("AppRoutes", () => {
     vi.mocked(useHasPermission).mockReturnValueOnce(false);
     renderRoutes("/job-list");
     expect(screen.getByText(/permission/i)).toBeInTheDocument();
-  });
-
-  it("renders AddASC only when AG_M is requested", () => {
-    vi.mocked(useHasPermission).mockImplementation(
-      (requiredPermissions?: string[]) =>
-        requiredPermissions?.includes(PERMISSIONS.ACCESS.CAN_ACCESS_ASC_GLOBALLY) ?? true,
-    );
-
-    renderRoutes("/add-asc");
-
-    expect(screen.getByTestId("add-asc")).toBeInTheDocument();
   });
 });

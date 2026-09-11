@@ -141,13 +141,14 @@ function SearchableSingleDropdown({
             <div className="multi-select-dropdown-empty">{t("noOptions")}</div>
           ) : (
             filteredOptions.map((opt) => (
-              <div
+              <button
                 key={opt.key ?? `${name}-${opt.value}`}
                 className={`searchable-dropdown-option${value === opt.value ? " searchable-dropdown-option--selected" : ""}`}
                 onMouseDown={() => handleSelect(opt)}
+                type="button"
               >
                 {opt.name}
-              </div>
+              </button>
             ))
           )}
         </div>

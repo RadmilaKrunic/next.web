@@ -163,6 +163,7 @@ describe("postWarrantyCheck", () => {
       evaluationStatus: "ELIGIBLE",
       supportedWarrantyType: "STANDARD_WARRANTY",
       proServiceType: null,
+      extendedType: null,
       reasonKey: null,
       expirationDate: "2027-06-15",
       allowedWarrantyRepairCount: 3,

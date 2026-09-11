@@ -33,9 +33,7 @@ export function getPriceFieldEditability(
   const normalizedJobType = (jobType ?? "").toUpperCase();
   const isProtected = isProtectedPosition(position);
 
-  const isEditableJobType =
-    normalizedJobType === "COMMERCIAL_GOODWILL" ||
-    (normalizedJobType === "CHARGEABLE" && isProtected);
+  const isEditableJobType = normalizedJobType === "CHARGEABLE" && isProtected;
 
   if (!isEditableJobType) return NOT_EDITABLE;
 

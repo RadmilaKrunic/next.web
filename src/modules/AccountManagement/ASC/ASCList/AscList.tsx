@@ -13,8 +13,6 @@ import { getAscColumns } from "./AscList.columns.config";
 import { filterBySearchValue } from "../../AccountManagement.utils";
 import { getAllASCs } from "../../../../api/services/serviceCenters/action";
 import { ServiceCenter } from "../../../../api/services/serviceCenters/serviceCenters.types";
-import { useHasPermission } from "../../../../hooks/useHasPermission";
-import { PERMISSIONS } from "../../../../utils/Permissions";
 import "./ASCList.scss";
 
 function AscList() {
@@ -24,7 +22,6 @@ function AscList() {
     pageSize: Number(sessionStorage.getItem("ascList-pageSize")) || 10,
   });
   const navigate = useNavigate();
-  const canAddAsc = useHasPermission([PERMISSIONS.ACCESS.CAN_ACCESS_ASC_GLOBALLY]);
 
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   useBreadcrumbs([{ label: t("ascProfiles"), href: "/asc-profiles" }]);
@@ -87,17 +84,13 @@ function AscList() {
         searchValue={searchValue}
         onSearchChange={setSearchValue}
         onSearchReset={() => setSearchValue("")}
-        actionButton={
-          canAddAsc
-            ? {
-                icon: "add",
-                label: t("addAsc"),
-                onClick: () => {
-                  navigate(`/add-asc`);
-                },
-              }
-            : undefined
-        }
+        actionButton={{
+          icon: "add",
+          label: t("addAsc"),
+          onClick: () => {
+            navigate(`/add-asc`);
+          },
+        }}
         type="asc"
       />
       <Table<ServiceCenter>

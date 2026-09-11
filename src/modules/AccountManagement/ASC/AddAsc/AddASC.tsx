@@ -55,18 +55,15 @@ function AddASC() {
   const addASCForm = uiConfigurationForms?.forms.find((form) => form.name === "AddASC") || null;
 
   const [openedSections, setOpenedSections] = useState<Record<string, boolean>>(() => {
-    const state = addASCForm?.sections.reduce(
-      (acc, section) => {
-        if (section.name === "generalInfo") {
-          acc[section.name] = true;
-          return acc;
-        }
-        acc[section.name] = false;
+    const state = addASCForm?.sections.reduce<Record<string, boolean>>((acc, section) => {
+      if (section.name === "generalInfo") {
+        acc[section.name] = true;
         return acc;
-      },
+      }
 
-      {} as Record<string, boolean>,
-    );
+      acc[section.name] = false;
+      return acc;
+    }, {});
     return state || {};
   });
 
@@ -179,7 +176,10 @@ function AddASC() {
       city: serviceCenter.address.city,
       state: serviceCenter.address.stateProvinceRegion,
       postalCode: serviceCenter.address.postalCode,
-      country: serviceCenter.address.countryCode,
+      countryCode: serviceCenter.address.countryCode,
+      neighborhood: serviceCenter.address.neighborhood,
+      district: serviceCenter.address.district,
+      addressLineTwo: serviceCenter.address.additionalDetails,
       logo: serviceCenter?.logo?.logoId
         ? [
             {
@@ -368,6 +368,9 @@ function AddASC() {
             stateProvinceRegion: formValues.state,
             postalCode: formValues.postalCode,
             countryCode: formValues.countryCode,
+            neighborhood: formValues.neighborhood,
+            district: formValues.district,
+            additionalDetails: formValues.addressLineTwo,
           },
           laPriceChargeable: null,
           frPriceChargeable: null,

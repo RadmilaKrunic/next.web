@@ -5,69 +5,9 @@ import {
   postClaimDecision,
   postBulkApproveClaims,
   putClaimPrices,
-  postValidateClaimPrices,
   patchClaimStatusPending,
   saveClaimListColumns,
 } from "./action";
-import { PutClaimPricesRequest } from "./claims.types";
-
-vi.mock("api/services/itemPolicy/priceEngineSimulator", () => ({
-  simulateClaimPriceValidate: vi.fn(),
-}));
-import { simulateClaimPriceValidate } from "api/services/itemPolicy/priceEngineSimulator";
-const mockSimulateClaimPriceValidate = vi.mocked(simulateClaimPriceValidate);
-
-const claimPriceMaterial = {
-  position: "SP",
-  partNumber: "1600A00ABC",
-  description: "Spare part",
-  jobType: "CHARGEABLE",
-  quantity: 1,
-  order: 1,
-  isPriceSetManually: false,
-  price: {
-    discount: 0,
-    suggestedNetPrice: 100,
-    taxAmount: 20,
-    unitPrice: 100,
-    netAmount: 100,
-    tax: 20,
-    grossAmount: 120,
-    totalAmount: 120,
-  },
-};
-
-const putClaimPricesRequestFixture: PutClaimPricesRequest = {
-  id: "C001",
-  jobId: "J001",
-  ascId: "ASC001",
-  customerId: "CUST001",
-  ascName: "Test ASC",
-  diagnosticId: "D001",
-  countryCode: "TR",
-  actionType: "REPAIR",
-  jobType: "CHARGEABLE",
-  typeOfUsage: "PRIVATE",
-  faultCode: "F001",
-  faultCodeDescription: "Fault description",
-  faultCodeLabourQuantity: 1,
-  exchangeReason: null,
-  claimStatus: "REVISED",
-  claimNotes: "some note",
-  customer: { firstName: "John", lastName: "Doe" },
-  job: { jobId: "J001" },
-  materials: [claimPriceMaterial],
-  archivedMaterials: [],
-  claimPriceSummary: {
-    netAmount: 100,
-    suggestedNetPrice: 100,
-    grossAmount: 120,
-    discount: 0,
-    totalAmount: 120,
-    taxAmount: 20,
-  },
-  jobDiagnostic: undefined,
-};
 
 vi.mock("api/axios-client/axiosClient", () => ({
   default: {
@@ -171,70 +111,14 @@ describe("postBulkApproveClaims", () => {
 describe("putClaimPrices", () => {
   it("puts price data and returns response", async () => {
     mockPut.mockResolvedValueOnce({ data: { updated: true } });
-    const result = await putClaimPrices("C001", putClaimPricesRequestFixture);
+    const result = await putClaimPrices("C001", { total: 100 });
     expect(result).toEqual({ updated: true });
-    expect(mockPut).toHaveBeenCalledWith("/v1/claims/C001/prices", putClaimPricesRequestFixture);
+    expect(mockPut).toHaveBeenCalledWith("/v1/claims/C001/prices", { total: 100 });
   });
 
   it("throws on error", async () => {
     mockPut.mockRejectedValueOnce(new Error("put failed"));
-    await expect(putClaimPrices("C001", putClaimPricesRequestFixture)).rejects.toThrow(
-      "put failed",
-    );
-  });
-});
-
-describe("postValidateClaimPrices", () => {
-  const baseline = { materials: [], archivedMaterials: [] };
-  const request = { requestId: "req-1", jobId: "J001", diagnosticId: "D001", changedRows: [] };
-
-  it("calls the price-engine simulator in DEV mode, without hitting the network", async () => {
-    const simulatedResult = { requestId: "req-1", claim: { ...baseline, priceSummary: {} } };
-    mockSimulateClaimPriceValidate.mockReturnValueOnce(simulatedResult as never);
-
-    const result = await postValidateClaimPrices("C001", request, {
-      baseline,
-      discountBase: "GROSS_PRICE",
-    });
-
-    expect(mockSimulateClaimPriceValidate).toHaveBeenCalledWith(
-      baseline,
-      request,
-      "GROSS_PRICE",
-      undefined,
-    );
-    expect(mockPost).not.toHaveBeenCalled();
-    expect(result).toBe(simulatedResult);
-  });
-
-  it("posts to the real endpoint when not in DEV mode", async () => {
-    vi.stubEnv("DEV", false);
-    try {
-      mockPost.mockResolvedValueOnce({ data: { requestId: "req-1", claim: baseline } });
-
-      const result = await postValidateClaimPrices("C001", request, {
-        baseline,
-        discountBase: "GROSS_PRICE",
-      });
-
-      expect(mockPost).toHaveBeenCalledWith("/v1/claims/C001/prices/validate", request);
-      expect(mockSimulateClaimPriceValidate).not.toHaveBeenCalled();
-      expect(result).toEqual({ requestId: "req-1", claim: baseline });
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
-  it("throws on API error when not in DEV mode", async () => {
-    vi.stubEnv("DEV", false);
-    try {
-      mockPost.mockRejectedValueOnce(new Error("fail"));
-      await expect(
-        postValidateClaimPrices("C001", request, { baseline, discountBase: "GROSS_PRICE" }),
-      ).rejects.toThrow("fail");
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    await expect(putClaimPrices("C001", {})).rejects.toThrow("put failed");
   });
 });
 

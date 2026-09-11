@@ -213,17 +213,29 @@ export const getSparePartCompatibilityMessage = (
   const rowTypeValue = rowTypeField
     ? ((values[rowTypeField.name] as string) ?? "").toUpperCase()
     : "";
-
+  const positionValue = allFields.find(
+    (currentField) =>
+      currentField.subtype === "diagnosticPosition" &&
+      currentField.fieldMapping?.nameStartsWith === field.fieldMapping?.nameStartsWith,
+  );
+  const materialPosition = new Set(["SP", "PN", "AC"]);
+  // This function only runs for sparePartNumber fields (see guard above), which are
+  // inherently material. A diagnosticPosition field, when present, can narrow that down
+  // further (only SP/PN/AC count); when no position field exists on the row, don't let
+  // its absence silently disable the compatibility check — default to material.
+  const isMaterial = positionValue
+    ? materialPosition.has(values[positionValue.name] as string)
+    : true;
   const actionType = (values["actionType"] as string) || "";
   const isExchange = ["NEW_TOOL_EXCHANGE", "SPARE_PARTS_EXCHANGE", "ACCESSORIES_EXCHANGE"].includes(
     actionType,
   );
 
-  if (rowTypeValue === "WARRANTY" && !isExchange) {
+  if (rowTypeValue === "WARRANTY" && !isExchange && isMaterial) {
     return "incompatibleWarrantyType";
   }
 
-  if (rowTypeValue === "SERVICE_OFFERING" && !isExchange) {
+  if (rowTypeValue === "SERVICE_OFFERING" && !isExchange && isMaterial) {
     return "incompatibleServiceOfferingType";
   }
 

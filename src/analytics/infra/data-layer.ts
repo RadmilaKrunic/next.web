@@ -16,9 +16,9 @@ type DataLayerProvider = () => DataLayerEntry[] | undefined;
 
 export const resolveWindowDataLayer = (): DataLayerEntry[] | undefined => {
   try {
-    if (typeof window === "undefined") return undefined;
-    if (!Array.isArray(window.dataLayer)) window.dataLayer = [];
-    return window.dataLayer;
+    if (globalThis.window === undefined) return undefined;
+    if (!Array.isArray(globalThis.window.dataLayer)) globalThis.window.dataLayer = [];
+    return globalThis.window.dataLayer;
   } catch {
     return undefined;
   }

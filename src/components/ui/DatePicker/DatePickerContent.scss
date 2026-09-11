@@ -26,10 +26,20 @@
 
   .datepicker-header {
     display: flex;
-    justify-content: flex-start;
+    justify-content: space-between;
     align-items: center;
     gap: 0.5rem;
     width: 100%;
+
+    .datepicker-month-button {
+      width: 1rem;
+      height: 1.5rem;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+    }
 
     .a-dropdown:first-child {
       flex: 1;

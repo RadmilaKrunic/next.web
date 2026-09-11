@@ -18,7 +18,7 @@ export const useFormInitialization = (formConfig: GenericForm | null) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [sections, setSections] = useState<Section[]>([]);
   const [tabs, setTabs] = useState<Section[]>([]);
-  const [initialFormValues, setInitialFormValues] = useState<Record<string, unknown>>({});
+  const [initialFormValues, setInitialFormValues] = useState<Record<string, unknown> | null>(null);
   const [allFields, setAllFields] = useState<Field[] | null>(null);
   const [mandatoryFields, setMandatoryFields] = useState<Record<
     string,
@@ -34,12 +34,10 @@ export const useFormInitialization = (formConfig: GenericForm | null) => {
       return;
     }
     setSections(setInitalSectionsAreasFields(formConfig));
-    setIsInitialized(false);
   }, [formConfig]);
 
   useEffect(() => {
-    if (isInitialized || !formConfig || sections.length === 0) return;
-
+    if (initialFormValues || isInitialized || !formConfig || sections.length === 0) return;
     let processedFields = sections.flatMap((section) => getAllFieldsFromSection(section));
     processedFields = processedFields.map((field) => mapFieldToFieldMapping(field));
 
@@ -57,14 +55,16 @@ export const useFormInitialization = (formConfig: GenericForm | null) => {
         return section.isTab && hasPermission && !section.isHidden;
       }),
     );
-    setPatternDiagnosticArea(getAreasByName(sections, "diagnosticData")?.[0] || null);
+    const areas = getAreasByName(sections, "diagnosticsSpareParts");
+    setPatternDiagnosticArea(areas?.[0] || null);
     setIsInitialized(true);
-  }, [isInitialized, sections, formConfig, user?.permissions]);
+  }, [isInitialized, sections, formConfig, user?.permissions, initialFormValues]);
 
   const reset = useCallback(() => {
     if (formConfig) {
       setSections(setInitalSectionsAreasFields(formConfig));
     }
+    setInitialFormValues(null);
     setIsInitialized(false);
   }, [formConfig]);
 

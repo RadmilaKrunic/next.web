@@ -53,11 +53,11 @@ export const AnalyticsProvider = ({
         const user = readUserContext(queryClient, resolveRole, userQueryKey);
         const page =
           currentPageRef.current ??
-          (typeof window === "undefined"
+          (globalThis.window === undefined
             ? null
             : resolveVirtualPage({
-                pathname: window.location.pathname,
-                hash: window.location.hash,
+                pathname: globalThis.window.location.pathname,
+                hash: globalThis.window.location.hash,
               }));
         return {
           environment: config.environment,

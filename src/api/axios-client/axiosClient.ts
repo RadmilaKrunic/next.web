@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 
 
 const axiosClient: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000,
   headers: { "Content-Type": "application/json" },
   withCredentials: true,
   xsrfCookieName: "XSRF-TOKEN",

@@ -7,6 +7,7 @@ import {
   getAutofillFieldName,
   handleAutoCompleteSelect,
   handleResetAutoCompleteFields,
+  getSparePartCompatibilityMessage,
 } from "./AutoComplete.helper";
 import type Field from "../../generics/Field/GenericField.types";
 
@@ -519,5 +520,164 @@ describe("handleAutoCompleteSelect and handleResetAutoCompleteFields", () => {
     expect(handleFieldChange).toHaveBeenCalledWith("row0_primary", "DEF");
     expect(handleFieldChange).toHaveBeenCalledWith("row0_a1", "D1");
     expect(handleFieldChange).toHaveBeenCalledWith("row0_a2", "D2");
+  });
+});
+
+describe("getSparePartCompatibilityMessage", () => {
+  const sparePartField = makeField("row1_sparePartNumber", {
+    fieldMapping: {
+      originalName: "sparePartNumber",
+      map: "sparePartNumber",
+      parentMap: [],
+      prefixes: [],
+      nameStartsWith: "row1_",
+    },
+  });
+
+  const rowTypeField = () =>
+    makeField("row1_rowType", {
+      subtype: "diagnosticType",
+      fieldMapping: {
+        originalName: "rowType",
+        map: "rowType",
+        parentMap: [],
+        prefixes: [],
+        nameStartsWith: "row1_",
+      },
+    });
+
+  const positionField = () =>
+    makeField("row1_position", {
+      subtype: "diagnosticPosition",
+      fieldMapping: {
+        originalName: "position",
+        map: "position",
+        parentMap: [],
+        prefixes: [],
+        nameStartsWith: "row1_",
+      },
+    });
+
+  it("returns empty string when field name is not a sparePartNumber field", () => {
+    const result = getSparePartCompatibilityMessage(
+      makeField("row1_bareToolNumber"),
+      "row1_bareToolNumber",
+      { row1_rowType: "WARRANTY" },
+      [rowTypeField()],
+      { row1_bareToolNumber: true },
+    );
+    expect(result).toBe("");
+  });
+
+  it("returns empty string when sparePartNotBelongsToTool is undefined", () => {
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { row1_rowType: "WARRANTY" },
+      [rowTypeField()],
+      undefined,
+    );
+    expect(result).toBe("");
+  });
+
+  it("returns empty string when the field has no entry in sparePartNotBelongsToTool", () => {
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { row1_rowType: "WARRANTY" },
+      [rowTypeField()],
+      {},
+    );
+    expect(result).toBe("");
+  });
+
+  it("returns empty string when the flagged value is explicitly false", () => {
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { row1_rowType: "WARRANTY" },
+      [rowTypeField()],
+      { row1_sparePartNumber: false },
+    );
+    expect(result).toBe("");
+  });
+
+  it("returns incompatibleWarrantyType for a WARRANTY row with no position field present (defaults to material)", () => {
+    // Regression test: a row config without a diagnosticPosition field must still be
+    // treated as material for a sparePartNumber field, not silently skipped.
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { row1_rowType: "WARRANTY", actionType: "REPAIR" },
+      [sparePartField, rowTypeField()],
+      { row1_sparePartNumber: true },
+    );
+    expect(result).toBe("incompatibleWarrantyType");
+  });
+
+  it("returns incompatibleServiceOfferingType for a SERVICE_OFFERING row with no position field present", () => {
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { row1_rowType: "SERVICE_OFFERING", actionType: "REPAIR" },
+      [sparePartField, rowTypeField()],
+      { row1_sparePartNumber: true },
+    );
+    expect(result).toBe("incompatibleServiceOfferingType");
+  });
+
+  it("returns incompatibleWarrantyType when a position field is present with a material value (SP)", () => {
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { row1_rowType: "WARRANTY", row1_position: "SP", actionType: "REPAIR" },
+      [sparePartField, rowTypeField(), positionField()],
+      { row1_sparePartNumber: true },
+    );
+    expect(result).toBe("incompatibleWarrantyType");
+  });
+
+  it("returns empty string when a position field is present but its value is not a material position", () => {
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { row1_rowType: "WARRANTY", row1_position: "LB", actionType: "REPAIR" },
+      [sparePartField, rowTypeField(), positionField()],
+      { row1_sparePartNumber: true },
+    );
+    expect(result).toBe("");
+  });
+
+  it("returns empty string when actionType is an exchange type", () => {
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { row1_rowType: "WARRANTY", actionType: "NEW_TOOL_EXCHANGE" },
+      [sparePartField, rowTypeField()],
+      { row1_sparePartNumber: true },
+    );
+    expect(result).toBe("");
+  });
+
+  it("returns empty string when rowType is neither WARRANTY nor SERVICE_OFFERING", () => {
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { row1_rowType: "REPAIR", actionType: "REPAIR" },
+      [sparePartField, rowTypeField()],
+      { row1_sparePartNumber: true },
+    );
+    expect(result).toBe("");
+  });
+
+  it("returns empty string when no matching diagnosticType field exists", () => {
+    const result = getSparePartCompatibilityMessage(
+      sparePartField,
+      "row1_sparePartNumber",
+      { actionType: "REPAIR" },
+      [sparePartField],
+      { row1_sparePartNumber: true },
+    );
+    expect(result).toBe("");
   });
 });

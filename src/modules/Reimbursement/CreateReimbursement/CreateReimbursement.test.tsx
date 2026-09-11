@@ -274,7 +274,7 @@ describe("CreateReimbursement", () => {
     expect(screen.getByTestId("action-status")).toHaveTextContent("DISABLED");
   });
 
-  it("disables action status when approvedClaimCount is not available", () => {
+  it("keeps action status enabled when approvedClaimCount is not available", () => {
     mockFormikValues = { ascDetails: "ASC1", dateRange: "2026-01-01,2026-01-31" };
     mockReimbursementDryRunInfo = {
       approvedClaimCount: 0,
@@ -285,7 +285,7 @@ describe("CreateReimbursement", () => {
 
     renderComponent();
 
-    expect(screen.getByTestId("action-status")).toHaveTextContent("DISABLED");
+    expect(screen.getByTestId("action-status")).toHaveTextContent("ENABLED");
   });
 
   it("shows loading indicator while create reimbursement request is pending", async () => {

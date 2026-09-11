@@ -141,12 +141,6 @@ vi.mock("hooks/useActionWithValidation", () => ({
     vi.fn(async (_a: string, _b: unknown, _c: unknown, onValid: () => void) => onValid()),
 }));
 vi.mock("hooks/usePositionDropdownSync", () => ({ usePositionDropdownSync: vi.fn() }));
-// JobOverview.tsx calls useItemPolicyConfig directly (React Query's useQuery under the
-// hood), which the blanket @tanstack/react-query mock below doesn't provide — mock at the
-// hook level instead, consistent with every other domain hook in this file.
-vi.mock("api/services/itemPolicy/hooks", () => ({
-  useItemPolicyConfig: () => ({ data: undefined, isLoading: false, isError: false }),
-}));
 vi.mock("hooks/useSectionEditing", () => ({
   useSectionEditing: () => ({
     editingSections: editingSectionsMock.value,
@@ -155,28 +149,9 @@ vi.mock("hooks/useSectionEditing", () => ({
     setEditingSections: vi.fn(),
   }),
 }));
-// getBoschInternalPending/getChargeablePendingInfo/hasWarrantyOrProServiceItems are still
-// live, job-diagnostic-tab-specific helpers JobOverview.tsx imports from here directly
-// (Phase 5 unification, items-and-prices-refactor.md §15 step 10) — the useDiagnosticsManager
-// hook itself was deleted from this module and is mocked separately below, matching
-// JobOverview.tsx's real step-8 switch to useItemsManager.
 vi.mock("hooks/useDiagnosticsManager", () => ({
-  getBoschInternalPending: () => ({ pendingTypeFields: [], hasBoschInternalPending: false }),
-  getChargeablePendingInfo: () => ({ pendingTypeFields: [], hasChargeablePending: false }),
-  hasWarrantyOrProServiceItems: (
-    _fields: Array<{ subtype?: string; name: string }>,
-    values: Record<string, unknown>,
-  ) =>
-    Object.entries(values).some(([key, value]) => {
-      if (!key.endsWith("_type")) return false;
-      return value === "WARRANTY" || value === "SERVICE_OFFERING";
-    }),
-}));
-
-vi.mock("hooks/itemsManager/useItemsManager", () => ({
-  useItemsManager: () => ({
+  useDiagnosticsManager: () => ({
     materials: [],
-    archivedMaterials: [],
     setMaterials: vi.fn(),
     positionDropdownOptions: [],
     allowedPositions: [],
@@ -184,11 +159,8 @@ vi.mock("hooks/itemsManager/useItemsManager", () => ({
     markAllValidated: vi.fn(),
     markRowDirty: vi.fn(),
     discountBase: discountBaseMock.value,
-    getPositionConfig: vi.fn(),
-    getQuantityForPosition: vi.fn(),
     onAddRow: onAddRowMock,
     onDeleteRow: vi.fn(),
-    onDeleteArchivedRow: undefined,
     onRestoreRow: vi.fn(),
     onAddMaterials: vi.fn(),
     getExistingPartNumbers: () => new Set<string>(),
@@ -201,6 +173,16 @@ vi.mock("hooks/itemsManager/useItemsManager", () => ({
     automaticRows: [],
     resyncMaterialsFromAPI: vi.fn(),
   }),
+  getBoschInternalPending: () => ({ pendingTypeFields: [], hasBoschInternalPending: false }),
+  getChargeablePendingInfo: () => ({ pendingTypeFields: [], hasChargeablePending: false }),
+  hasWarrantyOrProServiceItems: (
+    _fields: Array<{ subtype?: string; name: string }>,
+    values: Record<string, unknown>,
+  ) =>
+    Object.entries(values).some(([key, value]) => {
+      if (!key.endsWith("_type")) return false;
+      return value === "WARRANTY" || value === "SERVICE_OFFERING";
+    }),
 }));
 
 vi.mock("components/generics/Form/useFormValidation", () => ({

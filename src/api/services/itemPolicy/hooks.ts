@@ -1,16 +1,12 @@
-import { useQuery, UseQueryOptions } from "@tanstack/react-query";
-import { getItemPolicyConfig } from "./action";
-import { ItemPolicyConfig } from "./itemPolicy.types";
+import { useQuery } from "@tanstack/react-query";
+import { getItemPolicy } from "./action";
 
-export const useItemPolicyConfig = (
-  countryCode: string,
-  options?: Omit<UseQueryOptions<ItemPolicyConfig, Error>, "queryKey" | "queryFn">,
-) => {
-  return useQuery({
-    queryKey: ["itemPolicyConfig", countryCode],
-    queryFn: () => getItemPolicyConfig(countryCode),
-    enabled: !!countryCode,
+export const itemPolicyQueryKey = (countryCode: string) => ["itemPolicy", countryCode];
+
+export const useItemPolicyQuery = (countryCode: string, enabled = true) =>
+  useQuery({
+    queryKey: itemPolicyQueryKey(countryCode),
+    queryFn: () => getItemPolicy(countryCode),
     staleTime: Infinity,
-    ...options,
+    enabled: enabled && !!countryCode,
   });
-};

@@ -1,13 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within, fireEvent, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Formik } from "formik";
 import GenericField from "./GenericField";
 import Field from "./GenericField.types";
-import { GenericFormContext } from "../Form/GenericForm.context";
+import {
+  GenericFormContext,
+  type ActionCallback,
+  type RadioSourceCallback,
+} from "../Form/GenericForm.context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { handleFaultCodeSelection } from "./GenericField.utils";
 import type { AllowedPosition } from "api/services/countryConfiguration/countryConfiguration";
+import {
+  handleAutoCompleteSelect,
+  handleResetAutoCompleteFields,
+  getSparePartCompatibilityMessage,
+} from "../../ui/AutoComplete/AutoComplete.helper";
 
 const mockUseDiagnosticsContext = vi.fn(
   () => ({ allowedPositions: [] }) as { allowedPositions: AllowedPosition[]; jobStatus?: string },
@@ -26,6 +35,37 @@ vi.mock("react-i18next", () => ({
 // Mock @bosch/react-frok components
 vi.mock("@bosch/react-frok", () => ({
   Button: () => <button data-testid="generic-button">Button</button>,
+  Icon: ({ iconName }: { iconName: string }) => (
+    <span data-testid={`icon-${iconName}`}>{iconName}</span>
+  ),
+  Toggle: ({
+    name,
+    id,
+    leftLabel,
+    checked,
+    disabled,
+    onChange,
+  }: {
+    name: string;
+    id: string;
+    leftLabel?: string;
+    checked: boolean;
+    disabled?: boolean;
+    onChange: (e: { target: { checked: boolean } }) => void;
+  }) => (
+    <label>
+      {leftLabel}
+      <input
+        type="checkbox"
+        id={id}
+        name={name}
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange({ target: { checked: e.target.checked } })}
+        data-testid={`toggle-${name}`}
+      />
+    </label>
+  ),
   Checkbox: ({
     label,
     checked,
@@ -56,6 +96,7 @@ vi.mock("@bosch/react-frok", () => ({
     disabled,
     type,
     onBlur,
+    onFocus,
   }: {
     label: string;
     name: string;
@@ -64,6 +105,7 @@ vi.mock("@bosch/react-frok", () => ({
     disabled?: boolean;
     type?: string;
     onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
+    onFocus?: () => void;
   }) => (
     <div>
       <label htmlFor={name}>{label}</label>
@@ -74,6 +116,7 @@ vi.mock("@bosch/react-frok", () => ({
         value={value}
         onChange={onChange}
         onBlur={onBlur}
+        onFocus={onFocus}
         disabled={disabled}
         data-testid={`text-field-${name}`}
       />
@@ -186,18 +229,23 @@ vi.mock("components/ui/FileUpload/FileUpload", () => ({
     name,
     isDisabled,
     onFilesSelected,
+    initialFiles,
   }: {
     name: string;
     isDisabled?: boolean;
     onFilesSelected: (files: File[]) => void;
+    initialFiles?: Array<{ attachmentId?: string; name?: string; type?: string }>;
   }) => (
-    <input
-      type="file"
-      data-testid={`file-upload-${name}`}
-      disabled={isDisabled}
-      onChange={(e) => onFilesSelected(Array.from(e.target.files || []))}
-      aria-label={`File upload for ${name}`}
-    />
+    <div>
+      <input
+        type="file"
+        data-testid={`file-upload-${name}`}
+        disabled={isDisabled}
+        onChange={(e) => onFilesSelected(Array.from(e.target.files || []))}
+        aria-label={`File upload for ${name}`}
+      />
+      <pre data-testid={`file-upload-initial-${name}`}>{JSON.stringify(initialFiles ?? [])}</pre>
+    </div>
   ),
 }));
 
@@ -208,14 +256,40 @@ vi.mock("components/ui/AutoComplete/AutoComplete", () => ({
     value,
     onChange,
     disabled,
+    onSelect,
+    onSetFieldError,
+    onSetFieldTouched,
+    onClearFieldError,
+    onValidation,
+    incompatibleSelectionMessage,
+    position,
+    brand,
+    bareTool,
+    isExchange,
   }: {
     name: string;
     label: string;
     value: string;
     onChange: (value: string) => void;
     disabled?: boolean;
+    onSelect?: (option: { notBelongsToTool?: boolean }) => void;
+    onSetFieldError?: (fieldName: string, message: string) => void;
+    onSetFieldTouched?: (fieldName: string, touched: boolean) => void;
+    onClearFieldError?: (fieldName: string) => void;
+    onValidation?: (isValid: boolean) => void;
+    incompatibleSelectionMessage?: string;
+    position?: string;
+    brand?: string;
+    bareTool?: string;
+    isExchange?: boolean;
   }) => (
-    <div>
+    <div
+      data-testid={`autocomplete-context-${name}`}
+      data-position={position}
+      data-brand={brand}
+      data-baretool={bareTool}
+      data-isexchange={String(!!isExchange)}
+    >
       <label htmlFor={name}>{label}</label>
       <input
         type="text"
@@ -226,6 +300,44 @@ vi.mock("components/ui/AutoComplete/AutoComplete", () => ({
         disabled={disabled}
         data-testid={`autocomplete-${name}`}
       />
+      {incompatibleSelectionMessage && (
+        <span data-testid={`autocomplete-incompatible-${name}`}>
+          {incompatibleSelectionMessage}
+        </span>
+      )}
+      <button
+        data-testid={`autocomplete-select-belongs-${name}`}
+        onClick={() => onSelect?.({ notBelongsToTool: false })}
+      >
+        Select (belongs)
+      </button>
+      <button
+        data-testid={`autocomplete-select-not-belongs-${name}`}
+        onClick={() => onSelect?.({ notBelongsToTool: true })}
+      >
+        Select (not belongs)
+      </button>
+      <button
+        data-testid={`autocomplete-set-error-${name}`}
+        onClick={() => onSetFieldError?.(name, "err")}
+      >
+        Set error
+      </button>
+      <button
+        data-testid={`autocomplete-set-touched-${name}`}
+        onClick={() => onSetFieldTouched?.(name, true)}
+      >
+        Set touched
+      </button>
+      <button
+        data-testid={`autocomplete-clear-error-${name}`}
+        onClick={() => onClearFieldError?.(name)}
+      >
+        Clear error
+      </button>
+      <button data-testid={`autocomplete-validate-${name}`} onClick={() => onValidation?.(true)}>
+        Validate
+      </button>
     </div>
   ),
 }));
@@ -238,6 +350,7 @@ vi.mock("components/ui/DynamicDropdown/DynamicDropdown", () => ({
     onChange,
     disabled,
     onRawOptionSelect,
+    options,
   }: {
     name: string;
     label: string;
@@ -245,6 +358,7 @@ vi.mock("components/ui/DynamicDropdown/DynamicDropdown", () => ({
     onChange: (value: string) => void;
     disabled?: boolean;
     onRawOptionSelect?: (rawItem: Record<string, unknown>) => void;
+    options?: Array<{ value: string; label?: string; disabled?: boolean }>;
   }) => (
     <div>
       <label htmlFor={name}>{label}</label>
@@ -257,6 +371,11 @@ vi.mock("components/ui/DynamicDropdown/DynamicDropdown", () => ({
         data-testid={`dropdown-${name}`}
       >
         <option value="">Select</option>
+        {options?.map((option) => (
+          <option key={option.value} value={option.value} disabled={option.disabled}>
+            {option.label ?? option.value}
+          </option>
+        ))}
       </select>
       {onRawOptionSelect && (
         <button
@@ -267,6 +386,12 @@ vi.mock("components/ui/DynamicDropdown/DynamicDropdown", () => ({
         </button>
       )}
     </div>
+  ),
+}));
+
+vi.mock("components/ui/StatusIndicator/StatusIndicator", () => ({
+  default: ({ status }: { status: string; type?: string; showStatusMessage?: boolean }) => (
+    <div data-testid="status-indicator">{status}</div>
   ),
 }));
 
@@ -302,11 +427,20 @@ vi.mock("../../ui/AutoComplete/AutoComplete.helper", () => ({
 
 describe("GenericField", () => {
   const mockContextValue = {
-    allFields: [],
+    allFields: [] as Field[],
     setAllFields: vi.fn(),
     mandatoryFields: null,
     setMandatoryFields: vi.fn(),
-    actionCallbacks: {},
+    actionCallbacks: {} as Record<string, ActionCallback>,
+    onDeleteStart: undefined as (() => void) | undefined,
+    onDeleteEnd: undefined as (() => void) | undefined,
+    autocompleteValidation: undefined as { current: Record<string, boolean> } | undefined,
+    sparePartNotBelongsToTool: undefined as { current: Record<string, boolean> } | undefined,
+    radioSourceCallbacks: undefined as Record<string, RadioSourceCallback> | undefined,
+    activeValueChangeFieldRef: undefined as { current: string | null } | undefined,
+    warrantyPanelInfo: undefined as
+      | { isIneligible?: boolean; hasPurchaseDate?: boolean; supportedWarrantyType: string }
+      | undefined,
   };
 
   const mockInitialValues = {
@@ -317,11 +451,18 @@ describe("GenericField", () => {
 
   const queryClient = new QueryClient();
 
-  const renderWithContext = (field: Field) => {
+  const renderWithContext = (
+    field: Field,
+    contextOverrides: Partial<typeof mockContextValue> = {},
+    initialValuesOverrides: Record<string, unknown> = {},
+  ) => {
     return render(
       <QueryClientProvider client={queryClient}>
-        <GenericFormContext.Provider value={mockContextValue}>
-          <Formik initialValues={mockInitialValues} onSubmit={vi.fn()}>
+        <GenericFormContext.Provider value={{ ...mockContextValue, ...contextOverrides }}>
+          <Formik
+            initialValues={{ ...mockInitialValues, ...initialValuesOverrides }}
+            onSubmit={vi.fn()}
+          >
             <GenericField field={field} />
           </Formik>
         </GenericFormContext.Provider>
@@ -430,6 +571,107 @@ describe("GenericField", () => {
       renderWithContext(field);
 
       expect(screen.getByTestId("info-icon-testField")).toBeInTheDocument();
+    });
+  });
+
+  describe("Price Field", () => {
+    it("formats a non-focused, non-disabled amount value to two decimals", () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        isRequired: false,
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: 12.5 });
+
+      expect(screen.getByTestId("text-field-priceField")).toHaveValue("12.50");
+    });
+
+    it("shows the raw value while focused", () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        isRequired: false,
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: 12.5 });
+
+      const input = screen.getByTestId("text-field-priceField");
+      fireEvent.focus(input);
+
+      expect(input).toHaveValue("12.5");
+    });
+
+    it("clears the display to empty while a zero value is focused, then reformats on blur", () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        isRequired: false,
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: 0 });
+
+      const input = screen.getByTestId("text-field-priceField");
+      fireEvent.focus(input);
+      expect(input).toHaveValue("");
+
+      fireEvent.blur(input);
+      expect(input).toHaveValue("0.00");
+    });
+
+    it("defaults an emptied price value to 0 on blur", async () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        isRequired: false,
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: "" });
+
+      const input = screen.getByTestId("text-field-priceField");
+      fireEvent.blur(input);
+
+      await waitFor(() => expect(input).toHaveValue("0.00"));
+    });
+
+    it("locks the active value-change field on focus and releases it on blur for guarded fields", async () => {
+      vi.useFakeTimers();
+      const field: Field = {
+        name: "onSummaryTotalAmountChange",
+        label: "Total",
+        type: "price",
+        subtype: "amount",
+        isRequired: false,
+        onValueChange: "onSummaryTotalAmountChange",
+        fieldMapping: { originalName: "onSummaryTotalAmountChange" },
+      };
+      const activeValueChangeFieldRef = { current: null as string | null };
+
+      renderWithContext(field, { activeValueChangeFieldRef }, { onSummaryTotalAmountChange: 5 });
+
+      const input = screen.getByTestId("text-field-onSummaryTotalAmountChange");
+      fireEvent.focus(input);
+      expect(activeValueChangeFieldRef.current).toBe("onSummaryTotalAmountChange");
+
+      fireEvent.blur(input);
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(activeValueChangeFieldRef.current).toBeNull();
+
+      vi.useRealTimers();
     });
   });
 
@@ -657,6 +899,80 @@ describe("GenericField", () => {
         allowedPositions,
       );
     });
+
+    it("disables warranty-ineligible job types when the tool is warranty-ineligible", () => {
+      const field: Field = {
+        name: "jobType",
+        label: "Job Type",
+        type: "dropdown",
+        isRequired: false,
+        options: [
+          { value: "WARRANTY", label: "Warranty", name: "Warranty" },
+          { value: "CHARGABLE", label: "Chargeable", name: "Chargeable" },
+        ],
+        fieldMapping: { originalName: "jobType" },
+      };
+
+      renderWithContext(field, {
+        warrantyPanelInfo: {
+          isIneligible: true,
+          hasPurchaseDate: true,
+          supportedWarrantyType: "WARRANTY",
+        },
+      });
+
+      const dropdown = screen.getByTestId("dropdown-jobType");
+      expect(within(dropdown).getByRole("option", { name: "Warranty" })).toBeDisabled();
+      expect(within(dropdown).getByRole("option", { name: "Chargeable" })).toBeEnabled();
+    });
+
+    it("disables warranty-ineligible job types when the tool has no purchase date", () => {
+      const field: Field = {
+        name: "jobType",
+        label: "Job Type",
+        type: "dropdown",
+        isRequired: false,
+        options: [
+          { value: "WARRANTY", label: "Warranty", name: "Warranty" },
+          { value: "CHARGABLE", label: "Chargeable", name: "Chargeable" },
+        ],
+        fieldMapping: { originalName: "jobType" },
+      };
+
+      renderWithContext(field, {
+        warrantyPanelInfo: {
+          isIneligible: false,
+          hasPurchaseDate: false,
+          supportedWarrantyType: "WARRANTY",
+        },
+      });
+
+      const dropdown = screen.getByTestId("dropdown-jobType");
+      expect(within(dropdown).getByRole("option", { name: "Warranty" })).toBeDisabled();
+      expect(within(dropdown).getByRole("option", { name: "Chargeable" })).toBeEnabled();
+    });
+
+    it("leaves job type options enabled when the tool is warranty-eligible", () => {
+      const field: Field = {
+        name: "jobType",
+        label: "Job Type",
+        type: "dropdown",
+        isRequired: false,
+        options: [{ value: "WARRANTY", label: "Warranty", name: "Warranty" }],
+        fieldMapping: { originalName: "jobType" },
+      };
+
+      renderWithContext(field, {
+        warrantyPanelInfo: {
+          isIneligible: false,
+          hasPurchaseDate: true,
+          supportedWarrantyType: "WARRANTY",
+        },
+      });
+
+      const dropdown = screen.getByTestId("dropdown-jobType");
+      expect(within(dropdown).getByRole("option", { name: "Warranty" })).toBeEnabled();
+    });
   });
 
   describe("File Upload Field", () => {
@@ -672,6 +988,40 @@ describe("GenericField", () => {
       renderWithContext(field);
 
       expect(screen.getByTestId("file-upload-testFile")).toBeInTheDocument();
+    });
+
+    it("builds a single-entry file list for the logo field when a logoId is present", () => {
+      const field: Field = {
+        name: "logo",
+        label: "Logo",
+        type: "upload",
+        isRequired: false,
+        fieldMapping: { originalName: "logo" },
+      };
+
+      renderWithContext(
+        field,
+        {},
+        { logo: { logoId: "LOGO-1", name: "logo.png", type: "image/png" } },
+      );
+
+      expect(screen.getByTestId("file-upload-initial-logo")).toHaveTextContent(
+        JSON.stringify([{ attachmentId: "LOGO-1", name: "logo.png", type: "image/png" }]),
+      );
+    });
+
+    it("falls back to an empty attachments list for the logo field when no logoId is present", () => {
+      const field: Field = {
+        name: "logo",
+        label: "Logo",
+        type: "upload",
+        isRequired: false,
+        fieldMapping: { originalName: "logo" },
+      };
+
+      renderWithContext(field, {}, { logo: undefined });
+
+      expect(screen.getByTestId("file-upload-initial-logo")).toHaveTextContent("[]");
     });
   });
 
@@ -723,6 +1073,202 @@ describe("GenericField", () => {
 
       expect(screen.getByTestId("autocomplete-testAutocomplete")).toBeInTheDocument();
     });
+
+    it("extracts position, brand, bareTool and isExchange for a spare part number field", () => {
+      const field: Field = {
+        name: "row0_sparePartNumber",
+        label: "Spare Part",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "sparePartNumber" },
+      };
+
+      renderWithContext(
+        field,
+        {},
+        {
+          row0_position: "SP",
+          brand: "BRANDX",
+          bareToolNumber: "BT-9",
+          actionType: "SPARE_PARTS_EXCHANGE",
+        },
+      );
+
+      const wrapper = screen.getByTestId("autocomplete-context-row0_sparePartNumber");
+      expect(wrapper).toHaveAttribute("data-position", "SP");
+      expect(wrapper).toHaveAttribute("data-brand", "BRANDX");
+      expect(wrapper).toHaveAttribute("data-baretool", "BT-9");
+      expect(wrapper).toHaveAttribute("data-isexchange", "true");
+    });
+
+    it("does not extract spare-part context for non spare-part-number fields", () => {
+      const field: Field = {
+        name: "bareToolNumber",
+        label: "Bare Tool",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "bareToolNumber" },
+      };
+
+      renderWithContext(field, {}, { actionType: "SPARE_PARTS_EXCHANGE" });
+
+      const wrapper = screen.getByTestId("autocomplete-context-bareToolNumber");
+      expect(wrapper).toHaveAttribute("data-position", "");
+      expect(wrapper).toHaveAttribute("data-isexchange", "false");
+    });
+
+    it("shows the compatibility message returned by getSparePartCompatibilityMessage", () => {
+      vi.mocked(getSparePartCompatibilityMessage).mockReturnValueOnce("incompatibleWarrantyType");
+      const field: Field = {
+        name: "row0_sparePartNumber",
+        label: "Spare Part",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "sparePartNumber" },
+      };
+
+      renderWithContext(field);
+
+      expect(
+        screen.getByTestId("autocomplete-incompatible-row0_sparePartNumber"),
+      ).toHaveTextContent("incompatibleWarrantyType");
+    });
+
+    it("flags a spare part number as not belonging to the tool while typing (not an SP exchange)", async () => {
+      const user = userEvent.setup();
+      const sparePartNotBelongsToTool = { current: {} as Record<string, boolean> };
+      const field: Field = {
+        name: "row0_sparePartNumber",
+        label: "Spare Part",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "sparePartNumber" },
+      };
+
+      renderWithContext(field, { sparePartNotBelongsToTool }, { actionType: "REPAIR" });
+
+      await user.type(screen.getByTestId("autocomplete-row0_sparePartNumber"), "1");
+
+      expect(sparePartNotBelongsToTool.current["row0_sparePartNumber"]).toBe(true);
+    });
+
+    it("does not flag a spare part number while typing during a spare-parts exchange", async () => {
+      const user = userEvent.setup();
+      const sparePartNotBelongsToTool = { current: {} as Record<string, boolean> };
+      const field: Field = {
+        name: "row0_sparePartNumber",
+        label: "Spare Part",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "sparePartNumber" },
+      };
+
+      renderWithContext(
+        field,
+        { sparePartNotBelongsToTool },
+        { actionType: "SPARE_PARTS_EXCHANGE" },
+      );
+
+      await user.type(screen.getByTestId("autocomplete-row0_sparePartNumber"), "1");
+
+      expect(sparePartNotBelongsToTool.current["row0_sparePartNumber"]).toBeUndefined();
+    });
+
+    it("resets dependent fields when the autocomplete value is cleared", async () => {
+      const field: Field = {
+        name: "testAutocomplete",
+        label: "Test Autocomplete",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "testAutocomplete" },
+      };
+
+      renderWithContext(field, {}, { testAutocomplete: "existing" });
+
+      fireEvent.change(screen.getByTestId("autocomplete-testAutocomplete"), {
+        target: { value: "" },
+      });
+
+      await waitFor(() => expect(handleResetAutoCompleteFields).toHaveBeenCalled());
+    });
+
+    it("records notBelongsToTool from the selected option and calls handleAutoCompleteSelect", async () => {
+      const user = userEvent.setup();
+      const sparePartNotBelongsToTool = { current: {} as Record<string, boolean> };
+      const field: Field = {
+        name: "row0_sparePartNumber",
+        label: "Spare Part",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "sparePartNumber" },
+      };
+
+      renderWithContext(field, { sparePartNotBelongsToTool });
+
+      await user.click(screen.getByTestId("autocomplete-select-not-belongs-row0_sparePartNumber"));
+
+      await waitFor(() => expect(handleAutoCompleteSelect).toHaveBeenCalled());
+      expect(sparePartNotBelongsToTool.current["row0_sparePartNumber"]).toBe(true);
+    });
+
+    it("marks the option as belonging to the tool when notBelongsToTool is false", async () => {
+      const user = userEvent.setup();
+      const sparePartNotBelongsToTool = { current: {} as Record<string, boolean> };
+      const field: Field = {
+        name: "row0_sparePartNumber",
+        label: "Spare Part",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "sparePartNumber" },
+      };
+
+      renderWithContext(field, { sparePartNotBelongsToTool });
+
+      await user.click(screen.getByTestId("autocomplete-select-belongs-row0_sparePartNumber"));
+
+      await waitFor(() => expect(handleAutoCompleteSelect).toHaveBeenCalled());
+      expect(sparePartNotBelongsToTool.current["row0_sparePartNumber"]).toBe(false);
+    });
+
+    it("wires field error, touched, clear-error and validation callbacks through to formik / the ref", async () => {
+      const user = userEvent.setup();
+      const autocompleteValidation = { current: {} as Record<string, boolean> };
+      const field: Field = {
+        name: "bareToolNumber",
+        label: "Bare Tool",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "bareToolNumber" },
+      };
+
+      renderWithContext(field, { autocompleteValidation });
+
+      // These call into formikContext internals — just confirm no crash and the ref path.
+      await user.click(screen.getByTestId("autocomplete-set-error-bareToolNumber"));
+      await user.click(screen.getByTestId("autocomplete-set-touched-bareToolNumber"));
+      await user.click(screen.getByTestId("autocomplete-clear-error-bareToolNumber"));
+      await user.click(screen.getByTestId("autocomplete-validate-bareToolNumber"));
+
+      expect(autocompleteValidation.current["bareToolNumber"]).toBe(true);
+    });
+
+    it("does not track validation for non-lookup fields", async () => {
+      const user = userEvent.setup();
+      const autocompleteValidation = { current: {} as Record<string, boolean> };
+      const field: Field = {
+        name: "customerName",
+        label: "Customer",
+        type: "autocomplete",
+        isRequired: false,
+        fieldMapping: { originalName: "customerName" },
+      };
+
+      renderWithContext(field, { autocompleteValidation });
+
+      await user.click(screen.getByTestId("autocomplete-validate-customerName"));
+
+      expect(autocompleteValidation.current["customerName"]).toBeUndefined();
+    });
   });
 
   describe("Button Field", () => {
@@ -738,6 +1284,116 @@ describe("GenericField", () => {
       renderWithContext(field);
 
       expect(screen.getByTestId("generic-button")).toBeInTheDocument();
+    });
+  });
+
+  describe("Badge Field", () => {
+    it("renders a status indicator and hidden input reflecting the field value", () => {
+      const field: Field = {
+        name: "statusField",
+        label: "Status",
+        type: "badge",
+        isRequired: false,
+        fieldMapping: { originalName: "statusField" },
+      };
+
+      renderWithContext(field, {}, { statusField: "APPROVED" });
+
+      expect(screen.getByTestId("status-indicator")).toHaveTextContent("APPROVED");
+    });
+  });
+
+  describe("Toggle Field", () => {
+    it("renders a toggle reflecting the field value and handles changes", async () => {
+      const user = userEvent.setup();
+      const field: Field = {
+        name: "toggleField",
+        label: "Toggle Field",
+        type: "toggle",
+        isRequired: false,
+        fieldMapping: { originalName: "toggleField" },
+      };
+
+      renderWithContext(field, {}, { toggleField: false });
+
+      const toggle = screen.getByTestId("toggle-toggleField");
+      expect(toggle).not.toBeChecked();
+
+      await user.click(toggle);
+
+      expect(toggle).toBeChecked();
+    });
+
+    it("renders info text next to the toggle when provided", () => {
+      const field: Field = {
+        name: "toggleField",
+        label: "Toggle Field",
+        type: "toggle",
+        isRequired: false,
+        infoText: "Extra context",
+        fieldMapping: { originalName: "toggleField" },
+      };
+
+      renderWithContext(field);
+
+      expect(screen.getByText("Extra context")).toBeInTheDocument();
+    });
+  });
+
+  describe("Info Icon Field", () => {
+    it("renders the translated info text next to an info icon", () => {
+      const field: Field = {
+        name: "infoField",
+        label: "Info",
+        type: "infoIcon",
+        isRequired: false,
+        infoText: "helpfulInfoKey",
+        fieldMapping: { originalName: "infoField" },
+      };
+
+      renderWithContext(field);
+
+      expect(screen.getByTestId("icon-info-i-frame")).toBeInTheDocument();
+      expect(screen.getByText("helpfulInfoKey")).toBeInTheDocument();
+    });
+  });
+
+  describe("Label suffix", () => {
+    it("appends a percentage suffix for percentage subtype fields", () => {
+      const field: Field = {
+        name: "discountField",
+        label: "Discount",
+        type: "text",
+        subtype: "discount",
+        isRequired: false,
+        fieldMapping: { originalName: "discountField" },
+      };
+
+      renderWithContext(field);
+
+      expect(screen.getByLabelText(/Discount \(%\)/)).toBeInTheDocument();
+    });
+
+    it("appends the currency symbol for amount subtype fields when configured", () => {
+      queryClient.setQueryData(["user"], { countryCode: "US" });
+      queryClient.setQueryData(["countryConfiguration", "US"], { currencySymbol: "$" });
+
+      const field: Field = {
+        name: "totalField",
+        label: "Total",
+        type: "text",
+        subtype: "amount",
+        isRequired: false,
+        fieldMapping: { originalName: "totalField" },
+      };
+
+      renderWithContext(field);
+
+      expect(screen.getByLabelText(/Total \(\$\)/)).toBeInTheDocument();
+
+      // Avoid leaking this cached data into unrelated tests that reuse `queryClient`.
+      queryClient.removeQueries({ queryKey: ["user"] });
+      queryClient.removeQueries({ queryKey: ["countryConfiguration", "US"] });
     });
   });
 

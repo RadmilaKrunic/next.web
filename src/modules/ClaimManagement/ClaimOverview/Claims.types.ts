@@ -5,9 +5,6 @@ import {
   CustomerWish,
   JobDiagnostic,
 } from "modules/JobManagement/JobList/JobList.types";
-import { Price } from "types/price.types";
-
-export type { Price };
 
 export interface Asset {
   brand: string;
@@ -41,6 +38,17 @@ export interface Tax {
   type: string;
   percentage: number;
   value: number;
+}
+
+export interface Price {
+  discount: number;
+  grossAmount: number;
+  netAmount: number;
+  suggestedNetPrice: number;
+  tax: number;
+  taxAmount: number;
+  totalAmount: number;
+  unitPrice: number;
 }
 
 export interface Material {

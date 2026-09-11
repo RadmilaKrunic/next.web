@@ -1,5 +1,5 @@
-{
-  "version": "2026-08-24.2",
+﻿{
+  "version": "2026-09-11.1",
   "countryCode": "TR",
   "positions": [
     {
@@ -12,6 +12,11 @@
         "canEditUnitPrice": "DLPE",
         "canEditDiscount": "DLDE",
         "canEditTotal": "DLTE"
+      },
+      "isDistributable": false,
+      "autofill": {
+        "partNumber": "1609888887",
+        "descriptionKey": "labourCost"
       }
     },
     {
@@ -24,6 +29,11 @@
         "canEditUnitPrice": "DFPE",
         "canEditDiscount": "DFDE",
         "canEditTotal": "DFTE"
+      },
+      "isDistributable": false,
+      "autofill": {
+        "partNumber": "1609888888",
+        "descriptionKey": "freightCost"
       }
     },
     {
@@ -36,7 +46,8 @@
         "canEditUnitPrice": "DTEP",
         "canEditDiscount": "DTDE",
         "canEditTotal": "DTTE"
-      }
+      },
+      "isDistributable": true
     },
     {
       "position": "SP",
@@ -48,7 +59,8 @@
         "canEditUnitPrice": "DSPE",
         "canEditDiscount": "DSDE",
         "canEditTotal": "DSTE"
-      }
+      },
+      "isDistributable": true
     },
     {
       "position": "AC",
@@ -60,7 +72,8 @@
         "canEditUnitPrice": "DSPE",
         "canEditDiscount": "DSDE",
         "canEditTotal": "DSTE"
-      }
+      },
+      "isDistributable": true
     },
     {
       "position": "PC",
@@ -72,11 +85,13 @@
         "canEditUnitPrice": "DSPE",
         "canEditDiscount": "DSDE",
         "canEditTotal": "DSTE"
-      }
+      },
+      "isDistributable": false
     }
   ],
-  "editability": [
+  "priceEditability": [
     {
+      "fieldSubTypes": ["diagnosticDiscount", "diagnosticTotalAmount", "diagnosticNetAmount"],
       "contextType": "jobType",
       "contextValue": "COMMERCIAL_GOODWILL",
       "appliesToProtectedPositionsOnly": false,
@@ -84,6 +99,7 @@
       "controlledBySummary": false
     },
     {
+      "fieldSubTypes": ["diagnosticDiscount", "diagnosticTotalAmount", "diagnosticNetAmount"],
       "contextType": "jobType",
       "contextValue": "CHARGEABLE",
       "appliesToProtectedPositionsOnly": true,
@@ -91,6 +107,7 @@
       "controlledBySummary": false
     },
     {
+      "fieldSubTypes": ["diagnosticDiscount", "diagnosticTotalAmount", "diagnosticNetAmount"],
       "contextType": "jobType",
       "contextValue": "CHARGEABLE",
       "appliesToProtectedPositionsOnly": false,
@@ -98,16 +115,20 @@
       "controlledBySummary": true
     }
   ],
+  "fieldModeRestrictions": {
+    "diagnosticTotalAmount": "GROSS_PRICE",
+    "diagnosticNetAmount": "NET_PRICE"
+  },
   "warrantyGating": {
     "gatedTypes": ["WARRANTY", "SERVICE_OFFERING"],
     "disableTypeOptionsWhenInvalidSparePart": true
   },
   "surfaceOverrides": {
     "claimDiagnosticsReadOnly": {
-      "editability": []
+      "priceEditability": []
     },
     "claimSpareParts": {
-      "editability": [
+      "priceEditability": [
         {
           "contextType": "claimStatus",
           "contextValue": "REVISED",
@@ -124,5 +145,6 @@
         }
       ]
     }
-  }
+  },
+  "statusesWithPermanentDelete": ["IN_DIAGNOSTICS"]
 }

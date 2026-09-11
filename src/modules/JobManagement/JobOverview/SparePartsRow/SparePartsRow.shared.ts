@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import Field from "components/generics/Field/GenericField.types";
 import type { discountBase } from "api/services/countryConfiguration/countryConfiguration";
 import { useSparePartPriceCalculation } from "./useSparePartPriceCalculation";
+import { useDiagnosticsPricingContext } from "../DiagnosticsPricingContext";
 
 function getSubtypeName(fields: Field[], subtype: string): string {
   return fields.find((f) => f.subtype === subtype)?.name || "";
@@ -57,7 +58,9 @@ export function useSparePartsRowCommon({
   areaIndex: number;
   isValidating?: boolean;
 }): string {
+  const { enabled: isBackendPricing } = useDiagnosticsPricingContext();
   useSparePartPriceCalculation({
+    isDisabled: isBackendPricing,
     quantity: getSubtypeName(fields, "diagnosticQuantity"),
     unitPrice: getSubtypeName(fields, "diagnosticUnitPrice"),
     netAmount: getSubtypeName(fields, "diagnosticNetAmount"),

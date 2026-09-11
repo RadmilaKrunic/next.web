@@ -12,7 +12,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../SparePartsRow/ItemRow", () => ({
+vi.mock("../SparePartsRow/SparePartsRow", () => ({
   default: () => <div data-testid="spare-parts-row" />,
 }));
 
@@ -88,9 +88,6 @@ const createDiagnosticsContextValue = (
   discountBase: "GROSS_PRICE",
   automaticRows: [],
   isValidating: false,
-  canDeleteRows: false,
-  archivedMaterials: [],
-  isClaimPending: false,
   ...overrides,
 });
 

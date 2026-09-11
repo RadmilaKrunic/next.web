@@ -40,6 +40,8 @@ export default function DatePicker({
     handleInputFocus,
     handleInputBlur,
     handleKeyDown,
+    handlePreviousMonth,
+    handleNextMonth,
     monthOptions,
     yearOptions,
     calendarDays,
@@ -102,6 +104,8 @@ export default function DatePicker({
             isRangeEnd={isRangeEnd}
             onMonthChange={handleMonthChange}
             onYearChange={handleYearChange}
+            onPreviousMonth={handlePreviousMonth}
+            onNextMonth={handleNextMonth}
             onDateClick={handleDateClick}
             onKeyDown={handleKeyDown}
             onCancel={handleCancel}

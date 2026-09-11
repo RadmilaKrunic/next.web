@@ -1,6 +1,8 @@
 import Field, { DependentField } from "../Field/GenericField.types";
 import { GenericActions } from "../Action/GenericAction.types";
-
+interface AreaMapping {
+  originalName: string;
+}
 interface Area {
   name: string;
   label: string;
@@ -16,6 +18,7 @@ interface Area {
   permissions?: string[];
   //calculated prop - all fields in area are disabled
   isDisabled?: boolean;
+  mapping?: AreaMapping;
 }
 
 export default Area;
