@@ -30,6 +30,7 @@ import {
   getPositionPermissions,
   isProtectedPosition as isPolicyProtectedPosition,
   resolvePriceFieldPolicy,
+  isWarrantyGatedType,
 } from "utils/itemPolicy";
 import type { User } from "types/user.type";
 
@@ -674,6 +675,8 @@ function SparePartsRow({
   );
   const actionType = (values["actionType"] as string) ?? "";
   const isSparepartExchangeRow = SPARE_PARTS_EXCHANGE_ACTION_TYPES.has(actionType);
+  const isTypeWarrantyGated = (type: string): boolean =>
+    isPolicyDriven ? isWarrantyGatedType(itemPolicy, type) : WARRANTY_GATED_TYPES.has(type);
   const fieldsWithTypeOptionsDisabled = useMemo(
     () =>
       fields.map((field) => {
@@ -684,16 +687,19 @@ function SparePartsRow({
           ...field,
           options: field.options.map((option) => {
             const optionValue = String(option.value ?? "").toUpperCase();
-            if (
-              !WARRANTY_GATED_TYPES.has(optionValue) ||
-              isSparepartExchangeRow
-            )
-              return option;
+            if (!isTypeWarrantyGated(optionValue) || isSparepartExchangeRow) return option;
             return { ...option, disabled: true };
           }),
         };
       }),
-    [fields, isSparePartTypeRestricted, isWarrantyIneligible, isSparepartExchangeRow],
+    [
+      fields,
+      isSparePartTypeRestricted,
+      isWarrantyIneligible,
+      isSparepartExchangeRow,
+      isPolicyDriven,
+      itemPolicy,
+    ],
   );
 
   const mainFields = fieldsWithTypeOptionsDisabled.filter(
