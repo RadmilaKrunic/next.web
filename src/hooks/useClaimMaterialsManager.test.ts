@@ -4,7 +4,9 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Field from "components/generics/Field/GenericField.types";
 import Section from "components/generics/Section/GenericSection.types";
+import Area from "components/generics/Area/GenericArea.types";
 import { useClaimMaterialsManager } from "./useClaimMaterialsManager";
+import { buildMaterialsRowValues } from "hooks/useDiagnosticsManager";
 
 vi.mock("components/generics/utils", () => ({
   setDuplicatedArea: vi.fn((area, index, tabName) => ({
@@ -25,6 +27,9 @@ vi.mock("components/generics/utils", () => ({
 
 vi.mock("hooks/useDiagnosticsManager", () => ({
   buildRowValues: vi.fn(() => ({
+    "claims_claimSpareParts#0_sparePartNumber": "PN-1",
+  })),
+  buildMaterialsRowValues: vi.fn(() => ({
     "claims_claimSpareParts#0_sparePartNumber": "PN-1",
   })),
 }));
@@ -397,6 +402,48 @@ describe("useClaimMaterialsManager", () => {
     expect(setArePricesValidated).toHaveBeenCalledWith(false);
   });
 
+  it("derives row values via the shared full-recomputation helper, not an inline incremental reuse", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(["user"], { countryCode: "ZA", permissions: [] });
+    const setInitialFormValues = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useClaimMaterialsManager({
+          claimId: "C1",
+          claimMaterials: loadedClaimMaterials as never,
+          currentActionType: "REPAIR",
+          currentJobType: "WARRANTY",
+          tabs: [claimsTab],
+          setTabs: vi.fn(),
+          allFields,
+          setAllFields: vi.fn(),
+          setInitialFormValues,
+          skipFormResetRef: { current: false },
+          formValuesRef: { current: {} },
+          arePricesValidated: false,
+          setArePricesValidated: vi.fn(),
+          readOnly: false,
+          isResyncingRef: { current: false },
+        }),
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(1));
+
+    // Every row 0..N-1 is re-derived from `materials` on each change (job's Phase 4 fix,
+    // ported here) rather than claim's own hand-rolled "reuse form values when idx <
+    // currentCount" logic, which left stale values in place after a row shifted position.
+    expect(buildMaterialsRowValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        materials: expect.arrayContaining([expect.objectContaining({ partNumber: "P-1" })]),
+        currentCount: expect.any(Number),
+        forceRebuild: expect.any(Boolean),
+      }),
+    );
+    expect(setInitialFormValues).toHaveBeenCalled();
+  });
+
   it("preserves reimbursement payment method when archiving a loaded material", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     queryClient.setQueryData(["user"], { countryCode: "ZA", permissions: [] });
@@ -430,5 +477,61 @@ describe("useClaimMaterialsManager", () => {
     });
 
     expect(result.current.archivedMaterials[0].reimbursementPaymentMethod).toBe("BANK_TRANSFER");
+  });
+
+  it("deleting the last remaining row clears its areas/fields/values directly (Effect 2 can't reach a zero-row state)", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(["user"], { countryCode: "ZA", permissions: [] });
+    const setAllFields = vi.fn();
+    const setTabs = vi.fn();
+    const setInitialFormValues = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useClaimMaterialsManager({
+          claimId: "C1",
+          claimMaterials: loadedClaimMaterials as never,
+          currentActionType: "REPAIR",
+          currentJobType: "WARRANTY",
+          tabs: [claimsTab],
+          setTabs,
+          allFields,
+          setAllFields,
+          setInitialFormValues,
+          skipFormResetRef: { current: false },
+          formValuesRef: { current: {} },
+          arePricesValidated: false,
+          setArePricesValidated: vi.fn(),
+          readOnly: false,
+          isResyncingRef: { current: false },
+        }),
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(1));
+    setAllFields.mockClear();
+    setTabs.mockClear();
+    setInitialFormValues.mockClear();
+
+    act(() => {
+      result.current.onDeleteRow("claims_claimSpareParts#0");
+    });
+
+    // Called directly by onDeleteRow itself, not deferred to Effect 2 (which bails out
+    // immediately once materials is empty and would otherwise never clear the row).
+    expect(setAllFields).toHaveBeenCalled();
+    expect(setTabs).toHaveBeenCalled();
+    expect(setInitialFormValues).toHaveBeenCalled();
+
+    // Thread every setTabs call through in order (archiving the deleted row triggers its
+    // own tabs update too, in the same batch) the way React would apply them for real.
+    const finalTabs = setTabs.mock.calls.reduce(
+      (prev: Section[], [arg]) => (typeof arg === "function" ? arg(prev) : arg),
+      [claimsTab],
+    );
+    const claimsTabAfter = finalTabs.find((t: Section) => t.name === "claims");
+    expect(claimsTabAfter.areas.some((a: Area) => a.name === "claims_claimSpareParts#0")).toBe(
+      false,
+    );
   });
 });

@@ -1,66 +1,16 @@
-import type {
-  AllowedPosition,
-  discountBase,
-} from "api/services/countryConfiguration/countryConfiguration";
-import type { GenericOptionProps } from "components/generics/Field/GenericField.types";
-import Field from "components/generics/Field/GenericField.types";
-import Area from "components/generics/Area/GenericArea.types";
-import { setDuplicatedArea, mapFieldToFieldMapping } from "components/generics/utils";
-import { calculatePrices } from "utils/priceCalculator";
 import type { TFunction } from "i18next";
-import type { MaterialItem } from "./itemsManager.types";
-import type { MaterialRow, MaterialRowResult } from "api/services/itemPolicy/itemPolicy.types";
-
-// Pure material-row derivation helpers shared by the job (useDiagnosticsManager.ts) and
-// claim (useClaimMaterialsManager.ts, Phase 5) item-row managers. Moved out of
-// useDiagnosticsManager.ts verbatim — see items-and-prices-refactor.md §15 (Phase 5 unification
-// plan, step 2) for why: claim never adopted job's Phase-4 full-recomputation fix and had its
-// own near-duplicate copies of several of these (getOrderValue/normalizeMaterialOrders/
-// sortMaterialsByOrder), which is what this extraction is meant to end.
-
-export const getPositionAutofill = (
-  t: TFunction<"translation", "app">,
-): Record<string, { partNumber: string; description: string }> => ({
-  LA: { partNumber: "1609888887", description: t("labourCost") },
-  FR: { partNumber: "1609888888", description: t("freightCost") },
-});
-
-export const POSITION_ORDER: Record<string, number> = {
-  LA: 0,
-  PN: 1,
-  SP: 2,
-  AC: 3,
-  FR: 4,
-  PC: 5,
-};
-
-export const sortByPositionOrder = (positions: string[]): string[] =>
-  [...positions].sort(
-    (a, b) =>
-      (POSITION_ORDER[a] ?? Number.MAX_SAFE_INTEGER) -
-      (POSITION_ORDER[b] ?? Number.MAX_SAFE_INTEGER),
-  );
-
-export const getOrderValue = (item: MaterialItem, fallbackIndex: number): number => {
-  const parsed = Number(item.order);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallbackIndex + 1;
-  return parsed;
-};
-
-export const normalizeMaterialOrders = (items: MaterialItem[]): MaterialItem[] =>
-  items.map((item, index) => ({ ...item, order: getOrderValue(item, index) }));
-
-export const sortMaterialsByOrder = (items: MaterialItem[]): MaterialItem[] =>
-  [...normalizeMaterialOrders(items)].sort((a, b) => {
-    const byOrder = getOrderValue(a, 0) - getOrderValue(b, 0);
-    if (byOrder !== 0) return byOrder;
-    return (
-      (POSITION_ORDER[a.position] ?? Number.MAX_SAFE_INTEGER) -
-      (POSITION_ORDER[b.position] ?? Number.MAX_SAFE_INTEGER)
-    );
-  });
+import Field from "components/generics/Field/GenericField.types";
+import type { GenericOptionProps } from "components/generics/Field/GenericField.types";
+import Area from "components/generics/Area/GenericArea.types";
+import Section from "components/generics/Section/GenericSection.types";
+import type { AllowedPosition, discountBase } from "api/services/countryConfiguration/countryConfiguration";
+import { calculatePrices } from "utils/priceCalculator";
+import { FEATURE_FLAGS, isFeatureEnabled } from "utils/featureFlags";
+import type { MaterialItem } from "./materialItem.types";
+import { getPositionAutofill } from "./diagnosticFieldHelpers";
 
 export const computePricesForItem = (item: MaterialItem, mode?: discountBase): MaterialItem => {
+  if (isFeatureEnabled(FEATURE_FLAGS.DIAGNOSTICS_BACKEND_DRIVEN)) return item;
   if (item.unitPrice <= 0) return item;
   const result = calculatePrices(
     {
@@ -310,116 +260,29 @@ export function withSpecialMaterialSpOption(params: {
   });
 }
 
-/**
- * Rebuilds the full set of spare-parts Areas + Fields for `count` rows from a single
- * pristine template, every time — rather than incrementally cloning only the rows added
- * since the last pass and trimming only the rows removed from the end (the previous
- * design). Field names stay index-based (`#{i}_...`), same as today — `mapValuesToAPI`'s
- * numeric-index parsing (src/components/generics/utils.ts) is untouched. This is what lets
- * a delete-from-the-middle collapse into "remove the item from `materials`, recompute
- * everything" instead of "remove one area, then separately shift every subsequent area's
- * name/fields/values down by one" (see items-and-prices-refactor.md §7 for the full
- * rationale, including why field names stay index-based rather than a stable per-row id).
- */
-export function deriveSparePartsAreasAndFields(
-  templateArea: Area,
-  count: number,
-  sectionName: string,
-): { areas: Area[]; fields: Field[] } {
-  const areas: Area[] = [];
-  let fields: Field[] = [];
-  for (let i = 0; i < count; i++) {
-    const cloned = structuredClone(templateArea);
-    if (i !== 0) cloned.label = "";
-    const area = setDuplicatedArea(cloned, i, sectionName);
-    area.fields = area.fields.map((f) => mapFieldToFieldMapping(f));
-    areas.push(area);
-    fields = [...fields, ...area.fields];
-  }
-  return { areas, fields };
+export function computeFinalSparePartsAreas(
+  needed: number,
+  sparePartsAreas: Area[],
+  newAreas: Area[],
+  removeAreaNames: Set<string>,
+): Area[] {
+  if (needed > 0) return [...sparePartsAreas, ...newAreas];
+  if (needed < 0) return sparePartsAreas.filter((a) => !removeAreaNames.has(a.name));
+  return sparePartsAreas;
 }
 
-// Confirmed byte-identical (Phase 5 unification, items-and-prices-refactor.md §15 step 7)
-// between ArchivedSparePartsArea.tsx (job) and ClaimArchivedSparePartsArea.tsx (claim) —
-// area.fields in tabs state are separate objects from allFields context; options are
-// stamped only on the allFields copies, so the archivedPosition dropdown's options must be
-// merged in here for the dropdown to render.
-export function enrichArchivedFieldOptions(areaFields: Field[], allFields: Field[] | undefined): Field[] {
-  return areaFields.map((f) => {
-    if (f.subtype !== "archivedPosition") return f;
-    const contextField = allFields?.find((cf) => cf.name === f.name);
-    if (!contextField?.options?.length) return f;
-    return { ...f, options: contextField.options };
-  });
+export function removeDiagnosticsAreas(tab: Section, removeAreaNames: Set<string>): Section {
+  if (tab.name !== "diagnosticData") return tab;
+  return {
+    ...tab,
+    areas: tab.areas.filter((area) => !removeAreaNames.has(area.name)),
+  };
 }
 
-// Phase 3 (items-and-prices-refactor.md §15/§10, backend-authoritative price validation,
-// gated behind ENABLE_PRICE_VALIDATE_API) — pure MaterialItem <-> wire-contract MaterialRow
-// conversion, shared by job and claim since both already reduce to the same client-side
-// MaterialItem shape (Phase 5 unification). rowId is synthesized per-call from the row's
-// current array index (never stored on MaterialItem) — this codebase's rows are deliberately
-// positional/index-based throughout (see items-and-prices-refactor.md's row-rendering notes),
-// same convention priceEngineSimulator.ts's own simulateClaimPricesSave already uses.
-
-/** unitPrice <= 0 means "not yet priced" — mirrors computePricesForItem's own gate above and
- *  the wire contract's stated meaning for MaterialRow.price === null ("not yet priced, please
- *  calculate"). */
-export const materialItemToMaterialRow = (item: MaterialItem, index: number): MaterialRow => ({
-  rowId: `row-${index}`,
-  position: item.position,
-  partNumber: item.partNumber,
-  description: item.description,
-  type: item.type,
-  quantity: item.quantity,
-  status: item.status,
-  isPriceSetManually: item.isPriceSetManually ?? false,
-  isValidated: item.isValidated ?? false,
-  price:
-    item.unitPrice > 0
-      ? {
-          unitPrice: item.unitPrice,
-          netAmount: item.netAmount,
-          tax: item.tax,
-          grossAmount: item.grossAmount,
-          discount: item.discount,
-          discountAmount: item.discountAmount,
-          taxAmount: item.taxAmount,
-          totalAmount: item.totalAmount,
-          suggestedNetPrice: item.suggestedNetPrice ?? 0,
-        }
-      : null,
-});
-
-/** Merges a validate response's MaterialRowResult[] back onto the current MaterialItem[] by
- *  positional index — safe because the merge that produced the response preserves the
- *  baseline's original row order (see priceEngineSimulator.ts's computeMergedRows: baseline
- *  rows are inserted into the merge Map first, and re-setting an existing Map key never moves
- *  its iteration position), and every call sends the FULL current materials[] as the baseline,
- *  so response.length === materials.length. A row missing from the response (shouldn't happen,
- *  but the API contract doesn't guarantee array identity) is left untouched rather than dropped. */
-export const applyMaterialRowResultsToMaterials = (
-  materials: MaterialItem[],
-  results: MaterialRowResult[],
-): MaterialItem[] =>
-  materials.map((item, index) => {
-    const result = results[index];
-    if (!result) return item;
-    const price = result.price;
-    return {
-      ...item,
-      isValidated: result.changeStatus === "confirmed",
-      ...(price
-        ? {
-            unitPrice: price.unitPrice,
-            netAmount: price.netAmount,
-            tax: price.tax,
-            grossAmount: price.grossAmount,
-            discount: price.discount,
-            discountAmount: price.discountAmount,
-            taxAmount: price.taxAmount,
-            totalAmount: price.totalAmount,
-            suggestedNetPrice: price.suggestedNetPrice,
-          }
-        : {}),
-    };
-  });
+export function removeArchivedArea(tab: Section, areaName: string): Section {
+  if (tab.name !== "diagnosticData") return tab;
+  return {
+    ...tab,
+    areas: tab.areas.filter((area) => area.name !== areaName),
+  };
+}

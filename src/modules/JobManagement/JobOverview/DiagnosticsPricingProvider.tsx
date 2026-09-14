@@ -11,6 +11,7 @@ import {
   buildMaterialPricePatch,
   buildPricingMaterials,
   groupRowFields,
+  type RowFieldGroup,
 } from "utils/diagnosticsFormSync";
 import { useDebouncedValue } from "hooks/useDebouncedValue";
 import {
@@ -39,6 +40,54 @@ const PRICE_INPUT_SUBTYPES = [
   "diagnosticPartNumber",
   "diagnosticType",
 ];
+
+/** Only these subtypes tell the backend which direction to back-calculate; the rest (position/partNumber/type) fall back to "load". */
+const SUBTYPE_TO_TRIGGER: Partial<Record<string, DiagnosticPricingTrigger>> = {
+  diagnosticQuantity: "quantity",
+  diagnosticUnitPrice: "unitPrice",
+  diagnosticDiscount: "discount",
+  diagnosticNetAmount: "netAmount",
+  diagnosticGrossAmount: "grossAmount",
+  diagnosticTotalAmount: "totalAmount",
+};
+
+type ValueSnapshot = Map<string, string>;
+
+const buildValueSnapshot = (
+  rows: RowFieldGroup[],
+  values: Record<string, unknown>,
+): ValueSnapshot => {
+  const snapshot: ValueSnapshot = new Map();
+  for (const row of rows) {
+    for (const subtype of PRICE_INPUT_SUBTYPES) {
+      const name = row.bySubtype[subtype];
+      const value = name ? values[name] : undefined;
+      snapshot.set(
+        `${row.order}:${subtype}`,
+        value === null || value === undefined ? "" : String(value as string | number | boolean),
+      );
+    }
+  }
+  return snapshot;
+};
+
+/** Finds the first row/field that changed since the last settled snapshot, in field priority order. */
+const findChangeTrigger = (
+  rows: RowFieldGroup[],
+  prev: ValueSnapshot | null,
+  next: ValueSnapshot,
+): { trigger: DiagnosticPricingTrigger; triggeredByOrder?: number } => {
+  if (!prev) return { trigger: "load" };
+  for (const row of rows) {
+    for (const subtype of PRICE_INPUT_SUBTYPES) {
+      const key = `${row.order}:${subtype}`;
+      if (prev.get(key) === next.get(key)) continue;
+      const trigger = SUBTYPE_TO_TRIGGER[subtype];
+      return trigger ? { trigger, triggeredByOrder: row.order } : { trigger: "load" };
+    }
+  }
+  return { trigger: "load" };
+};
 
 export function DiagnosticsPricingProvider({
   enabled,
@@ -94,32 +143,31 @@ export function DiagnosticsPricingProvider({
   // Serialized price inputs — recalculation is requested once the user stops editing.
   const signature = useMemo(() => {
     if (!enabled) return "";
-    return rows
-      .map((row) =>
-        PRICE_INPUT_SUBTYPES.map((subtype) => {
-          const name = row.bySubtype[subtype];
-          const value = name ? values[name] : undefined;
-          return value === null || value === undefined
-            ? ""
-            : String(value as string | number | boolean);
-        }).join("|"),
-      )
-      .join("~");
+    return [...buildValueSnapshot(rows, values).values()].join("|");
   }, [enabled, rows, values]);
 
   const debouncedSignature = useDebouncedValue(signature, 500);
   const lastSignatureRef = useRef<string | null>(null);
+  const lastSnapshotRef = useRef<ValueSnapshot | null>(null);
 
   useEffect(() => {
     if (!enabled || !debouncedSignature) return;
+    const nextSnapshot = buildValueSnapshot(rowsRef.current, valuesRef.current);
     // First settled signature is the state loaded from the backend — nothing to recalculate.
     if (lastSignatureRef.current === null) {
       lastSignatureRef.current = debouncedSignature;
+      lastSnapshotRef.current = nextSnapshot;
       return;
     }
     if (lastSignatureRef.current === debouncedSignature) return;
+    const { trigger, triggeredByOrder } = findChangeTrigger(
+      rowsRef.current,
+      lastSnapshotRef.current,
+      nextSnapshot,
+    );
     lastSignatureRef.current = debouncedSignature;
-    recalculate("load");
+    lastSnapshotRef.current = nextSnapshot;
+    recalculate(trigger, triggeredByOrder);
   }, [enabled, debouncedSignature, recalculate]);
 
   const contextValue = useMemo<DiagnosticsPricingContextValue>(

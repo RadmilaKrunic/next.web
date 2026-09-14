@@ -9,24 +9,25 @@ vi.mock("api/axios-client/axiosClient", () => ({
 vi.stubEnv("DEV", false);
 
 import axiosClient from "api/axios-client/axiosClient";
-import { getItemPolicyConfig } from "./action";
+import { getItemPolicy } from "./action";
 
 const mockGet = vi.mocked(axiosClient.get);
 
-describe("getItemPolicyConfig", () => {
+describe("getItemPolicy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("calls the API with the correct country code when not in DEV mode", async () => {
     mockGet.mockResolvedValueOnce({ data: { countryCode: "ZA" } });
-    const result = await getItemPolicyConfig("ZA");
+    const result = await getItemPolicy("ZA");
     expect(mockGet).toHaveBeenCalledWith("/v1/countries/ZA/item-policy");
     expect(result).toEqual({ countryCode: "ZA" });
   });
 
-  it("throws on API error", async () => {
+  it("returns null on API error", async () => {
     mockGet.mockRejectedValueOnce(new Error("Network Error"));
-    await expect(getItemPolicyConfig("ZA")).rejects.toThrow("Network Error");
+    const result = await getItemPolicy("ZA");
+    expect(result).toBeNull();
   });
 });

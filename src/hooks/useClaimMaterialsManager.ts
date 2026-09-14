@@ -15,7 +15,9 @@ import {
   type MaterialItem,
   type ImportedMaterial,
   buildRowValues,
+  buildMaterialsRowValues,
 } from "hooks/useDiagnosticsManager";
+import { syncMaterialsWithForm } from "hooks/diagnostics/materialsFormSync";
 import type { Material } from "modules/ClaimManagement/ClaimOverview/Claims.types";
 import { calculatePrices } from "utils/priceCalculator";
 import { PERMISSIONS } from "utils/Permissions";
@@ -199,6 +201,8 @@ const POSITION_PERMISSIONS: Record<string, string> = {
   PN: PERMISSIONS.DIAGNOSTICS.CAN_VIEW_NET_DEALER_PRICE,
 };
 
+const CLAIM_SPARE_PARTS_PREFIX = "claims_claimSpareParts#";
+
 // ── Hook ──────────────────────────────────────────────────────────────────
 
 export const useClaimMaterialsManager = ({
@@ -381,22 +385,17 @@ export const useClaimMaterialsManager = ({
       removeNames,
     );
 
-    let rowValues: Record<string, unknown> = {};
-    materials.forEach((item, idx) => {
-      const area = finalClaimsAreas[idx];
-      if (!area) return;
-      const areaFieldNames = new Set(area.fields.map((af) => af.name));
-      const areaFields = allUpdatedFields.filter((f) => areaFieldNames.has(f.name));
-      if (idx < currentCount && !forceRebuildRef.current) {
-        const existingValues = Object.fromEntries(
-          areaFields
-            .filter((f) => f.name in formValuesRef.current)
-            .map((f) => [f.name, formValuesRef.current[f.name]]),
-        );
-        rowValues = { ...rowValues, ...existingValues };
-      } else {
-        rowValues = { ...rowValues, ...buildRowValues(areaFields, item) };
-      }
+    // Full recomputation, not incremental patching: every row 0..N-1 is rebuilt from the
+    // current `materials` on every change (shared with job's useDiagnosticsManager, see its
+    // Effect 3) so a row that "moved" after a delete/reorder gets *its* material's values,
+    // not whatever stale form values happened to be sitting at that row index.
+    const rowValues = buildMaterialsRowValues({
+      materials,
+      areas: finalClaimsAreas,
+      fields: allUpdatedFields,
+      formValues: formValuesRef.current,
+      currentCount,
+      forceRebuild: forceRebuildRef.current,
     });
 
     const keepClaimArea = (a: Area) => !removeNames.has(a.name);
@@ -599,24 +598,8 @@ export const useClaimMaterialsManager = ({
 
       setMaterials((prev) => {
         // Sync current form values back into existing rows before appending
-        prev.forEach((m, i) => {
-          m.partNumber =
-            (formValues[`claims_claimSpareParts#${i}_sparePartNumber`] as string) ?? m.partNumber;
-          m.position = (formValues[`claims_claimSpareParts#${i}_position`] as string) ?? m.position;
-          m.quantity = Number(formValues[`claims_claimSpareParts#${i}_quantity`]) || m.quantity;
-          m.unitPrice = Number(formValues[`claims_claimSpareParts#${i}_unitPrice`]) || m.unitPrice;
-          m.description =
-            (formValues[`claims_claimSpareParts#${i}_description`] as string) ?? m.description;
-          m.type = (formValues[`claims_claimSpareParts#${i}_type`] as string) ?? m.type;
-          m.netAmount = Number(formValues[`claims_claimSpareParts#${i}_netAmount`]) || m.netAmount;
-          m.grossAmount =
-            Number(formValues[`claims_claimSpareParts#${i}_grossAmount`]) || m.grossAmount;
-          m.totalAmount =
-            Number(formValues[`claims_claimSpareParts#${i}_totalAmount`]) || m.totalAmount;
-          m.discount = Number(formValues[`claims_claimSpareParts#${i}_discount`]) || m.discount;
-          m.tax = Number(formValues[`claims_claimSpareParts#${i}_tax`]) || m.tax;
-        });
-        return normalizeMaterialOrders([...prev, newItem]);
+        const synced = syncMaterialsWithForm(prev, formValues, CLAIM_SPARE_PARTS_PREFIX);
+        return normalizeMaterialOrders([...synced, newItem]);
       });
       setArePricesValidated(false);
     },
@@ -626,10 +609,7 @@ export const useClaimMaterialsManager = ({
   // ── onDeleteRow ────────────────────────────────────────────────────────
   const onDeleteRow = useCallback(
     (areaName: string) => {
-      let currentTabs = tabsRef.current;
-      const currentFields = allFieldsRef.current ?? [];
-
-      const claimsTab = currentTabs.find((t) => t.name === "claims");
+      const claimsTab = tabsRef.current.find((t) => t.name === "claims");
       if (!claimsTab) return;
 
       const sparePartsAreas = claimsTab.areas.filter(
@@ -641,40 +621,56 @@ export const useClaimMaterialsManager = ({
       const areaIndex = sparePartsAreas.findIndex((a) => a.name === areaName);
       if (areaIndex === -1) return;
 
-      const areaToRemove = sparePartsAreas[areaIndex];
-      const fieldNamesToRemove = new Set(areaToRemove.fields.map((f) => f.name));
+      // Sync every row's latest form edits into `materials` before removing one, so
+      // Effect 2's forced full recomputation below has accurate values for every
+      // surviving row — not just the ones whose position happens to stay unchanged.
+      const syncedMaterials = syncMaterialsWithForm(
+        materialsRef.current,
+        formValuesRef.current,
+        CLAIM_SPARE_PARTS_PREFIX,
+      );
 
-      // ── Archive the deleted material ───────────────────────────────────
-      const materialItem = materialsRef.current[areaIndex];
-      if (materialItem) {
+      const deletedMaterial = syncedMaterials[areaIndex];
+      if (deletedMaterial) {
         archivedForceRebuildRef.current = true;
-        setArchivedMaterials((prev) => [...prev, materialItemToMaterial(materialItem)]);
+        setArchivedMaterials((prev) => [...prev, materialItemToMaterial(deletedMaterial)]);
       }
 
-      const updatedValues = { ...formValuesRef.current };
-      fieldNamesToRemove.forEach((name) => {
-        delete updatedValues[name];
-      });
-      currentTabs = currentTabs.map((tab) =>
-        tab.name === "claims"
-          ? { ...tab, areas: tab.areas.filter((a) => a.name !== areaName) }
-          : tab,
-      );
-      skipFormResetRef.current = true;
-      setInitialFormValues(updatedValues);
-      setAllFields(currentFields.filter((f) => !fieldNamesToRemove.has(f.name)));
-      setTabs(currentTabs);
-      setMaterials((prev) => normalizeMaterialOrders(prev.filter((_, i) => i !== areaIndex)));
+      const remainingMaterials = syncedMaterials.filter((_, i) => i !== areaIndex);
+
+      // Effect 2 owns deriving areas/allFields/initialFormValues from `materials` for any
+      // nonzero row count, but it bails out immediately when `materials.length === 0` (it
+      // has to — that guard also protects the still-empty template area before any row has
+      // been added yet). Deleting the very last row is the one transition Effect 2 can never
+      // react to on its own — handle it directly, a plain wholesale clear since nothing
+      // survives to reindex.
+      if (remainingMaterials.length === 0) {
+        const fieldNamesToRemove = new Set(
+          sparePartsAreas.flatMap((a) => a.fields.map((f) => f.name)),
+        );
+        skipFormResetRef.current = true;
+        setAllFields((prev) => (prev ?? []).filter((f) => !fieldNamesToRemove.has(f.name)));
+        setTabs((prev) =>
+          prev.map((tab) =>
+            tab.name === "claims"
+              ? { ...tab, areas: tab.areas.filter((a) => a.name !== areaName) }
+              : tab,
+          ),
+        );
+        setInitialFormValues((prev) => {
+          const next = { ...prev };
+          fieldNamesToRemove.forEach((name) => delete next[name]);
+          return next;
+        });
+      } else {
+        // Row identities are shifting by one — reusing stale per-index form values isn't
+        // safe here, so force Effect 2 to rebuild every row fresh from `materials` instead.
+        forceRebuildRef.current = true;
+      }
+      setMaterials(normalizeMaterialOrders(remainingMaterials));
       setArePricesValidated(false);
     },
-    [
-      setInitialFormValues,
-      setAllFields,
-      setTabs,
-      formValuesRef,
-      skipFormResetRef,
-      setArePricesValidated,
-    ],
+    [setAllFields, setTabs, setInitialFormValues, formValuesRef, skipFormResetRef, setArePricesValidated],
   );
 
   // ── onAddMaterials (from AddSpecialMaterialModal / ExplosionDrawing) ───
