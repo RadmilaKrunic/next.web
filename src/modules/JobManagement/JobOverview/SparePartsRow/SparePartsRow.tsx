@@ -4,6 +4,8 @@ import GenericField from "components/generics/Field/GenericField";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useFormikContext } from "formik";
 import { getPositionAutofill } from "hooks/useDiagnosticsManager";
+import { WARRANTY_GATED_TYPES } from "hooks/diagnostics/diagnosticFieldHelpers";
+import { RESETTABLE_MATERIAL_STATUSES } from "hooks/diagnostics/materialsFormSync";
 import { useParams } from "react-router-dom";
 import { useHasPermission } from "hooks/useHasPermission";
 import { useQueryClient } from "@tanstack/react-query";
@@ -57,8 +59,6 @@ const EXCHANGE_ACTION_TYPES = new Set([
 const SPARE_PARTS_EXCHANGE_ACTION_TYPES = new Set(["SPARE_PARTS_EXCHANGE"]);
 const EDITABLE_WITH_CONDITION_TYPES = new Set(["CHARGEABLE"]);
 const EDITABLE_TYPES = new Set(["COMMERCIAL_GOODWILL"]);
-const TYPE_OPTIONS_DISABLED_FOR_INVALID_SPARE_PART = new Set(["WARRANTY", "SERVICE_OFFERING"]);
-const RESETTABLE_ROW_STATUSES = new Set(["REVISED", "REJECTED"]);
 const POSITION_PERMISSIONS = {
   LA: {
     canView: PERMISSIONS.DIAGNOSTICS.CAN_VIEW_LABOUR_ITEMS,
@@ -416,7 +416,7 @@ function SparePartsRow({
 
     const currentStatusValue = statusField ? values[statusField.name] : undefined;
     const wasRevisedOrRejected =
-      typeof currentStatusValue === "string" && RESETTABLE_ROW_STATUSES.has(currentStatusValue);
+      typeof currentStatusValue === "string" && RESETTABLE_MATERIAL_STATUSES.has(currentStatusValue);
     if (areaIndex === 1 && !isResyncingRef.current && !prevPartNumberRef.current) {
       isResyncingRef.current = true;
     }
@@ -570,7 +570,7 @@ function SparePartsRow({
 
     const currentStatusValue = statusField ? values[statusField.name] : undefined;
     const wasRevisedOrRejected =
-      typeof currentStatusValue === "string" && RESETTABLE_ROW_STATUSES.has(currentStatusValue);
+      typeof currentStatusValue === "string" && RESETTABLE_MATERIAL_STATUSES.has(currentStatusValue);
     if (areaIndex === 1 && !isResyncingRef.current && !prevPartNumberRef.current) {
       isResyncingRef.current = true;
     }
@@ -685,7 +685,7 @@ function SparePartsRow({
           options: field.options.map((option) => {
             const optionValue = String(option.value ?? "").toUpperCase();
             if (
-              !TYPE_OPTIONS_DISABLED_FOR_INVALID_SPARE_PART.has(optionValue) ||
+              !WARRANTY_GATED_TYPES.has(optionValue) ||
               isSparepartExchangeRow
             )
               return option;
@@ -808,7 +808,7 @@ function SparePartsRow({
           return;
 
         const rowStatus = statusField ? values[statusField.name] : undefined;
-        if (typeof rowStatus === "string" && RESETTABLE_ROW_STATUSES.has(rowStatus)) {
+        if (typeof rowStatus === "string" && RESETTABLE_MATERIAL_STATUSES.has(rowStatus)) {
           setRevisedRejectedRowPending(areaName);
         }
       }}

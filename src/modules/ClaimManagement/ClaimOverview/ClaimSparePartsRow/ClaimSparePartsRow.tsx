@@ -5,6 +5,7 @@ import { useFormikContext } from "formik";
 import { useHasPermission } from "hooks/useHasPermission";
 import Field from "components/generics/Field/GenericField.types";
 import { getPositionAutofill } from "hooks/useDiagnosticsManager";
+import { WARRANTY_GATED_TYPES } from "hooks/diagnostics/diagnosticFieldHelpers";
 import {
   resolveDiscountFieldNames,
   useSparePartsRowCommon,
@@ -17,8 +18,6 @@ import { PERMISSIONS } from "utils/Permissions";
 import { useClaimContext } from "../ClaimContext";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import "modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.scss";
-
-const TYPE_OPTIONS_DISABLED_FOR_INVALID_SPARE_PART = new Set(["WARRANTY", "SERVICE_OFFERING"]);
 
 function ClaimSparePartsRow({
   fields,
@@ -203,7 +202,7 @@ function ClaimSparePartsRow({
           ...field,
           options: field.options.map((option) => {
             const optionValue = String(option.value ?? "").toUpperCase();
-            if (!TYPE_OPTIONS_DISABLED_FOR_INVALID_SPARE_PART.has(optionValue)) return option;
+            if (!WARRANTY_GATED_TYPES.has(optionValue)) return option;
             return { ...option, disabled: true };
           }),
         };

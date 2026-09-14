@@ -12,15 +12,21 @@ export function computeIsChargeable(
   return typeFields.some((f) => (values[f.name] as string) === "CHARGEABLE");
 }
 
+/**
+ * WARRANTY/SERVICE_OFFERING — the same pairing `data/itemPolicy*.json`'s
+ * `warrantyGating.gatedTypes` describes (see `utils/itemPolicy.ts`'s `isWarrantyGatedType`).
+ * Kept as a hardcoded fallback here and in `SparePartsRow.tsx`/`ClaimSparePartsRow.tsx`'s
+ * type-option-disabling logic for when policy isn't loaded — not wired to the policy-driven
+ * resolver yet, so this stays the single source for the hardcoded value.
+ */
+export const WARRANTY_GATED_TYPES = new Set(["WARRANTY", "SERVICE_OFFERING"]);
+
 export function hasWarrantyOrProServiceItems(
   allFields: Field[],
   values: Record<string, unknown>,
 ): boolean {
   const typeFields = allFields.filter((f) => f.subtype === "diagnosticType");
-  return typeFields.some((f) => {
-    const type = (values[f.name] as string) ?? "";
-    return type === "WARRANTY" || type === "SERVICE_OFFERING";
-  });
+  return typeFields.some((f) => WARRANTY_GATED_TYPES.has((values[f.name] as string) ?? ""));
 }
 
 export function getChargeablePendingInfo(
