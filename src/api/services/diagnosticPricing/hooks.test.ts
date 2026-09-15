@@ -39,6 +39,7 @@ describe("useDiagnosticPricing", () => {
     });
     result.current.mutate(request);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(onSuccess).toHaveBeenCalledWith({ materials: [], summaries: [] });
+    // useMutation's onSuccess is called as (data, variables, context) — only assert on data.
+    expect(onSuccess.mock.calls[0][0]).toEqual({ materials: [], summaries: [] });
   });
 });

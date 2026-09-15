@@ -44,11 +44,10 @@ function Probe() {
   const { enabled } = useDiagnosticsPricingContext();
   const { values, setFieldValue } = useFormikContext<Record<string, unknown>>();
   const totalAmount = values[`${PREFIX}_diagnosticTotalAmount`];
-  const ta = typeof totalAmount === "string" ? totalAmount : 10;
   return (
     <div>
       <span data-testid="enabled">{String(enabled)}</span>
-      <span data-testid="total">{String(ta)}</span>
+      <span data-testid="total">{String(totalAmount)}</span>
       <button type="button" onClick={() => void setFieldValue(`${PREFIX}_diagnosticQuantity`, 3)}>
         change qty
       </button>
