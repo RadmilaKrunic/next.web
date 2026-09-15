@@ -1,12 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import type Field from "components/generics/Field/GenericField.types";
-import type { DiagnosticPricingResponse } from "api/services/diagnosticPricing/diagnosticPricing.types";
+import type { DiagnosticPriceSummaryDetailed } from "api/services/diagnosticPricing/diagnosticPricing.types";
 import {
   applyPricePatch,
-  buildMaterialPricePatch,
-  buildPricingMaterials,
-  buildSummaryPricePatch,
-  findSummary,
+  buildPriceSummaryPatch,
+  buildPricingLines,
+  findRowChange,
   groupRowFields,
   toBackendSummaryType,
 } from "./diagnosticsFormSync";
@@ -32,21 +31,10 @@ const allFields: Field[] = [
   rowField(ROW_0, "diagnosticUnitPrice"),
   rowField(ROW_0, "diagnosticDiscountHidden"),
   rowField(ROW_0, "diagnosticTotalAmount"),
+  rowField(ROW_0, "diagnosticMaterialId"),
   rowField("claims_claimSpareParts#0", "diagnosticPosition"),
   { name: "summaryUnrelated", subtype: "diagnosticType" } as unknown as Field,
 ];
-
-const price = {
-  discount: 10,
-  discountAmount: 5,
-  suggestedNetPrice: 50,
-  unitPrice: 25,
-  netAmount: 50,
-  tax: 15,
-  taxAmount: 7.5,
-  grossAmount: 57.5,
-  totalAmount: 52.5,
-};
 
 describe("groupRowFields", () => {
   it("groups only matching areas, ordered by row index", () => {
@@ -60,7 +48,7 @@ describe("groupRowFields", () => {
   });
 });
 
-describe("buildPricingMaterials", () => {
+describe("buildPricingLines", () => {
   it("reads row values into the request payload", () => {
     const rows = groupRowFields(allFields, "diagnosticsSpareParts");
     const values = {
@@ -72,38 +60,84 @@ describe("buildPricingMaterials", () => {
       [`${ROW_0}_diagnosticDiscountHidden`]: 10,
       [`${ROW_0}_diagnosticTotalAmount`]: 52.5,
     };
-    const [first] = buildPricingMaterials(rows, values);
+    const [first] = buildPricingLines(rows, values);
     expect(first).toMatchObject({
-      order: 0,
+      lineId: "row-0",
       position: "SP",
       partNumber: "1600A1",
-      type: "CHARGEABLE",
+      jobType: "CHARGEABLE",
       quantity: 2,
       unitPrice: 25,
-      discount: 10,
+      discountPercentage: 10,
       totalAmount: 52.5,
     });
-    expect(first.id).toBeUndefined();
+  });
+
+  it("uses the material id as lineId once the row has one", () => {
+    const rows = groupRowFields(allFields, "diagnosticsSpareParts");
+    const values = { [`${ROW_0}_diagnosticMaterialId`]: "SP_1600A1_CHARGEABLE" };
+    const [first] = buildPricingLines(rows, values);
+    expect(first.lineId).toBe("SP_1600A1_CHARGEABLE");
   });
 });
 
-describe("buildMaterialPricePatch", () => {
-  it("maps backend prices onto row field names by order", () => {
+describe("findRowChange", () => {
+  it("returns null without a baseline (the first settle is the as-loaded state)", () => {
     const rows = groupRowFields(allFields, "diagnosticsSpareParts");
-    const response: DiagnosticPricingResponse = {
-      materials: [{ order: 0, position: "SP", price }],
-      summaries: [],
-    };
-    const patch = buildMaterialPricePatch(rows, response);
-    expect(patch[`${ROW_0}_diagnosticUnitPrice`]).toBe(25);
-    expect(patch[`${ROW_0}_diagnosticDiscountHidden`]).toBe(10);
-    expect(patch[`${ROW_0}_diagnosticTotalAmount`]).toBe(52.5);
-    // Unpriced row is untouched.
-    expect(patch[`${ROW_1}_diagnosticTotalAmount`]).toBeUndefined();
-    // Non-price fields are not patched.
-    expect(patch[`${ROW_0}_diagnosticPosition`]).toBeUndefined();
+    const values = { [`${ROW_0}_diagnosticQuantity`]: 2 };
+    const snapshot = buildSnapshotFor(rows, values);
+    expect(findRowChange(rows, values, null, snapshot)).toBeNull();
+  });
+
+  it("finds the first changed price field, in priority order, and builds its change", () => {
+    const rows = groupRowFields(allFields, "diagnosticsSpareParts");
+    const before = { [`${ROW_0}_diagnosticQuantity`]: 2, [`${ROW_0}_diagnosticUnitPrice`]: 25 };
+    const after = { [`${ROW_0}_diagnosticQuantity`]: 3, [`${ROW_0}_diagnosticUnitPrice`]: 25 };
+    const prev = buildSnapshotFor(rows, before);
+    const next = buildSnapshotFor(rows, after);
+    expect(findRowChange(rows, after, prev, next)).toEqual({
+      type: "SET_QUANTITY",
+      lineId: "row-0",
+      value: 3,
+    });
+  });
+
+  it("returns null for a position/partNumber/type-only change", () => {
+    const rows = groupRowFields(allFields, "diagnosticsSpareParts");
+    const before = { [`${ROW_0}_diagnosticPosition`]: "SP" };
+    const after = { [`${ROW_0}_diagnosticPosition`]: "PN" };
+    const prev = buildSnapshotFor(rows, before);
+    const next = buildSnapshotFor(rows, after);
+    expect(findRowChange(rows, after, prev, next)).toBeNull();
   });
 });
+
+// Local helper mirroring DiagnosticsPricingProvider's own snapshot builder, scoped to this test file
+// so it doesn't need to import a private symbol.
+const PRICE_SUBTYPES = [
+  "diagnosticQuantity",
+  "diagnosticUnitPrice",
+  "diagnosticDiscount",
+  "diagnosticDiscountHidden",
+  "diagnosticNetAmount",
+  "diagnosticGrossAmount",
+  "diagnosticTotalAmount",
+  "diagnosticPosition",
+];
+function buildSnapshotFor(
+  rows: ReturnType<typeof groupRowFields>,
+  values: Record<string, unknown>,
+): Map<string, string> {
+  const snapshot = new Map<string, string>();
+  for (const row of rows) {
+    for (const subtype of PRICE_SUBTYPES) {
+      const name = row.bySubtype[subtype];
+      const value = name ? values[name] : undefined;
+      snapshot.set(`${row.order}:${subtype}`, value === undefined ? "" : String(value));
+    }
+  }
+  return snapshot;
+}
 
 describe("summary mapping", () => {
   const summaryFields = [
@@ -113,12 +147,23 @@ describe("summary mapping", () => {
     { name: "sumRadio", subtype: "diagnosticSummaryType" },
   ] as unknown as Field[];
 
-  const response: DiagnosticPricingResponse = {
-    materials: [],
-    summaries: [
-      { type: "TOTAL", price, materialPrice: { ...price, totalAmount: 40 } },
-      { type: "CHARGEABLE", price },
-    ],
+  const totalBlock = {
+    netAmount: 50,
+    suggestedNetPrice: 50,
+    taxAmount: 7.5,
+    grossAmount: 57.5,
+    discount: 10,
+    totalAmount: 52.5,
+  };
+  const detailed: DiagnosticPriceSummaryDetailed = {
+    total: totalBlock,
+    byJobType: {
+      CHARGEABLE: {
+        total: totalBlock,
+        materialRelated: { ...totalBlock, totalAmount: 40 },
+      },
+      WARRANTY: { total: totalBlock },
+    },
   };
 
   it("converts UI summary types to backend types", () => {
@@ -127,24 +172,23 @@ describe("summary mapping", () => {
     expect(toBackendSummaryType("commercialGoodwill")).toBe("COMMERCIAL_GOODWILL");
   });
 
-  it("finds a summary case-insensitively", () => {
-    expect(findSummary(response, "total")?.type).toBe("TOTAL");
-    expect(findSummary(response, "WARRANTY")).toBeNull();
-    expect(findSummary(null, "TOTAL")).toBeNull();
+  it("maps the total block for the totalSummary type", () => {
+    const patch = buildPriceSummaryPatch(summaryFields, detailed, "totalSummary");
+    expect(patch).toEqual({ sumTotal: 52.5, sumDiscountHidden: 10 });
   });
 
-  it("maps price and material blocks to their fields", () => {
-    const patch = buildSummaryPricePatch(summaryFields, findSummary(response, "TOTAL"));
+  it("maps price and material blocks for a specific job type", () => {
+    const patch = buildPriceSummaryPatch(summaryFields, detailed, "chargeable");
     expect(patch).toEqual({ sumTotal: 52.5, sumDiscountHidden: 10, sumTotalMaterial: 40 });
   });
 
   it("skips material fields when the backend omits the material block", () => {
-    const patch = buildSummaryPricePatch(summaryFields, findSummary(response, "CHARGEABLE"));
+    const patch = buildPriceSummaryPatch(summaryFields, detailed, "warranty");
     expect(patch.sumTotalMaterial).toBeUndefined();
   });
 
-  it("returns an empty patch without a summary", () => {
-    expect(buildSummaryPricePatch(summaryFields, null)).toEqual({});
+  it("returns an empty patch without a detailed summary", () => {
+    expect(buildPriceSummaryPatch(summaryFields, undefined, "totalSummary")).toEqual({});
   });
 });
 

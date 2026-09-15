@@ -12,13 +12,8 @@ import {
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import { useDiagnosticsContext } from "../DiagnosticsContext";
 import { useDiagnosticsPricingContext } from "../DiagnosticsPricingContext";
-import {
-  applyPricePatch,
-  buildSummaryPricePatch,
-  findSummary,
-  toBackendSummaryType,
-} from "utils/diagnosticsFormSync";
-import { TOTAL_SUMMARY_TYPE } from "api/services/diagnosticPricing/diagnosticPricing.types";
+import { applyPricePatch, buildPriceSummaryPatch, toBackendSummaryType } from "utils/diagnosticsFormSync";
+import { useDebouncedValue } from "hooks/useDebouncedValue";
 import { useItemPolicy } from "contexts/itemPolicyContext";
 import { getDistributablePositions } from "utils/itemPolicy";
 import { useHasPermission } from "hooks/useHasPermission";
@@ -54,7 +49,7 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     jobStatus,
   } = useDiagnosticsContext();
   const hasPriceViewPermission = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES]);
-  const { enabled: isBackendPricing, pricing } = useDiagnosticsPricingContext();
+  const { enabled: isBackendPricing, pricing, recalculate } = useDiagnosticsPricingContext();
   const itemPolicy = useItemPolicy();
   const distributablePositions = useMemo(() => {
     const fromPolicy = isBackendPricing ? getDistributablePositions(itemPolicy) : new Set<string>();
@@ -200,9 +195,9 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     };
 
     if (isBackendPricing && pricing) {
-      pricing.summaries
-        .filter((s) => s.type.toUpperCase() !== TOTAL_SUMMARY_TYPE)
-        .forEach((s) => addType(s.type));
+      Object.keys(pricing.priceSummaryDetailed?.byJobType ?? {}).forEach((jobType) =>
+        addType(jobType),
+      );
     } else {
       scopedFields
         .filter((f) => f.subtype === "diagnosticType")
@@ -392,15 +387,50 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     isBackendPricing,
   ]);
 
-  // Backend-driven summaries: the API returns one price block per cost-allocation type.
+  // Backend-driven summaries: the API returns priceSummaryDetailed, broken down by job type.
   useEffect(() => {
     if (!isBackendPricing || !pricing) return;
-    const summary = findSummary(pricing, toBackendSummaryType(currentSummaryType));
-    const patch = buildSummaryPricePatch(area.fields, summary);
+    const patch = buildPriceSummaryPatch(area.fields, pricing.priceSummaryDetailed, currentSummaryType);
     applyPricePatch(patch, valuesRef.current, (field, value) => {
       void setFieldValueRef.current(field, value);
     });
   }, [isBackendPricing, pricing, currentSummaryType, area.fields]);
+
+  // Backend-driven summary discount: request a recalculation once the user stops editing the
+  // active discount field, scoped to this summary's distributable positions and job type(s).
+  const summaryDiscountSignature = isBackendPricing
+    ? Number(values[activeSummaryDiscountField?.name ?? ""]) || 0
+    : 0;
+  const debouncedSummaryDiscount = useDebouncedValue(summaryDiscountSignature, 500);
+  const lastSummaryDiscountRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isBackendPricing || !activeSummaryDiscountField) return;
+    if (lastSummaryDiscountRef.current === null) {
+      lastSummaryDiscountRef.current = debouncedSummaryDiscount;
+      return;
+    }
+    if (lastSummaryDiscountRef.current === debouncedSummaryDiscount) return;
+    lastSummaryDiscountRef.current = debouncedSummaryDiscount;
+    const jobTypes =
+      currentSummaryType === "totalSummary"
+        ? summaryTypeOptions
+            .filter((o) => o.value !== "totalSummary")
+            .map((o) => toBackendSummaryType(o.value))
+        : [toBackendSummaryType(currentSummaryType)];
+    recalculate({
+      type: "SET_SUMMARY_DISCOUNT",
+      scope: { positions: [...distributablePositions], jobTypes },
+      value: debouncedSummaryDiscount,
+    });
+  }, [
+    isBackendPricing,
+    activeSummaryDiscountField,
+    debouncedSummaryDiscount,
+    currentSummaryType,
+    summaryTypeOptions,
+    distributablePositions,
+    recalculate,
+  ]);
 
   // On first load: sync active visible summary discount from hidden field.
   // Hidden has attributeMapping; visible does not. Guard with hasPricesPopulated

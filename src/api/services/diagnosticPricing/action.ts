@@ -1,6 +1,6 @@
 import axiosClient from "api/axios-client/axiosClient";
 import type {
-  DiagnosticPricingRequest,
+  DiagnosticPricingRequestInput,
   DiagnosticPricingResponse,
 } from "./diagnosticPricing.types";
 import { simulateDiagnosticPricing } from "./priceEngineSimulator";
@@ -15,21 +15,22 @@ const BACKEND_ENDPOINT_READY = false;
 
 export const postDiagnosticPricing = async (
   jobId: string,
-  payload: DiagnosticPricingRequest,
+  payload: DiagnosticPricingRequestInput,
 ): Promise<DiagnosticPricingResponse> => {
+  const request = { requestId: crypto.randomUUID(), ...payload };
   if (import.meta.env.DEV && !import.meta.env.TEST) {
-    return simulateDiagnosticPricing(payload);
+    return simulateDiagnosticPricing(request);
   }
   if (!BACKEND_ENDPOINT_READY) {
     console.log(
       `[diagnosticPricing] backend not ready — would POST to /v1/jobs/${jobId}/diagnostic/price-calculation`,
-      payload,
+      request,
     );
-    return simulateDiagnosticPricing(payload);
+    return simulateDiagnosticPricing(request);
   }
   const response = await axiosClient.post<DiagnosticPricingResponse>(
     `/v1/jobs/${jobId}/diagnostic/price-calculation`,
-    payload,
+    request,
   );
   return response.data;
 };

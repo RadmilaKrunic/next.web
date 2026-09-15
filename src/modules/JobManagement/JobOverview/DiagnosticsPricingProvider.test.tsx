@@ -42,12 +42,10 @@ const initialValues = {
 
 function Probe() {
   const { enabled } = useDiagnosticsPricingContext();
-  const { values, setFieldValue } = useFormikContext<Record<string, unknown>>();
-  const totalAmount = values[`${PREFIX}_diagnosticTotalAmount`];
+  const { setFieldValue } = useFormikContext<Record<string, unknown>>();
   return (
     <div>
       <span data-testid="enabled">{String(enabled)}</span>
-      <span data-testid="total">{String(totalAmount)}</span>
       <button type="button" onClick={() => void setFieldValue(`${PREFIX}_diagnosticQuantity`, 3)}>
         change qty
       </button>
@@ -58,7 +56,7 @@ function Probe() {
   );
 }
 
-const renderProvider = (enabled: boolean) =>
+const renderProvider = (enabled: boolean, onApplyResponse?: (r: DiagnosticPricingResponse) => void) =>
   render(
     <GenericFormContext.Provider
       value={{ allFields } as unknown as React.ContextType<typeof GenericFormContext>}
@@ -69,7 +67,10 @@ const renderProvider = (enabled: boolean) =>
           jobId="J1"
           actionType="REPAIR"
           jobType="CHARGEABLE"
+          country="TR"
+          ascId="ASC8"
           areaNameContains="diagnosticsSpareParts"
+          onApplyResponse={onApplyResponse}
         >
           <Probe />
         </DiagnosticsPricingProvider>
@@ -105,7 +106,7 @@ describe("DiagnosticsPricingProvider", () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
-  it("requests a recalculation after a price input settles, with the field-specific trigger", () => {
+  it("requests a recalculation after a price input settles, with the field-specific change", () => {
     renderProvider(true);
     settle();
     fireEvent.click(screen.getByRole("button", { name: "change qty" }));
@@ -113,52 +114,43 @@ describe("DiagnosticsPricingProvider", () => {
 
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(mutate.mock.calls[0][0]).toMatchObject({
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
-      trigger: "quantity",
-      triggeredByOrder: 0,
-      materials: [{ order: 0, position: "SP", quantity: 3, unitPrice: 10 }],
+      pricingContext: { country: "TR", ascId: "ASC8", scale: 2 },
+      changes: { type: "SET_QUANTITY", lineId: "row-0", value: 3 },
+      lines: [{ position: "SP", quantity: 3, unitPrice: 10 }],
     });
   });
 
-  it("falls back to the load trigger for a non-price-field change (e.g. position)", () => {
+  it("does not recalculate for a position/partNumber/type-only change (archived-and-recreated instead)", () => {
     renderProvider(true);
     settle();
     fireEvent.click(screen.getByRole("button", { name: "change position" }));
     settle();
 
-    expect(mutate).toHaveBeenCalledTimes(1);
-    expect(mutate.mock.calls[0][0]).toMatchObject({ trigger: "load" });
-    expect(mutate.mock.calls[0][0].triggeredByOrder).toBeUndefined();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
-  it("writes backend prices back into Formik", () => {
-    renderProvider(true);
+  it("hands the full response to onApplyResponse for the caller to refresh materials from", () => {
+    const onApplyResponse = vi.fn();
+    renderProvider(true, onApplyResponse);
     settle();
 
-    act(() =>
-      capturedOnSuccess?.({
-        materials: [
-          {
-            order: 0,
-            position: "SP",
-            price: {
-              discount: 0,
-              discountAmount: 0,
-              suggestedNetPrice: 30,
-              unitPrice: 10,
-              netAmount: 30,
-              tax: 0,
-              taxAmount: 0,
-              grossAmount: 30,
-              totalAmount: 30,
-            },
-          },
-        ],
-        summaries: [],
-      }),
-    );
+    const response: DiagnosticPricingResponse = {
+      materials: [
+        {
+          order: 0,
+          position: "SP",
+          partNumber: "1611016003",
+          jobType: "CHARGEABLE",
+          quantity: 3,
+          status: "PENDING",
+          isPriceSetManually: false,
+          notBelongsToTool: false,
+        },
+      ],
+      priceSummary: null,
+    };
+    act(() => capturedOnSuccess?.(response));
 
-    expect(screen.getByTestId("total")).toHaveTextContent("30");
+    expect(onApplyResponse).toHaveBeenCalledWith(response);
   });
 });

@@ -6,77 +6,81 @@ import {
   type PriceInputs,
 } from "utils/priceCalculator";
 import {
-  TOTAL_SUMMARY_TYPE,
+  type DiagnosticMaterialResponse,
   type DiagnosticPriceBlock,
-  type DiagnosticPricingMaterialInput,
-  type DiagnosticPricingMaterialResult,
+  type DiagnosticPriceSummaryBlock,
+  type DiagnosticPriceSummaryByJobType,
+  type DiagnosticPriceSummaryDetailed,
+  type DiagnosticPricingChangeType,
+  type DiagnosticPricingLine,
   type DiagnosticPricingRequest,
   type DiagnosticPricingResponse,
-  type DiagnosticPricingSummary,
-  type DiagnosticPricingTrigger,
 } from "./diagnosticPricing.types";
 
 /**
  * DEV-only stand-in for `POST /v1/jobs/{jobId}/diagnostic/price-calculation`, following this
  * codebase's established build-ahead-of-backend pattern (see getUIConfiguration/getCountryConfig/
  * getItemPolicy). Reuses the same pure math as the client preview (`priceCalculator.ts`) rather
- * than re-deriving pricing rules — this file only decides *which* field drives the recompute for
- * a given request and aggregates the per-row results into summaries.
+ * than re-deriving pricing rules — this file only decides *which* line/field drives the recompute
+ * for a given request and aggregates the per-line results into a diagnostic-shaped response.
  */
-const TRIGGER_TO_FIELD: Partial<Record<DiagnosticPricingTrigger, FieldName>> = {
-  quantity: "quantity",
-  unitPrice: "unitPrice",
-  discount: "discountPercent",
-  netAmount: "netAmount",
-  grossAmount: "grossAmount",
-  totalAmount: "totalAmount",
+const CHANGE_TYPE_TO_FIELD: Partial<Record<DiagnosticPricingChangeType, FieldName>> = {
+  SET_QUANTITY: "quantity",
+  SET_UNIT_PRICE: "unitPrice",
+  SET_DISCOUNT: "discountPercent",
+  SET_NET_AMOUNT: "netAmount",
+  SET_TOTAL_AMOUNT: "totalAmount",
 };
 
-const readFieldValue = (material: DiagnosticPricingMaterialInput, field: FieldName): number => {
+const readFieldValue = (line: DiagnosticPricingLine, field: FieldName): number => {
   switch (field) {
     case "quantity":
-      return material.quantity;
+      return line.quantity;
     case "unitPrice":
-      return material.unitPrice;
+      return line.unitPrice;
     case "discountPercent":
-      return material.discount;
+      return line.discountPercentage;
     case "netAmount":
-      return material.netAmount;
-    case "grossAmount":
-      return material.grossAmount;
+      return line.totalNetAmount;
     case "totalAmount":
-      return material.totalAmount;
+      return line.totalAmount;
     default:
-      return material.quantity;
+      return line.quantity;
   }
 };
 
-const simulateMaterial = (
-  material: DiagnosticPricingMaterialInput,
+const priceLine = (
+  line: DiagnosticPricingLine,
+  order: number,
   request: DiagnosticPricingRequest,
-): DiagnosticPricingMaterialResult => {
-  const isTriggerRow =
-    request.triggeredByOrder === undefined || request.triggeredByOrder === material.order;
-  const field = isTriggerRow ? (TRIGGER_TO_FIELD[request.trigger] ?? "quantity") : "quantity";
-  const changedValue = readFieldValue(material, field);
+): DiagnosticMaterialResponse => {
+  const isChangedLine = request.changes.lineId === line.lineId;
+  const field = isChangedLine ? CHANGE_TYPE_TO_FIELD[request.changes.type] : undefined;
+  const changedValue = field ? readFieldValue(line, field) : line.quantity;
 
   const inputs: PriceInputs = {
-    quantity: material.quantity,
-    unitPrice: material.unitPrice,
-    taxPercent: material.tax,
-    discountPercent: material.discount,
-    suggestedNetPrice: material.netAmount,
-    netAmount: material.netAmount,
-    grossAmount: material.grossAmount,
-    totalAmount: material.totalAmount,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    taxPercent: line.taxPercentage,
+    discountPercent: line.discountPercentage,
+    suggestedNetPrice: line.totalNetAmount,
+    netAmount: line.totalNetAmount,
+    grossAmount: 0,
+    totalAmount: line.totalAmount,
     taxAmount: 0,
   };
-  const result = calculatePrices(inputs, field, changedValue);
+  const result = calculatePrices(inputs, field ?? "quantity", changedValue);
 
   return {
-    id: material.id,
-    order: material.order,
-    position: material.position,
+    id: line.lineId.startsWith("row-") ? undefined : line.lineId,
+    position: line.position,
+    partNumber: line.partNumber,
+    jobType: line.jobType,
+    quantity: line.quantity,
+    status: "PENDING",
+    isPriceSetManually: false,
+    notBelongsToTool: false,
+    order,
     price: {
       discount: result.discountPercent,
       discountAmount: result.discountAmount,
@@ -91,9 +95,9 @@ const simulateMaterial = (
   };
 };
 
-const sumPriceBlocks = (blocks: DiagnosticPriceBlock[]): DiagnosticPriceBlock => {
+const sumPriceBlocks = (blocks: DiagnosticPriceBlock[]): DiagnosticPriceSummaryBlock => {
   const sum = (key: keyof DiagnosticPriceBlock) =>
-    roundToTwo(blocks.reduce((total, block) => total + block[key], 0));
+    roundToTwo(blocks.reduce((total, block) => total + (block[key] as number), 0));
   const netAmount = sum("netAmount");
   const grossAmount = sum("grossAmount");
   const discountAmount = sum("discountAmount");
@@ -102,38 +106,52 @@ const sumPriceBlocks = (blocks: DiagnosticPriceBlock[]): DiagnosticPriceBlock =>
     discount: grossAmount > 0 ? roundToTwo((discountAmount / grossAmount) * 100) : 0,
     discountAmount,
     suggestedNetPrice: sum("suggestedNetPrice"),
-    unitPrice: 0,
     netAmount,
-    tax: netAmount > 0 ? roundToTwo((taxAmount / netAmount) * 100) : 0,
     taxAmount,
     grossAmount,
     totalAmount: sum("totalAmount"),
   };
 };
 
-const buildSummary = (
-  type: string,
-  materials: DiagnosticPricingMaterialResult[],
-): DiagnosticPricingSummary => {
-  const materialRows = materials.filter((m) => DISTRIBUTABLE_POSITIONS.has(m.position));
-  return {
-    type,
-    price: sumPriceBlocks(materials.map((m) => m.price)),
-    materialPrice: materialRows.length ? sumPriceBlocks(materialRows.map((m) => m.price)) : undefined,
-  };
+const buildSummaryByJobType = (
+  materials: DiagnosticMaterialResponse[],
+): Record<string, DiagnosticPriceSummaryByJobType> => {
+  const jobTypes = [...new Set(materials.map((m) => m.jobType))];
+  const result: Record<string, DiagnosticPriceSummaryByJobType> = {};
+  for (const jobType of jobTypes) {
+    const rows = materials.filter((m) => m.jobType === jobType);
+    const materialRows = rows.filter((m) => DISTRIBUTABLE_POSITIONS.has(m.position));
+    const serviceRows = rows.filter((m) => !DISTRIBUTABLE_POSITIONS.has(m.position));
+    result[jobType] = {
+      total: sumPriceBlocks(rows.map((m) => m.price as DiagnosticPriceBlock)),
+      materialRelated: materialRows.length
+        ? sumPriceBlocks(materialRows.map((m) => m.price as DiagnosticPriceBlock))
+        : undefined,
+      serviceRelated: serviceRows.length
+        ? sumPriceBlocks(serviceRows.map((m) => m.price as DiagnosticPriceBlock))
+        : undefined,
+    };
+  }
+  return result;
 };
+
+const buildPriceSummaryDetailed = (
+  materials: DiagnosticMaterialResponse[],
+): DiagnosticPriceSummaryDetailed => ({
+  total: sumPriceBlocks(materials.map((m) => m.price as DiagnosticPriceBlock)),
+  byJobType: buildSummaryByJobType(materials),
+});
 
 export const simulateDiagnosticPricing = (
   request: DiagnosticPricingRequest,
 ): DiagnosticPricingResponse => {
-  const materials = request.materials.map((material) => simulateMaterial(material, request));
-  const types = [...new Set(request.materials.map((m) => m.type))];
-  const summaries = types.map((type) =>
-    buildSummary(
-      type,
-      materials.filter((m, i) => request.materials[i].type === type),
-    ),
-  );
-  summaries.push(buildSummary(TOTAL_SUMMARY_TYPE, materials));
-  return { materials, summaries };
+  const materials = request.lines.map((line, index) => priceLine(line, index + 1, request));
+  const priceSummaryDetailed = buildPriceSummaryDetailed(materials);
+  return {
+    materials,
+    archivedMaterials: [],
+    priceSummary: priceSummaryDetailed.total,
+    priceSummaryDetailed,
+    errorMessages: [],
+  };
 };

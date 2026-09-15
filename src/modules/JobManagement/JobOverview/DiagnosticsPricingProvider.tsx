@@ -3,16 +3,10 @@ import { useFormikContext } from "formik";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import { useDiagnosticPricing } from "api/services/diagnosticPricing/hooks";
 import type {
+  DiagnosticPricingChange,
   DiagnosticPricingResponse,
-  DiagnosticPricingTrigger,
 } from "api/services/diagnosticPricing/diagnosticPricing.types";
-import {
-  applyPricePatch,
-  buildMaterialPricePatch,
-  buildPricingMaterials,
-  groupRowFields,
-  type RowFieldGroup,
-} from "utils/diagnosticsFormSync";
+import { buildPricingLines, findRowChange, groupRowFields, type RowFieldGroup } from "utils/diagnosticsFormSync";
 import { useDebouncedValue } from "hooks/useDebouncedValue";
 import {
   DiagnosticsPricingContext,
@@ -24,10 +18,19 @@ interface DiagnosticsPricingProviderProps {
   jobId: string;
   actionType: string;
   jobType: string;
+  country: string;
+  ascId: string;
   /** Substring identifying the spare-parts row areas, e.g. "diagnosticsSpareParts". */
   areaNameContains: string;
+  /** Called with the full diagnostic-shaped response after a successful recalculation, so the
+   * caller can refresh materials/archivedMaterials/summary the same way a fresh load would. */
+  onApplyResponse?: (response: DiagnosticPricingResponse) => void;
   children: React.ReactNode;
 }
+
+const PRICING_SCALE = 2;
+
+type ValueSnapshot = Map<string, string>;
 
 const PRICE_INPUT_SUBTYPES = [
   "diagnosticQuantity",
@@ -36,22 +39,7 @@ const PRICE_INPUT_SUBTYPES = [
   "diagnosticNetAmount",
   "diagnosticGrossAmount",
   "diagnosticTotalAmount",
-  "diagnosticPosition",
-  "diagnosticPartNumber",
-  "diagnosticType",
 ];
-
-/** Only these subtypes tell the backend which direction to back-calculate; the rest (position/partNumber/type) fall back to "load". */
-const SUBTYPE_TO_TRIGGER: Partial<Record<string, DiagnosticPricingTrigger>> = {
-  diagnosticQuantity: "quantity",
-  diagnosticUnitPrice: "unitPrice",
-  diagnosticDiscount: "discount",
-  diagnosticNetAmount: "netAmount",
-  diagnosticGrossAmount: "grossAmount",
-  diagnosticTotalAmount: "totalAmount",
-};
-
-type ValueSnapshot = Map<string, string>;
 
 const buildValueSnapshot = (
   rows: RowFieldGroup[],
@@ -71,34 +59,19 @@ const buildValueSnapshot = (
   return snapshot;
 };
 
-/** Finds the first row/field that changed since the last settled snapshot, in field priority order. */
-const findChangeTrigger = (
-  rows: RowFieldGroup[],
-  prev: ValueSnapshot | null,
-  next: ValueSnapshot,
-): { trigger: DiagnosticPricingTrigger; triggeredByOrder?: number } => {
-  if (!prev) return { trigger: "load" };
-  for (const row of rows) {
-    for (const subtype of PRICE_INPUT_SUBTYPES) {
-      const key = `${row.order}:${subtype}`;
-      if (prev.get(key) === next.get(key)) continue;
-      const trigger = SUBTYPE_TO_TRIGGER[subtype];
-      return trigger ? { trigger, triggeredByOrder: row.order } : { trigger: "load" };
-    }
-  }
-  return { trigger: "load" };
-};
-
 export function DiagnosticsPricingProvider({
   enabled,
   jobId,
   actionType,
   jobType,
+  country,
+  ascId,
   areaNameContains,
+  onApplyResponse,
   children,
 }: Readonly<DiagnosticsPricingProviderProps>) {
   const { allFields } = useContext(GenericFormContext);
-  const { values, setFieldValue } = useFormikContext<Record<string, unknown>>();
+  const { values } = useFormikContext<Record<string, unknown>>();
   const [pricing, setPricing] = useState<DiagnosticPricingResponse | null>(null);
 
   const rows = useMemo(
@@ -111,15 +84,12 @@ export function DiagnosticsPricingProvider({
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
 
-  const setFieldValueRef = useRef(setFieldValue);
-  setFieldValueRef.current = setFieldValue;
+  const onApplyResponseRef = useRef(onApplyResponse);
+  onApplyResponseRef.current = onApplyResponse;
 
   const onPricingSuccess = useCallback((data: DiagnosticPricingResponse) => {
     setPricing(data);
-    const patch = buildMaterialPricePatch(rowsRef.current, data);
-    applyPricePatch(patch, valuesRef.current, (field, value) => {
-      void setFieldValueRef.current(field, value);
-    });
+    onApplyResponseRef.current?.(data);
   }, []);
 
   const pricingMutation = useDiagnosticPricing(jobId, onPricingSuccess);
@@ -127,17 +97,15 @@ export function DiagnosticsPricingProvider({
   mutateRef.current = pricingMutation.mutate;
 
   const recalculate = useCallback(
-    (trigger: DiagnosticPricingTrigger, triggeredByOrder?: number) => {
+    (change: DiagnosticPricingChange) => {
       if (!enabled || !jobId || rowsRef.current.length === 0) return;
       mutateRef.current({
-        actionType,
-        jobType,
-        trigger,
-        triggeredByOrder,
-        materials: buildPricingMaterials(rowsRef.current, valuesRef.current),
+        pricingContext: { country, ascId, scale: PRICING_SCALE },
+        lines: buildPricingLines(rowsRef.current, valuesRef.current),
+        changes: change,
       });
     },
-    [enabled, jobId, actionType, jobType],
+    [enabled, jobId, country, ascId],
   );
 
   // Serialized price inputs — recalculation is requested once the user stops editing.
@@ -150,24 +118,26 @@ export function DiagnosticsPricingProvider({
   const lastSignatureRef = useRef<string | null>(null);
   const lastSnapshotRef = useRef<ValueSnapshot | null>(null);
 
+  // Capture the as-loaded baseline synchronously on the render where pricing first becomes
+  // enabled and rows exist — before any user edit can occur — rather than inside the
+  // debounce-settle effect below, which would race the first settle against a possible
+  // earlier edit. Rows can still be empty on the very first render (UIConfiguration hasn't
+  // populated the spare-parts area yet), so wait for real row data before latching.
+  if (lastSnapshotRef.current === null && enabled && rows.length > 0) {
+    lastSnapshotRef.current = buildValueSnapshot(rows, values);
+    lastSignatureRef.current = signature;
+  }
+
   useEffect(() => {
     if (!enabled || !debouncedSignature) return;
-    const nextSnapshot = buildValueSnapshot(rowsRef.current, valuesRef.current);
-    // First settled signature is the state loaded from the backend — nothing to recalculate.
-    if (lastSignatureRef.current === null) {
-      lastSignatureRef.current = debouncedSignature;
-      lastSnapshotRef.current = nextSnapshot;
-      return;
-    }
     if (lastSignatureRef.current === debouncedSignature) return;
-    const { trigger, triggeredByOrder } = findChangeTrigger(
-      rowsRef.current,
-      lastSnapshotRef.current,
-      nextSnapshot,
-    );
+    const nextSnapshot = buildValueSnapshot(rowsRef.current, valuesRef.current);
+    const change = findRowChange(rowsRef.current, valuesRef.current, lastSnapshotRef.current, nextSnapshot);
     lastSignatureRef.current = debouncedSignature;
     lastSnapshotRef.current = nextSnapshot;
-    recalculate(trigger, triggeredByOrder);
+    // Position/partNumber/type edits archive-and-recreate the row instead of recalculating —
+    // findRowChange returns null for those (and for any row that only touched non-price fields).
+    if (change) recalculate(change);
   }, [enabled, debouncedSignature, recalculate]);
 
   const contextValue = useMemo<DiagnosticsPricingContextValue>(

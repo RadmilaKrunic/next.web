@@ -49,6 +49,7 @@ import { useDiagnosticData } from "hooks/useDiagnosticData";
 import { useFeatureFlag } from "hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "utils/featureFlags";
 import { DiagnosticsPricingProvider } from "./DiagnosticsPricingProvider";
+import type { DiagnosticPricingResponse } from "api/services/diagnosticPricing/diagnosticPricing.types";
 import {
   postMessage,
   getCostEstimationPdf,
@@ -1031,6 +1032,30 @@ export default function JobOverview() {
     isResyncingRef,
     jobStatus: currentStatus,
   });
+
+  // A recalculation response is the same diagnostic-shaped payload the GET endpoint returns —
+  // write it into that query's cache and let the existing API-sync effects (Effect 1/1b/3/3b in
+  // useDiagnosticsManager) rebuild materials/archivedMaterials/rows from it, the same path a
+  // fresh load takes. Summary fields are handled separately (SummaryArea reacts to `pricing`
+  // from context directly, since they're not part of the materials array).
+  const onApplyPricingResponse = useCallback(
+    (response: DiagnosticPricingResponse) => {
+      queryClient.setQueryData<JobDiagnostic>(["diagnostic", jobId], (prev) =>
+        prev
+          ? {
+              ...prev,
+              materials: response.materials as unknown as JobDiagnostic["materials"],
+              archivedMaterials:
+                (response.archivedMaterials as unknown as JobDiagnostic["archivedMaterials"]) ??
+                prev.archivedMaterials,
+              priceSummary: response.priceSummary ?? prev.priceSummary,
+            }
+          : prev,
+      );
+      resyncMaterialsFromAPI();
+    },
+    [queryClient, jobId, resyncMaterialsFromAPI],
+  );
 
   const { assetsAccessories, setAssetsAccessories } = useAccessoriesManager({
     mode: "view",
@@ -2608,7 +2633,10 @@ export default function JobOverview() {
                       jobId={jobId || ""}
                       actionType={currentActionType}
                       jobType={currentJobType}
+                      country={jobData?.order?.countryCode || ""}
+                      ascId={diagnosticData?.ascId || ""}
                       areaNameContains="diagnosticsSpareParts"
+                      onApplyResponse={onApplyPricingResponse}
                     >
                       {renderTabContent(isFormReadOnly)}
                     </DiagnosticsPricingProvider>

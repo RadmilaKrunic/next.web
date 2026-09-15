@@ -4,12 +4,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 vi.mock("./action", () => ({
-  postDiagnosticPricing: vi.fn().mockResolvedValue({ materials: [], summaries: [] }),
+  postDiagnosticPricing: vi.fn().mockResolvedValue({ materials: [], priceSummary: null }),
 }));
 
 import { useDiagnosticPricing } from "./hooks";
 import { postDiagnosticPricing } from "./action";
-import type { DiagnosticPricingRequest } from "./diagnosticPricing.types";
+import type { DiagnosticPricingRequestInput } from "./diagnosticPricing.types";
 
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -17,11 +17,10 @@ function makeWrapper() {
     React.createElement(QueryClientProvider, { client: qc }, children);
 }
 
-const request: DiagnosticPricingRequest = {
-  actionType: "REPAIR",
-  jobType: "CHARGEABLE",
-  trigger: "quantity",
-  materials: [],
+const request: DiagnosticPricingRequestInput = {
+  pricingContext: { country: "TR", ascId: "ASC8", scale: 2 },
+  changes: { type: "SET_QUANTITY", lineId: "row-0", value: 3 },
+  lines: [],
 };
 
 describe("useDiagnosticPricing", () => {
@@ -40,6 +39,6 @@ describe("useDiagnosticPricing", () => {
     result.current.mutate(request);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     // useMutation's onSuccess is called as (data, variables, context) — only assert on data.
-    expect(onSuccess.mock.calls[0][0]).toEqual({ materials: [], summaries: [] });
+    expect(onSuccess.mock.calls[0][0]).toEqual({ materials: [], priceSummary: null });
   });
 });
