@@ -1438,6 +1438,17 @@ export default function JobOverview() {
       const mappedData = mapValuesToAPI(formValues, currentAllFields) as Record<string, unknown>;
       const payload = (mappedData["diagnostic"] as Record<string, unknown>) ?? {};
       const preserveCalculatedPrices = options?.preserveCalculatedPrices ?? false;
+
+      // A diagnostic with no status yet (or still DRAFT) defaults to DRAFT on save. This
+      // must not depend on there being any material rows yet, or on isBackendDiagnosticsEnabled
+      // - it was previously set only inside the materials block below, past the backend-driven
+      // early return, so on a brand-new diagnostic (materials empty, or the flag on) `status`
+      // was left as whatever mapValuesToAPI mapped the diagnosticStatus field to (null when the
+      // field's own "DRAFT" defaultValue hadn't made it into Formik values yet).
+      const newDiagnostic =
+        payload.status === "DRAFT" || payload.status === null || payload.status === undefined;
+      if (newDiagnostic) payload.status = "DRAFT";
+
       if (Array.isArray(payload.materials)) {
         const normalizedMaterials = (payload.materials as Record<string, unknown>[])
           .filter((m) => m !== null && m !== undefined)
@@ -1477,8 +1488,6 @@ export default function JobOverview() {
           const id = (m as Record<string, unknown>)["id"];
           return !id;
         });
-        const newDiagnostic =
-          payload.status === "DRAFT" || payload.status === null || payload.status === undefined;
 
         if (preserveCalculatedPrices && newDiagnostic) {
           const cachedDiagnostic = queryClient.getQueryData<JobDiagnostic>(["diagnostic", jobId]);
@@ -1487,7 +1496,6 @@ export default function JobOverview() {
         if (withoutIds || newDiagnostic) {
           (payload.materials as unknown[]).forEach((m) => {
             if (newDiagnostic && !preserveCalculatedPrices) {
-              payload.status = "DRAFT";
               (m as Record<string, unknown>)["price"] = null;
               return;
             }
