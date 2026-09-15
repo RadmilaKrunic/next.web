@@ -150,16 +150,20 @@ export function DiagnosticsPricingProvider({
   const lastSignatureRef = useRef<string | null>(null);
   const lastSnapshotRef = useRef<ValueSnapshot | null>(null);
 
+  // Capture the as-loaded baseline synchronously on the render where pricing first becomes
+  // enabled and rows exist — before any user edit can occur — rather than inside the
+  // debounce-settle effect below, which would race the first settle against a possible
+  // earlier edit. Rows can still be empty on the very first render (UIConfiguration hasn't
+  // populated the spare-parts area yet), so wait for real row data before latching.
+  if (lastSnapshotRef.current === null && enabled && rows.length > 0) {
+    lastSnapshotRef.current = buildValueSnapshot(rows, values);
+    lastSignatureRef.current = signature;
+  }
+
   useEffect(() => {
     if (!enabled || !debouncedSignature) return;
-    const nextSnapshot = buildValueSnapshot(rowsRef.current, valuesRef.current);
-    // First settled signature is the state loaded from the backend — nothing to recalculate.
-    if (lastSignatureRef.current === null) {
-      lastSignatureRef.current = debouncedSignature;
-      lastSnapshotRef.current = nextSnapshot;
-      return;
-    }
     if (lastSignatureRef.current === debouncedSignature) return;
+    const nextSnapshot = buildValueSnapshot(rowsRef.current, valuesRef.current);
     const { trigger, triggeredByOrder } = findChangeTrigger(
       rowsRef.current,
       lastSnapshotRef.current,
