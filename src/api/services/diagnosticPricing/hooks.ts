@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { postDiagnosticPricing } from "./action";
 import type {
-  DiagnosticPricingRequest,
+  DiagnosticPricingRequestInput,
   DiagnosticPricingResponse,
 } from "./diagnosticPricing.types";
 
@@ -11,6 +11,6 @@ export const useDiagnosticPricing = (
 ) =>
   useMutation({
     mutationKey: ["diagnosticPricing", jobId],
-    mutationFn: (payload: DiagnosticPricingRequest) => postDiagnosticPricing(jobId, payload),
+    mutationFn: (payload: DiagnosticPricingRequestInput) => postDiagnosticPricing(jobId, payload),
     onSuccess,
   });

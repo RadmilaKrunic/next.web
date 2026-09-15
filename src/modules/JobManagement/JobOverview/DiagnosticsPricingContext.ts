@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import type {
+  DiagnosticPricingChange,
   DiagnosticPricingResponse,
-  DiagnosticPricingTrigger,
 } from "api/services/diagnosticPricing/diagnosticPricing.types";
 
 export interface DiagnosticsPricingContextValue {
@@ -9,7 +9,8 @@ export interface DiagnosticsPricingContextValue {
   enabled: boolean;
   pricing: DiagnosticPricingResponse | null;
   isPricing: boolean;
-  recalculate: (trigger: DiagnosticPricingTrigger, triggeredByOrder?: number) => void;
+  /** Requests a recalculation for a single row or summary-level edit. */
+  recalculate: (change: DiagnosticPricingChange) => void;
 }
 
 const defaultValue: DiagnosticsPricingContextValue = {

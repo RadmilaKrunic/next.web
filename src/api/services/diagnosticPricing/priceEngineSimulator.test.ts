@@ -1,56 +1,65 @@
 import { describe, it, expect } from "vitest";
 import { calculatePrices, roundToTwo } from "utils/priceCalculator";
 import { simulateDiagnosticPricing } from "./priceEngineSimulator";
-import { TOTAL_SUMMARY_TYPE, type DiagnosticPricingMaterialInput } from "./diagnosticPricing.types";
+import type { DiagnosticPricingLine, DiagnosticPricingRequest } from "./diagnosticPricing.types";
 
-const material = (
-  overrides: Partial<DiagnosticPricingMaterialInput>,
-): DiagnosticPricingMaterialInput => ({
-  order: 0,
+const line = (overrides: Partial<DiagnosticPricingLine>): DiagnosticPricingLine => ({
+  lineId: "row-0",
   position: "SP",
   partNumber: "P1",
-  type: "CHARGEABLE",
+  jobType: "CHARGEABLE",
   quantity: 2,
   unitPrice: 50,
-  discount: 10,
-  tax: 20,
-  netAmount: 100,
-  grossAmount: 120,
+  taxPercentage: 20,
+  discountPercentage: 10,
+  totalNetAmount: 100,
   totalAmount: 108,
   ...overrides,
 });
 
+const request = (
+  lines: DiagnosticPricingLine[],
+  changes: DiagnosticPricingRequest["changes"],
+): DiagnosticPricingRequest => ({
+  requestId: "test-request-id",
+  pricingContext: { country: "TR", ascId: "ASC8", scale: 2 },
+  lines,
+  changes,
+});
+
 describe("simulateDiagnosticPricing", () => {
-  it("recomputes the triggered row using the trigger's mapped field via calculatePrices", () => {
-    const m = material({ order: 0, quantity: 3 });
-    const response = simulateDiagnosticPricing({
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
-      trigger: "quantity",
-      triggeredByOrder: 0,
-      materials: [m],
-    });
+  it("recomputes the changed line using the change's mapped field via calculatePrices", () => {
+    const l = line({ lineId: "row-0", quantity: 3 });
+    const response = simulateDiagnosticPricing(
+      request([l], { type: "SET_QUANTITY", lineId: "row-0", value: 3 }),
+    );
 
     const expected = calculatePrices(
       {
-        quantity: m.quantity,
-        unitPrice: m.unitPrice,
-        taxPercent: m.tax,
-        discountPercent: m.discount,
-        suggestedNetPrice: m.netAmount,
-        netAmount: m.netAmount,
-        grossAmount: m.grossAmount,
-        totalAmount: m.totalAmount,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        taxPercent: l.taxPercentage,
+        discountPercent: l.discountPercentage,
+        suggestedNetPrice: l.totalNetAmount,
+        netAmount: l.totalNetAmount,
+        grossAmount: 0,
+        totalAmount: l.totalAmount,
         taxAmount: 0,
       },
       "quantity",
-      m.quantity,
+      l.quantity,
     );
 
     expect(response.materials[0]).toEqual({
       id: undefined,
-      order: 0,
       position: "SP",
+      partNumber: "P1",
+      jobType: "CHARGEABLE",
+      quantity: 3,
+      status: "PENDING",
+      isPriceSetManually: false,
+      notBelongsToTool: false,
+      order: 1,
       price: {
         discount: expected.discountPercent,
         discountAmount: expected.discountAmount,
@@ -65,100 +74,76 @@ describe("simulateDiagnosticPricing", () => {
     });
   });
 
-  it("recomputes non-triggered rows from their own quantity, not the trigger's field", () => {
-    const triggered = material({ order: 0, quantity: 3 });
-    const sibling = material({ order: 1, quantity: 5, unitPrice: 20 });
-    const response = simulateDiagnosticPricing({
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
-      trigger: "discount",
-      triggeredByOrder: 0,
-      materials: [triggered, sibling],
-    });
+  it("recomputes non-changed lines from their own quantity, not the change's field", () => {
+    const changed = line({ lineId: "row-0", quantity: 3 });
+    const sibling = line({ lineId: "row-1", quantity: 5, unitPrice: 20 });
+    const response = simulateDiagnosticPricing(
+      request([changed, sibling], { type: "SET_DISCOUNT", lineId: "row-0", value: 15 }),
+    );
 
     const siblingExpected = calculatePrices(
       {
         quantity: sibling.quantity,
         unitPrice: sibling.unitPrice,
-        taxPercent: sibling.tax,
-        discountPercent: sibling.discount,
-        suggestedNetPrice: sibling.netAmount,
-        netAmount: sibling.netAmount,
-        grossAmount: sibling.grossAmount,
+        taxPercent: sibling.taxPercentage,
+        discountPercent: sibling.discountPercentage,
+        suggestedNetPrice: sibling.totalNetAmount,
+        netAmount: sibling.totalNetAmount,
+        grossAmount: 0,
         totalAmount: sibling.totalAmount,
         taxAmount: 0,
       },
       "quantity",
       sibling.quantity,
     );
-    expect(response.materials[1].price.totalAmount).toBe(siblingExpected.totalAmount);
+    expect(response.materials[1].price?.totalAmount).toBe(siblingExpected.totalAmount);
   });
 
-  it("defaults to a quantity-driven recompute for triggers with no mapped field (e.g. load)", () => {
-    const m = material({ order: 0 });
-    const response = simulateDiagnosticPricing({
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
-      trigger: "load",
-      materials: [m],
-    });
-    const expected = calculatePrices(
-      {
-        quantity: m.quantity,
-        unitPrice: m.unitPrice,
-        taxPercent: m.tax,
-        discountPercent: m.discount,
-        suggestedNetPrice: m.netAmount,
-        netAmount: m.netAmount,
-        grossAmount: m.grossAmount,
-        totalAmount: m.totalAmount,
-        taxAmount: 0,
-      },
-      "quantity",
-      m.quantity,
+  it("assigns id only for a real backend lineId, leaving not-yet-saved rows undefined", () => {
+    const saved = line({ lineId: "SP_P1_CHARGEABLE" });
+    const response = simulateDiagnosticPricing(
+      request([saved], { type: "SET_QUANTITY", lineId: "SP_P1_CHARGEABLE", value: 2 }),
     );
-    expect(response.materials[0].price.totalAmount).toBe(expected.totalAmount);
+    expect(response.materials[0].id).toBe("SP_P1_CHARGEABLE");
   });
 
-  it("builds one summary per material type, plus a TOTAL roll-up over every row", () => {
-    const chargeable = material({ order: 0, type: "CHARGEABLE" });
-    const warranty = material({ order: 1, type: "WARRANTY", quantity: 1, unitPrice: 30 });
-    const response = simulateDiagnosticPricing({
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
-      trigger: "load",
-      materials: [chargeable, warranty],
-    });
+  it("builds a byJobType breakdown, plus a total roll-up over every line", () => {
+    const chargeable = line({ lineId: "row-0", jobType: "CHARGEABLE" });
+    const warranty = line({ lineId: "row-1", jobType: "WARRANTY", quantity: 1, unitPrice: 30 });
+    const response = simulateDiagnosticPricing(
+      request([chargeable, warranty], { type: "SET_QUANTITY", lineId: "row-0", value: 2 }),
+    );
 
-    const types = response.summaries.map((s) => s.type).sort();
-    expect(types).toEqual(["CHARGEABLE", TOTAL_SUMMARY_TYPE, "WARRANTY"].sort());
+    expect(Object.keys(response.priceSummaryDetailed?.byJobType ?? {}).sort()).toEqual([
+      "CHARGEABLE",
+      "WARRANTY",
+    ]);
 
-    const total = response.summaries.find((s) => s.type === TOTAL_SUMMARY_TYPE);
     const sumNetAmount = roundToTwo(
-      response.materials.reduce((sum, m) => sum + m.price.netAmount, 0),
+      response.materials.reduce((sum, m) => sum + (m.price?.netAmount ?? 0), 0),
     );
-    expect(total?.price.netAmount).toBe(sumNetAmount);
+    expect(response.priceSummary?.netAmount).toBe(sumNetAmount);
   });
 
-  it("scopes materialPrice to distributable positions only, and omits it when none apply", () => {
-    const spareParty = material({ order: 0, position: "SP", type: "CHARGEABLE" });
-    const labour = material({ order: 1, position: "LA", type: "CHARGEABLE" });
-    const response = simulateDiagnosticPricing({
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
-      trigger: "load",
-      materials: [spareParty, labour],
-    });
+  it("scopes materialRelated to distributable positions, and omits it when none apply", () => {
+    const spareParty = line({ lineId: "row-0", position: "SP", jobType: "CHARGEABLE" });
+    const labour = line({ lineId: "row-1", position: "LA", jobType: "CHARGEABLE" });
+    const response = simulateDiagnosticPricing(
+      request([spareParty, labour], { type: "SET_QUANTITY", lineId: "row-0", value: 2 }),
+    );
 
-    const summary = response.summaries.find((s) => s.type === "CHARGEABLE");
-    expect(summary?.materialPrice?.netAmount).toBe(response.materials[0].price.netAmount);
+    const chargeable = response.priceSummaryDetailed?.byJobType.CHARGEABLE;
+    expect(chargeable?.materialRelated?.netAmount).toBe(response.materials[0].price?.netAmount);
+    expect(chargeable?.serviceRelated?.netAmount).toBe(response.materials[1].price?.netAmount);
 
-    const labourOnly = simulateDiagnosticPricing({
-      actionType: "REPAIR",
-      jobType: "CHARGEABLE",
-      trigger: "load",
-      materials: [material({ order: 0, position: "LA", type: "CHARGEABLE" })],
-    });
-    expect(labourOnly.summaries.find((s) => s.type === "CHARGEABLE")?.materialPrice).toBeUndefined();
+    const labourOnly = simulateDiagnosticPricing(
+      request(
+        [line({ lineId: "row-0", position: "LA", jobType: "CHARGEABLE" })],
+        { type: "SET_QUANTITY", lineId: "row-0", value: 2 },
+      ),
+    );
+    expect(
+      labourOnly.priceSummaryDetailed?.byJobType.CHARGEABLE?.materialRelated,
+    ).toBeUndefined();
   });
 });
