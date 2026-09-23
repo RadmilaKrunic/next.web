@@ -15,7 +15,6 @@ import {
   mapFieldToFieldMapping,
   syncFieldsToTabs,
 } from "components/generics/utils";
-// import { calculatePrices } from "utils/priceCalculator";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useBareSalesRelation } from "api/services/bareSalesRelation/hooks";
@@ -178,43 +177,11 @@ enum QuantitySource {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-// const computePricesForItem = (item: MaterialItem, mode?: discountBase): MaterialItem => {
-//   if (item.unitPrice <= 0) return item;
-//   const result = calculatePrices(
-//     {
-//       quantity: item.quantity,
-//       unitPrice: item.unitPrice,
-//       taxPercent: item.tax,
-//       discountPercent: item.discount,
-//       grossAmount: 0,
-//       netAmount: 0,
-//       suggestedNetPrice: 0,
-//       totalAmount: 0,
-//       taxAmount: 0,
-//     },
-//     "unitPrice",
-//     item.unitPrice,
-//     mode,
-//   );
-//   return {
-//     ...item,
-//     netAmount: result.netAmount,
-//     suggestedNetPrice: result.suggestedNetPrice,
-//     tax: result.taxPercent,
-//     taxAmount: result.taxAmount,
-//     grossAmount: result.grossAmount,
-//     discount: result.discountPercent,
-//     discountAmount: result.discountAmount,
-//     totalAmount: result.totalAmount,
-//   };
-// };
-
 const buildEmptyMaterial = (
   position: string,
   jobType: string,
   quantity: number,
   t: TFunction<"translation", "app">,
- // mode?: discountBase,
 ): MaterialItem => {
   const autofill = getPositionAutofill(t)[position];
   const base: MaterialItem = {
