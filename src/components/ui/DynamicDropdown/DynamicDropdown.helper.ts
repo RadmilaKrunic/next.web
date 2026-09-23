@@ -191,7 +191,11 @@ export const translateStaticOptions = (
   const shouldDisplaySelectOption =
     !dropDownName.includes("reimbursementMethod") &&
     !dropDownName.includes("reimbursementCreateOn") &&
-    !dropDownName.includes("reimbursementPeriodType");
+    !dropDownName.includes("reimbursementPeriodType") &&
+    !dropDownName.includes("serviceCenterType") &&
+    !dropDownName.includes("country") &&
+    !dropDownName.includes("preferredSelectedCountry") &&
+    !dropDownName.includes("countryCode");
 
   if (!opts) return [];
   // Some callers (e.g. ClaimSparePartsRow/SparePartsRow position fields) already

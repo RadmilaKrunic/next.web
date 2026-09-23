@@ -9,70 +9,133 @@ import type { GenericOptionProps } from "components/generics/Field/GenericField.
 import Field from "components/generics/Field/GenericField.types";
 import Section from "components/generics/Section/GenericSection.types";
 import Area from "components/generics/Area/GenericArea.types";
-import type { RefObject, Dispatch, SetStateAction } from "react";
+import type { RefObject } from "react";
 import {
   setDuplicatedArea,
   mapFieldToFieldMapping,
   syncFieldsToTabs,
 } from "components/generics/utils";
-import { calculatePrices } from "utils/priceCalculator";
-import { FEATURE_FLAGS, isFeatureEnabled } from "utils/featureFlags";
-import { allowsPermanentDelete } from "utils/itemPolicy";
-import { useItemPolicy } from "contexts/itemPolicyContext";
-import type { ItemPolicy } from "api/services/itemPolicy/itemPolicy.types";
+// import { calculatePrices } from "utils/priceCalculator";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useBareSalesRelation } from "api/services/bareSalesRelation/hooks";
 import { PERMISSIONS } from "utils/Permissions";
 import type { HeaderUserData } from "api/services/header/action";
 import { MessagesContext } from "../contexts/messagescontext";
 import { scrollToTop } from "../utils/scrollToError";
-import {
-  type MaterialItem,
-  type ImportedMaterial,
-  POSITION_ORDER,
-  sortByPositionOrder,
-  normalizeMaterialOrders,
-  sortMaterialsByOrder,
-  QuantitySource,
-} from "hooks/diagnostics/materialItem.types";
-import {
-  computeIsChargeable,
-  hasWarrantyOrProServiceItems,
-  getChargeablePendingInfo,
-  getBoschInternalPending,
-  getPositionAutofill,
-  PREAPPROVAL_ACTION_TYPES,
-} from "hooks/diagnostics/diagnosticFieldHelpers";
-import {
-  buildRowValues,
-  buildMaterialsRowValues,
-  withSpecialMaterialSpOption,
-  computeFinalSparePartsAreas,
-  removeDiagnosticsAreas,
-  removeArchivedArea,
-  computePricesForItem,
-  buildEmptyMaterial,
-} from "hooks/diagnostics/rowValues";
-import {
-  RESETTABLE_MATERIAL_STATUSES,
-  syncMaterialsWithForm,
-} from "hooks/diagnostics/materialsFormSync";
 
-// Re-exported for external consumers (SparePartsRow, ClaimSparePartsRow, SummaryArea,
-// JobOverview, ClaimContext, DiagnosticsContext, this file's own test suite) — the
-// implementations now live under hooks/diagnostics/, kept here as a stable, unchanged
-// import path so nothing outside this file had to change.
-export type { MaterialItem, ImportedMaterial };
-export {
-  computeIsChargeable,
-  hasWarrantyOrProServiceItems,
-  getChargeablePendingInfo,
-  getBoschInternalPending,
-  getPositionAutofill,
-  buildRowValues,
-  buildMaterialsRowValues,
+// ── Types ──────────────────────────────────────────────────────────────────
+
+export interface MaterialItem {
+  position: string;
+  partNumber: string;
+  description: string;
+  type: string;
+  quantity: number;
+  unitPrice: number;
+  netAmount: number;
+  tax: number;
+  grossAmount: number;
+  discount: number;
+  discountAmount?: number;
+  taxAmount: number;
+  totalAmount: number;
+  suggestedNetPrice?: number;
+  status?: string;
+  materialId?: string;
+  origin?: "specialMaterial" | "explosionDrawing";
+  isValidated?: boolean;
+  /** True for rows added manually by the user (not loaded from API) */
+  isNew?: boolean;
+  order?: number;
+  notBelongsToTool?: boolean;
+  isPriceSetManually?: boolean;
+  reimbursementPaymentMethod?: string | null;
+}
+
+// ── Diagnostic field helpers ───────────────────────────────────────────────
+
+export function computeIsChargeable(
+  allFields: Field[],
+  values: Record<string, unknown>,
+): boolean | null {
+  const typeFields = allFields.filter((f) => f.subtype === "diagnosticType");
+  if (typeFields.length === 0) return null;
+  return typeFields.some((f) => (values[f.name] as string) === "CHARGEABLE");
+}
+
+export function hasWarrantyOrProServiceItems(
+  allFields: Field[],
+  values: Record<string, unknown>,
+): boolean {
+  const typeFields = allFields.filter((f) => f.subtype === "diagnosticType");
+  return typeFields.some((f) => {
+    const type = (values[f.name] as string) ?? "";
+    return type === "WARRANTY" || type === "SERVICE_OFFERING";
+  });
+}
+
+export function getChargeablePendingInfo(
+  fields: Field[],
+  values: Record<string, unknown>,
+): { pendingTypeFields: Field[]; hasChargeablePending: boolean } {
+  const typeFields = fields.filter((f) => f.subtype === "diagnosticType");
+  const statusFields = fields.filter((f) => f.subtype === "diagnosticMaterialStatus");
+  const pendingTypeFields = typeFields.filter((_, i) => {
+    const statusField = statusFields[i];
+    return !statusField || (values[statusField.name] as string) !== "APPROVED";
+  });
+  const hasChargeablePending = pendingTypeFields.some(
+    (tf) =>
+      (values[tf.name] as string) === "CHARGEABLE" ||
+      (values[tf.name] as string) === "SPECIAL_CONTRACT",
+  );
+  return { pendingTypeFields, hasChargeablePending };
+}
+
+const PREAPPROVAL_ACTION_TYPES = new Set([
+  "NEW_TOOL_EXCHANGE",
+  "SPARE_PARTS_EXCHANGE",
+  "ACCESSORIES_EXCHANGE",
+]);
+
+const PREAPPROVAL_JOB_TYPES = new Set(["WARRANTY", "SERVICE_OFFERING"]);
+
+export function getBoschInternalPending(
+  fields: Field[],
+  values: Record<string, unknown>,
+): { pendingTypeFields: Field[]; hasBoschInternalPending: boolean } {
+  const typeFields = fields.filter((f) => f.subtype === "diagnosticType");
+  const statusFields = fields.filter((f) => f.subtype === "diagnosticMaterialStatus");
+  const actionType = (values.actionType as string) ?? "";
+  const pendingTypeFields = typeFields.filter((_, i) => {
+    const statusField = statusFields[i];
+    return !statusField || (values[statusField.name] as string) !== "APPROVED";
+  });
+  const hasBoschInternalPending = pendingTypeFields.some((tf) => {
+    const type = (values[tf.name] as string) ?? "";
+    if (type === "COMMERCIAL_GOODWILL") return true;
+    if (PREAPPROVAL_ACTION_TYPES.has(actionType) && PREAPPROVAL_JOB_TYPES.has(type)) return true;
+    return false;
+  });
+  return { pendingTypeFields, hasBoschInternalPending };
+}
+
+export const getPositionAutofill = (
+  t: TFunction<"translation", "app">,
+): Record<string, { partNumber: string; description: string }> => ({
+  LA: { partNumber: "1609888887", description: t("labourCost") },
+  FR: { partNumber: "1609888888", description: t("freightCost") },
+});
+
+const POSITION_ORDER: Record<string, number> = {
+  LA: 0,
+  PN: 1,
+  SP: 2,
+  AC: 3,
+  FR: 4,
+  PC: 5,
 };
-
 const POSITION_VIEW_PERMISSIONS = {
   FR: PERMISSIONS.DIAGNOSTICS.CAN_VIEW_FREIGHT_ITEMS,
 } as const;
@@ -80,6 +143,397 @@ const POSITION_VIEW_PERMISSIONS = {
 const POSITION_INSERT_PERMISSIONS = {
   FR: PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_FREIGHT_ITEMS,
 } as const;
+
+const sortByPositionOrder = (positions: string[]): string[] =>
+  [...positions].sort(
+    (a, b) =>
+      (POSITION_ORDER[a] ?? Number.MAX_SAFE_INTEGER) -
+      (POSITION_ORDER[b] ?? Number.MAX_SAFE_INTEGER),
+  );
+
+const getOrderValue = (item: MaterialItem, fallbackIndex: number): number => {
+  const parsed = Number(item.order);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallbackIndex + 1;
+  return parsed;
+};
+
+const normalizeMaterialOrders = (items: MaterialItem[]): MaterialItem[] =>
+  items.map((item, index) => ({ ...item, order: getOrderValue(item, index) }));
+
+const sortMaterialsByOrder = (items: MaterialItem[]): MaterialItem[] =>
+  [...normalizeMaterialOrders(items)].sort((a, b) => {
+    const byOrder = getOrderValue(a, 0) - getOrderValue(b, 0);
+    if (byOrder !== 0) return byOrder;
+    return (
+      (POSITION_ORDER[a.position] ?? Number.MAX_SAFE_INTEGER) -
+      (POSITION_ORDER[b.position] ?? Number.MAX_SAFE_INTEGER)
+    );
+  });
+
+enum QuantitySource {
+  DEFAULT = "DEFAULT",
+  FAULT_CODES = "FAULT_CODES",
+  USER = "USER",
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+// const computePricesForItem = (item: MaterialItem, mode?: discountBase): MaterialItem => {
+//   if (item.unitPrice <= 0) return item;
+//   const result = calculatePrices(
+//     {
+//       quantity: item.quantity,
+//       unitPrice: item.unitPrice,
+//       taxPercent: item.tax,
+//       discountPercent: item.discount,
+//       grossAmount: 0,
+//       netAmount: 0,
+//       suggestedNetPrice: 0,
+//       totalAmount: 0,
+//       taxAmount: 0,
+//     },
+//     "unitPrice",
+//     item.unitPrice,
+//     mode,
+//   );
+//   return {
+//     ...item,
+//     netAmount: result.netAmount,
+//     suggestedNetPrice: result.suggestedNetPrice,
+//     tax: result.taxPercent,
+//     taxAmount: result.taxAmount,
+//     grossAmount: result.grossAmount,
+//     discount: result.discountPercent,
+//     discountAmount: result.discountAmount,
+//     totalAmount: result.totalAmount,
+//   };
+// };
+
+const buildEmptyMaterial = (
+  position: string,
+  jobType: string,
+  quantity: number,
+  t: TFunction<"translation", "app">,
+ // mode?: discountBase,
+): MaterialItem => {
+  const autofill = getPositionAutofill(t)[position];
+  const base: MaterialItem = {
+    position,
+    partNumber: autofill?.partNumber ?? "",
+    description: autofill?.description ?? "",
+    type: jobType,
+    quantity,
+    unitPrice: 0,
+    netAmount: 0,
+    suggestedNetPrice: 0,
+    tax: 0,
+    taxAmount: 0,
+    grossAmount: 0,
+    discount: 0,
+    totalAmount: 0,
+    order: 0,
+    isPriceSetManually: false,
+  };
+  return base;
+};
+
+/** Write a MaterialItem's values into the duplicate area's fields via subtype. */
+export const buildRowValues = (
+  areaFields: Field[],
+  item: MaterialItem,
+): Record<string, unknown> => {
+  const mappingSubtype: Record<string, unknown> = {
+    diagnosticPosition: item.position,
+    archivedPosition: item.position,
+    diagnosticPartNumber: item.partNumber,
+    archivedPartNumber: item.partNumber,
+    diagnosticDescription: item.description,
+    archivedDescription: item.description,
+    diagnosticType: item.type,
+    archivedType: item.type,
+    diagnosticQuantity: item.quantity,
+    archivedQuantity: item.quantity,
+    diagnosticUnitPrice: item.unitPrice,
+    archivedUnitPrice: item.unitPrice,
+    diagnosticNetAmount: item.netAmount,
+    archivedNetAmount: item.netAmount,
+    diagnosticSuggestedNetPrice: item.suggestedNetPrice || item.quantity * item.unitPrice,
+    archivedSuggestedNetPrice: item.suggestedNetPrice || item.quantity * item.unitPrice,
+    diagnosticTax: item.tax,
+    archivedTax: item.tax,
+    diagnosticTaxAmount: item.taxAmount,
+    archivedTaxAmount: item.taxAmount,
+    diagnosticGrossAmount: item.grossAmount,
+    archivedGrossAmount: item.grossAmount,
+    diagnosticDiscount: item.discount ?? 0,
+    diagnosticDiscountHidden: item.discount ?? 0,
+    diagnosticDiscountAmountHidden: item.discountAmount ?? 0,
+    archivedDiscount: item.discount ?? 0,
+    archivedDiscountAmountHidden: item.discountAmount ?? 0,
+    diagnosticTotalAmount: item.totalAmount ?? 0,
+    archivedTotalAmount: item.totalAmount ?? 0,
+    diagnosticMaterialStatus: item.status ?? "PENDING",
+    archivedMaterialStatus: item.status ?? "ARCHIVED",
+    diagnosticMaterialId: item.materialId ?? "",
+    notBelongsToTool: item.notBelongsToTool ?? "",
+  };
+  return areaFields.reduce(
+    (acc, field) => {
+      acc[field.name] = mappingSubtype[field.subtype ?? ""] ?? field.defaultValue ?? "";
+      return acc;
+    },
+    {} as Record<string, unknown>,
+  );
+};
+
+/** Overlay status and type fields onto an existing values map from the current form state. */
+function applyStatusAndTypeOverrides(
+  baseValues: Record<string, unknown>,
+  areaFields: Field[],
+  item: Pick<MaterialItem, "status" | "type">,
+  faultCodeDropdown: unknown,
+): Record<string, unknown> {
+  const result = { ...baseValues };
+  const statusField = areaFields.find((f) => f.subtype === "diagnosticMaterialStatus");
+  if (statusField && item.status !== undefined) {
+    result[statusField.name] = item.status;
+  }
+  const typeField = areaFields.find((f) => f.subtype === "diagnosticType");
+  if (typeField && !faultCodeDropdown) {
+    result[typeField.name] = item.type;
+  }
+  return result;
+}
+
+function shouldReuseExistingRowValues(params: {
+  rowIndex: number;
+  currentCount: number;
+  livePosition: string;
+  expectedPosition: string;
+  forceRebuild: boolean;
+  rowHasNoPrices: boolean;
+}): boolean {
+  const { rowIndex, currentCount, livePosition, expectedPosition, forceRebuild, rowHasNoPrices } =
+    params;
+  if (rowIndex >= currentCount) return false;
+  if (livePosition !== expectedPosition) return false;
+  if (forceRebuild) return false;
+  return !rowHasNoPrices;
+}
+
+export function buildMaterialsRowValues(params: {
+  materials: MaterialItem[];
+  areas: Area[];
+  fields: Field[];
+  formValues: Record<string, unknown>;
+  currentCount: number;
+  forceRebuild: boolean;
+}): Record<string, unknown> {
+  const { materials, areas, fields, formValues, currentCount, forceRebuild } = params;
+  let rowValues: Record<string, unknown> = {};
+
+  materials.forEach((item, idx) => {
+    const area = areas[idx];
+    if (!area) return;
+
+    const areaFieldNameSet = new Set(area.fields.map((af) => af.name));
+    const areaFields = fields.filter((f) => areaFieldNameSet.has(f.name));
+    const positionField = areaFields.find((f) => f.subtype === "diagnosticPosition");
+    const livePosition = positionField ? ((formValues[positionField.name] as string) ?? "") : "";
+    const hasApiPrices = item.netAmount > 0 || item.grossAmount > 0 || item.totalAmount > 0;
+    const rowHasNoPrices =
+      Boolean(item.materialId) &&
+      hasApiPrices &&
+      areaFields
+        .filter(
+          (f) =>
+            f.subtype === "diagnosticNetAmount" ||
+            f.subtype === "diagnosticGrossAmount" ||
+            f.subtype === "diagnosticTotalAmount" ||
+            f.subtype === "diagnosticSuggestedNetPrice",
+        )
+        .every((f) => !Number(formValues[f.name]));
+
+    const reuseExistingValues = shouldReuseExistingRowValues({
+      rowIndex: idx,
+      currentCount,
+      livePosition,
+      expectedPosition: item.position,
+      forceRebuild,
+      rowHasNoPrices,
+    });
+
+    if (reuseExistingValues) {
+      const baseValues = Object.fromEntries(
+        areaFields.filter((f) => f.name in formValues).map((f) => [f.name, formValues[f.name]]),
+      );
+      const existingValues = applyStatusAndTypeOverrides(
+        baseValues,
+        areaFields,
+        item,
+        formValues.faultCodeDropdown,
+      );
+      const descriptionField = areaFields.find((f) => f.subtype === "diagnosticDescription");
+      if (descriptionField) {
+        const currentDescription = existingValues[descriptionField.name];
+        if (
+          (typeof currentDescription !== "string" || !currentDescription.trim()) &&
+          item.description
+        ) {
+          existingValues[descriptionField.name] = item.description;
+        }
+      }
+      if (item.position === "LA") {
+        const qtyField = areaFields.find((f) => f.subtype === "diagnosticQuantity");
+        if (qtyField) {
+          existingValues[qtyField.name] = item.quantity;
+        }
+      }
+      rowValues = { ...rowValues, ...existingValues };
+      return;
+    }
+
+    rowValues = { ...rowValues, ...buildRowValues(areaFields, item) };
+  });
+
+  return rowValues;
+}
+
+function withSpecialMaterialSpOption(params: {
+  fields: Field[];
+  rowValues: Record<string, unknown>;
+  allowedPositions: AllowedPosition[];
+  addSpecialMaterialsAllowed: boolean;
+}): Field[] {
+  const { fields, rowValues, allowedPositions, addSpecialMaterialsAllowed } = params;
+  const spInAllowed = allowedPositions.some((p) => p.position === "SP");
+  if (spInAllowed || !addSpecialMaterialsAllowed) {
+    return fields;
+  }
+
+  const spPositionFieldNames = new Set(
+    Object.entries(rowValues)
+      .filter(([, v]) => v === "SP")
+      .map(([k]) => k),
+  );
+
+  if (spPositionFieldNames.size === 0) {
+    return fields;
+  }
+
+  const spOption: GenericOptionProps = { value: "SP", name: "SP" };
+  return fields.map((f) => {
+    if (f.subtype !== "diagnosticPosition" || !spPositionFieldNames.has(f.name)) return f;
+    return { ...f, options: [...(f.options ?? []), spOption] };
+  });
+}
+
+function computeFinalSparePartsAreas(
+  needed: number,
+  sparePartsAreas: Area[],
+  newAreas: Area[],
+  removeAreaNames: Set<string>,
+): Area[] {
+  if (needed > 0) return [...sparePartsAreas, ...newAreas];
+  if (needed < 0) return sparePartsAreas.filter((a) => !removeAreaNames.has(a.name));
+  return sparePartsAreas;
+}
+
+function removeDiagnosticsAreas(tab: Section, removeAreaNames: Set<string>): Section {
+  if (tab.name !== "diagnosticData") return tab;
+  return {
+    ...tab,
+    areas: tab.areas.filter((area) => !removeAreaNames.has(area.name)),
+  };
+}
+
+function removeArchivedArea(tab: Section, areaName: string): Section {
+  if (tab.name !== "diagnosticData") return tab;
+  return {
+    ...tab,
+    areas: tab.areas.filter((area) => area.name !== areaName),
+  };
+}
+
+const SPARE_PARTS_PREFIX = "diagnosticData_diagnosticsSpareParts#";
+const RESETTABLE_MATERIAL_STATUSES = new Set(["REVISED", "REJECTED"]);
+
+/**
+ * Returns the shifted key after deleting row `deletedIndex`.
+ * Returns null  → key belonged to the deleted row (drop it).
+ * Returns same  → key index < deletedIndex (keep as-is).
+ * Returns new   → key index > deletedIndex (shift down by 1).
+ */
+const shiftSparePartsKey = (key: string, deletedIndex: number): string | null => {
+  if (!key.startsWith(SPARE_PARTS_PREFIX)) return key;
+  const tail = key.slice(SPARE_PARTS_PREFIX.length);
+  const match = /^(\d+)(.*)$/.exec(tail);
+  if (!match) return key;
+  const currentIndex = Number(match[1]);
+  if (currentIndex === deletedIndex) return null;
+  if (currentIndex < deletedIndex) return key;
+  return `${SPARE_PARTS_PREFIX}${currentIndex - 1}${match[2]}`;
+};
+
+const shiftSparePartsArea = (area: Area, deletedIndex: number): Area => {
+  const shiftedAreaName = shiftSparePartsKey(area.name, deletedIndex);
+  if (!shiftedAreaName || shiftedAreaName === area.name) return area;
+  const shiftedFields = area.fields.map((field) => {
+    const shifted = shiftSparePartsKey(field.name, deletedIndex);
+    if (!shifted || shifted === field.name) return field;
+    return mapFieldToFieldMapping({ ...field, name: shifted });
+  });
+  return {
+    ...area,
+    name: shiftedAreaName,
+    index: area.index !== undefined && area.index > deletedIndex ? area.index - 1 : area.index,
+    fields: shiftedFields,
+  };
+};
+
+/** Re-keys every spare-parts form value, dropping the deleted row. */
+const reindexSparePartsValues = (
+  values: Record<string, unknown>,
+  deletedIndex: number,
+): Record<string, unknown> => {
+  const next: Record<string, unknown> = {};
+  Object.entries(values).forEach(([key, value]) => {
+    const shifted = shiftSparePartsKey(key, deletedIndex);
+    if (shifted !== null) next[shifted] = value;
+  });
+  return next;
+};
+
+const syncMaterialsWithForm = (materials: MaterialItem[], formValues: Record<string, unknown>) => {
+  const syncedMaterials = materials.map((materialItem, index) => {
+    return {
+      ...materialItem,
+      description:
+        (formValues[`${SPARE_PARTS_PREFIX}${index}_description`] as string) ??
+        materialItem.description,
+      discount:
+        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_discount`]) || materialItem.discount,
+      totalAmount:
+        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_totalAmount`]) || materialItem.totalAmount,
+      grossAmount:
+        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_grossAmount`]) || materialItem.grossAmount,
+      partNumber:
+        (formValues[`${SPARE_PARTS_PREFIX}${index}_sparePartNumber`] as string) ??
+        materialItem.partNumber,
+      position:
+        (formValues[`${SPARE_PARTS_PREFIX}${index}_position`] as string) ?? materialItem.position,
+      quantity:
+        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_quantity`]) || materialItem.quantity,
+      tax: Number(formValues[`${SPARE_PARTS_PREFIX}${index}_tax`]) || materialItem.tax,
+      netAmount:
+        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_netAmount`]) || materialItem.netAmount,
+      type: (formValues[`${SPARE_PARTS_PREFIX}${index}_type`] as string) ?? materialItem.type,
+      unitPrice:
+        Number(formValues[`${SPARE_PARTS_PREFIX}${index}_unitPrice`]) || materialItem.unitPrice,
+    };
+  });
+  return syncedMaterials;
+};
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
@@ -90,14 +544,14 @@ interface UseDiagnosticsManagerProps {
   currentActionType: string;
   currentJobType: string;
   tabs: Section[];
-  setTabs: Dispatch<SetStateAction<Section[]>>;
+  setTabs: React.Dispatch<React.SetStateAction<Section[]>>;
   allFields: Field[] | null;
-  setAllFields: Dispatch<SetStateAction<Field[] | null>>;
-  setInitialFormValues: Dispatch<SetStateAction<Record<string, unknown> | null>> | null;
+  setAllFields: React.Dispatch<React.SetStateAction<Field[] | null>>;
+  setInitialFormValues: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
   skipFormResetRef: RefObject<boolean>;
   formValuesRef: RefObject<Record<string, unknown>>;
   arePricesValidated: boolean;
-  setArePricesValidated: Dispatch<SetStateAction<boolean>>;
+  setArePricesValidated: React.Dispatch<React.SetStateAction<boolean>>;
   /** When set, will be flipped to true during initial load when all materials have IDs (prices from DB). */
   isResyncingRef?: RefObject<boolean>;
   /** When true, Effect 2 (rule-change rebuild) is skipped so API-loaded materials are preserved. */
@@ -110,7 +564,7 @@ export interface UseDiagnosticsManagerReturn {
   apiMaterialsLoaded: boolean;
   apiMaterialsEmpty: boolean;
   hasExistingDiagnostic: boolean;
-  setMaterials: Dispatch<SetStateAction<MaterialItem[]>>;
+  setMaterials: React.Dispatch<React.SetStateAction<MaterialItem[]>>;
   allowedPositions: AllowedPosition[];
   automaticRows: string[];
   positionDropdownOptions: GenericOptionProps[];
@@ -138,14 +592,18 @@ export interface UseDiagnosticsManagerReturn {
   canArchiveOnDelete: boolean;
 }
 
+export interface ImportedMaterial {
+  position?: string;
+  partNumber: string;
+  description?: string;
+  type?: string;
+  quantity?: number;
+  unitPrice?: number | null;
+  origin?: "specialMaterial" | "explosionDrawing";
+}
+
 /** Statuses where row deletion is permanent (no archiving). */
 export const STATUSES_WITH_PERMANENT_DELETE = ["IN_DIAGNOSTICS"];
-
-/** Policy-driven when a policy is supplied, otherwise the built-in status list. */
-const isPermanentDeleteStatus = (policy: ItemPolicy | null, jobStatus: string): boolean =>
-  policy
-    ? allowsPermanentDelete(policy, jobStatus)
-    : STATUSES_WITH_PERMANENT_DELETE.includes(jobStatus);
 
 export const useDiagnosticsManager = ({
   diagnosticData,
@@ -174,11 +632,6 @@ export const useDiagnosticsManager = ({
     userData?.countryCode,
   ]);
   const diagnosticsConfiguration = countryConfiguration?.diagnosticsConfiguration;
-
-  const isBackendDriven = isFeatureEnabled(FEATURE_FLAGS.DIAGNOSTICS_BACKEND_DRIVEN);
-  const itemPolicy = useItemPolicy();
-  const itemPolicyRef = useRef<ItemPolicy | null>(null);
-  itemPolicyRef.current = isBackendDriven ? itemPolicy : null;
 
   const hasDiagnosticsConfig = Boolean(diagnosticsConfiguration);
   const discountBase: discountBase =
@@ -276,12 +729,14 @@ export const useDiagnosticsManager = ({
   );
 
   // ── Source-of-truth list ─────────────────────────────────────────────────
+  //this is OK
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [archivedMaterials, setArchivedMaterials] = useState<MaterialItem[]>([]);
   const [apiMaterialsLoaded, setApiMaterialsLoaded] = useState(false);
   const [apiMaterialsEmpty, setApiMaterialsEmpty] = useState(false);
   const hasExistingDiagnostic = Boolean(diagnosticData?.jobId);
 
+  //remake the diagnostic
   // Stable refs so effects don't re-run when callbacks change
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
@@ -345,40 +800,17 @@ export const useDiagnosticsManager = ({
     position: string,
     description: string,
     price: Record<string, unknown>,
-    mode: discountBase,
   ) => {
     const quantity = Number(m.quantity) || 1;
     const unitPrice = Number(price.unitPrice) || 0;
     const taxPercent = Number(price.tax) || 0;
-    const discountPercent = Number(price.discount) || 0;
-
-    const calculated = isFeatureEnabled(FEATURE_FLAGS.DIAGNOSTICS_BACKEND_DRIVEN)
-      ? {
-          netAmount: Number(price.netAmount) || 0,
-          taxAmount: Number(price.taxAmount) || 0,
-          grossAmount: Number(price.grossAmount) || 0,
-          discountPercent,
-          discountAmount: Number(price.discountAmount) || 0,
-          totalAmount: Number(price.totalAmount) || 0,
-          suggestedNetPrice: Number(price.suggestedNetPrice) || 0,
-          taxPercent,
-        }
-      : calculatePrices(
-          {
-            quantity,
-            unitPrice,
-            taxPercent,
-            discountPercent,
-            suggestedNetPrice: 0,
-            netAmount: 0,
-            grossAmount: 0,
-            totalAmount: 0,
-            taxAmount: 0,
-          },
-          "unitPrice",
-          unitPrice,
-          mode,
-        );
+    const discount = Number(price.discount) || 0;
+    const netAmount = Number(price.netAmount) || 0;
+    const taxAmount = Number(price.taxAmount) || 0;
+    const grossAmount = Number(price.grossAmount) || 0;
+    const discountAmount = Number(price.discountAmount) || 0;
+    const totalAmount = Number(price.totalAmount) || 0;
+    const suggestedNetPrice = Number(price.suggestedNetPrice) || 0;
 
     return {
       position,
@@ -387,14 +819,14 @@ export const useDiagnosticsManager = ({
       type: (m.jobType as string) ?? "",
       quantity,
       unitPrice,
-      netAmount: calculated.netAmount,
+      netAmount,
       tax: taxPercent,
-      taxAmount: calculated.taxAmount,
-      grossAmount: calculated.grossAmount,
-      discount: calculated.discountPercent,
-      discountAmount: calculated.discountAmount,
-      totalAmount: calculated.totalAmount,
-      suggestedNetPrice: calculated.suggestedNetPrice,
+      taxAmount,
+      grossAmount,
+      discount,
+      discountAmount,
+      totalAmount,
+      suggestedNetPrice,
       status: (m.status as string) ?? undefined,
       materialId: (m.id as string) ?? undefined,
       isValidated: shouldMarkValidatedRef.current,
@@ -404,6 +836,7 @@ export const useDiagnosticsManager = ({
     };
   };
   // Reset on new job
+  //needs work
   useEffect(() => {
     hasSyncedFromAPIRef.current = false;
     hasSyncedArchivedRef.current = false;
@@ -415,6 +848,7 @@ export const useDiagnosticsManager = ({
     setArchivedMaterials([]);
   }, [diagnosticData?.jobId]);
 
+  //this is OK
   useEffect(() => {
     if (!diagnosticData) return;
     setApiMaterialsLoaded(true);
@@ -429,27 +863,21 @@ export const useDiagnosticsManager = ({
 
     hasSyncedFromAPIRef.current = true;
 
-    const autofill = getPositionAutofill(tRef.current, itemPolicyRef.current);
+    const autofill = getPositionAutofill(tRef.current);
     const items: MaterialItem[] = apiMaterials.map((m) => {
       const position = (m.position as string) ?? "";
       const price = (m.price as Record<string, unknown>) ?? {};
       const description = autofill[position]?.description ?? (m.description as string) ?? "";
-      return mapPrice(m, position, description, price, discountBaseRef.current);
+      return mapPrice(m, position, description, price);
     });
     shouldMarkValidatedRef.current = false;
 
-    // If every material already has an ID it was previously validated — prices exist in DB.
-    // Mark rows as validated so prices are visible, but always keep arePricesValidated=false
-    // on page load so the user must explicitly click Validate before proceeding.
     const allHaveIds = items.every((item) => !!item.materialId);
     if (allHaveIds) {
       items.forEach((item) => {
         item.isValidated = true;
       });
-      // Set isResyncingRef so useSparePartPriceCalculation skips recalculation during
-      // Formik reinitialization, preventing onUserEdit from zeroing out prices or
-      // calling markRowDirty which would flip arePricesValidated back to false.
-      if (isResyncingRef) {
+    if (isResyncingRef) {
         isResyncingRef.current = true;
       }
     }
@@ -485,7 +913,7 @@ export const useDiagnosticsManager = ({
       const position = (m.position as string) ?? "";
       const price = (m.price as Record<string, unknown>) ?? {};
       const description = (m.description as string) ?? "";
-      return mapPrice(m, position, description, price, discountBaseRef.current);
+      return mapPrice(m, position, description, price);
     });
 
     archivedForceRebuildRef.current = true;
@@ -534,7 +962,6 @@ export const useDiagnosticsManager = ({
           currentJobType,
           qty,
           tRef.current,
-          discountBaseRef.current,
         );
         if (pos === "PN") {
           prAutofillAppliedRef.current = false;
@@ -698,7 +1125,7 @@ export const useDiagnosticsManager = ({
     }
 
     if (forceRebuildRef.current) {
-      setInitialFormValues?.((prev) => ({ ...prev, ...rowValues }));
+      setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
     } else {
       const currentFormWithoutRowFields = Object.fromEntries(
         Object.entries(formValuesRef.current).filter(
@@ -709,7 +1136,7 @@ export const useDiagnosticsManager = ({
             v !== undefined,
         ),
       );
-      setInitialFormValues?.((prev) => ({ ...prev, ...currentFormWithoutRowFields, ...rowValues }));
+      setInitialFormValues((prev) => ({ ...prev, ...currentFormWithoutRowFields, ...rowValues }));
     }
     forceRebuildRef.current = false;
   }, [materials, setAllFields, setTabs, setInitialFormValues, formValuesRef, skipFormResetRef]);
@@ -797,7 +1224,7 @@ export const useDiagnosticsManager = ({
       }
     }
 
-    setInitialFormValues?.((prev) => ({ ...prev, ...rowValues }));
+    setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
     archivedForceRebuildRef.current = false;
   }, [
     archivedMaterials,
@@ -897,7 +1324,7 @@ export const useDiagnosticsManager = ({
     // Bug 6 fix: use tax from existing validated rows as default for new rows
     const defaultTax = materialsRef.current.find((m) => m.tax > 0)?.tax ?? 0;
     const newItem = {
-      ...buildEmptyMaterial(nextPosition, "", qty, tRef.current, discountBaseRef.current),
+      ...buildEmptyMaterial(nextPosition, "", qty, tRef.current),
       tax: defaultTax,
     };
 
@@ -909,59 +1336,87 @@ export const useDiagnosticsManager = ({
 
   const onDeleteRow = useCallback(
     (areaName: string) => {
-      const diagnosticTab = tabsRef.current.find((t) => t.name === "diagnosticData");
+      const currentTabs = tabsRef.current;
+      const currentFields = allFieldsRef.current ?? [];
+
+      const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
       if (!diagnosticTab) return;
 
+      // ── Delete of an active spare-parts row ──────────────────────────────
       const sparePartsAreas = diagnosticTab.areas.filter(
         (a) => a.isMultiple && a.name.includes("diagnosticsSpareParts"),
       );
       const areaIndex = sparePartsAreas.findIndex((a) => a.name === areaName);
       if (areaIndex === -1) return;
 
-      // Sync every row's latest form edits into `materials` before removing one, so
-      // Effect 3's forced full recomputation below has accurate values for every
-      // surviving row — not just the ones whose position happens to stay unchanged.
-      const syncedMaterials = syncMaterialsWithForm(materialsRef.current, formValuesRef.current);
-
       // Archive the row when the current status is not in the permanent-delete set
-      const deletedMaterial = syncedMaterials[areaIndex];
-      if (deletedMaterial && !isPermanentDeleteStatus(itemPolicyRef.current, jobStatusRef.current)) {
-        archivedForceRebuildRef.current = true;
-        pendingArchivedDeletionsRef.current += 1;
-        setArchivedMaterials((prev) => [...prev, deletedMaterial]);
+      if (!STATUSES_WITH_PERMANENT_DELETE.includes(jobStatusRef.current)) {
+        const syncedMaterials = syncMaterialsWithForm(materialsRef.current, formValuesRef.current);
+        const deletedMaterial = syncedMaterials[areaIndex];
+        if (deletedMaterial) {
+          archivedForceRebuildRef.current = true;
+          pendingArchivedDeletionsRef.current += 1;
+          setArchivedMaterials((prev) => [...prev, deletedMaterial]);
+        }
       }
 
-      const remainingMaterials = syncedMaterials.filter((_, i) => i !== areaIndex);
+      const areaToRemove = sparePartsAreas[areaIndex];
+      const fieldNamesToRemove = new Set(areaToRemove.fields.map((f) => f.name));
 
-      // Effect 3 owns deriving areas/allFields/initialFormValues from `materials` for any
-      // nonzero row count — but it always bails out immediately when `materials.length ===
-      // 0` (that guard also protects the still-empty template area on initial mount, before
-      // Effect 2 has populated any row, so it can't be loosened just for this case). Deleting
-      // the very last row is the one transition Effect 3 can never react to on its own —
-      // handle it directly here, a plain wholesale clear since nothing survives to reindex.
-      if (remainingMaterials.length === 0) {
-        const fieldNamesToRemove = new Set(
-          sparePartsAreas.flatMap((a) => a.fields.map((f) => f.name)),
-        );
-        const removeAreaNames = new Set(sparePartsAreas.map((a) => a.name));
-        skipFormResetRef.current = true;
-        setAllFields((prev) => (prev ?? []).filter((f) => !fieldNamesToRemove.has(f.name)));
-        setTabs((prev) => prev.map((tab) => removeDiagnosticsAreas(tab, removeAreaNames)));
-        setInitialFormValues?.((prev) => {
-          const next = { ...prev };
-          fieldNamesToRemove.forEach((name) => delete next[name]);
-          return next;
+      // Remove deleted row keys then compact #N → #(N-1) for all higher indices.
+      // This keeps form values, allFields names and area names in sync after deletion.
+      const valuesWithoutDeleted = { ...formValuesRef.current };
+      fieldNamesToRemove.forEach((name) => {
+        delete valuesWithoutDeleted[name];
+      });
+      const compactedValues = reindexSparePartsValues(valuesWithoutDeleted, areaIndex);
+      const compactedFields = currentFields
+        .filter((f) => !fieldNamesToRemove.has(f.name))
+        .map((f) => {
+          const shifted = shiftSparePartsKey(f.name, areaIndex);
+          if (shifted === null || shifted === f.name) return f;
+          return mapFieldToFieldMapping({ ...f, name: shifted });
         });
-      } else {
-        // Row identities are shifting by one — Effect 3's normal "reuse existing values
-        // when position matches" heuristic isn't safe to rely on here, so force it to
-        // rebuild every row fresh from `materials` instead.
-        forceRebuildRef.current = true;
-      }
-      setMaterials(normalizeMaterialOrders(remainingMaterials));
+
+      const compactedTabs = currentTabs.map((tab) => {
+        if (tab.name !== "diagnosticData") return tab;
+        const compactedAreas = tab.areas.flatMap((area) => {
+          if (area.name === areaName) return [];
+          const shiftedAreaName = shiftSparePartsKey(area.name, areaIndex);
+          if (shiftedAreaName === null) return [];
+          return [shiftSparePartsArea(area, areaIndex)];
+        });
+        return { ...tab, areas: compactedAreas };
+      });
+
+      skipFormResetRef.current = true;
+      Object.keys(formValuesRef.current).forEach((key) => {
+        const shifted = shiftSparePartsKey(key, areaIndex);
+        if (shifted === null) {
+          delete formValuesRef.current[key];
+        } else if (shifted !== key) {
+          formValuesRef.current[shifted] = formValuesRef.current[key];
+          delete formValuesRef.current[key];
+        }
+      });
+      setInitialFormValues(compactedValues);
+      setAllFields(compactedFields);
+      setTabs(compactedTabs);
+      setMaterials((prev) => {
+        const updatedMaterials = prev.filter((_, i) => i !== areaIndex);
+        const syncedMaterials = syncMaterialsWithForm(updatedMaterials, compactedValues);
+        return normalizeMaterialOrders(syncedMaterials);
+      });
       setArePricesValidated(false);
     },
-    [setAllFields, setTabs, setInitialFormValues, formValuesRef, skipFormResetRef, setArePricesValidated],
+    [
+      setInitialFormValues,
+      setAllFields,
+      setTabs,
+      formValuesRef,
+      skipFormResetRef,
+      setArePricesValidated,
+    ],
   );
 
   const onAddMaterials = useCallback(
@@ -991,7 +1446,7 @@ export const useDiagnosticsManager = ({
             totalAmount: 0,
             origin: m.origin,
           };
-          return computePricesForItem(base, discountBaseRef.current);
+          return base;
         });
 
       if (toAdd.length === 0) return;
@@ -1172,6 +1627,6 @@ export const useDiagnosticsManager = ({
     enableValidate,
     resyncMaterialsFromAPI,
     setRevisedRejectedRowPending,
-    canArchiveOnDelete: !isPermanentDeleteStatus(itemPolicyRef.current, jobStatus),
+    canArchiveOnDelete: !STATUSES_WITH_PERMANENT_DELETE.includes(jobStatus),
   };
 };

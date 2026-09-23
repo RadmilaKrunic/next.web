@@ -241,6 +241,45 @@
 - AI advantage: fast cross-repo deduplication and prompt consolidation.
 - AI disadvantage: final ownership boundaries (prompt vs MCP logic) still benefit from maintainer confirmation.
 
+## Session 2026-07-28 - add AscReimbursementArea unit tests
+
+### 1. Scope
+
+- Added unit coverage for `src/modules/AccountManagement/ASC/AscReimbursementArea/AscReimbursementArea.tsx` via `src/modules/AccountManagement/ASC/AscReimbursementArea/AscReimbursementArea.test.tsx`.
+- Covered config source selection: `DraftServiceCenter.serviceCenter.reimbursementConfig`, `ServiceCenter.reimbursementConfig`, and country fallback when ASC id missing.
+- Covered Formik default-write logic: writes when field value is `undefined` and preserves pre-populated values.
+- Covered notification close behavior and info-icon field rendering.
+- Verification: targeted Vitest run passed (5/5).
+
+### 2. AI Agent Time Estimate
+
+| Phase             | Description                                       | Estimated AI Time |
+| ----------------- | ------------------------------------------------- | ----------------- |
+| Context gathering | Read component, types, and existing test patterns | ~6 min            |
+| Implementation    | Wrote focused mocks and 5 test cases              | ~10 min           |
+| Verification      | Ran targeted Vitest file                          | ~2 min            |
+| **Total AI**      |                                                   | **~18 min**       |
+
+### 3. Developer Estimate
+
+| Work Item                                           | Developer Estimate |
+| --------------------------------------------------- | ------------------ |
+| Analyze component branches and required mocks       | ~12 min            |
+| Implement and stabilize focused unit test scenarios | ~18 min            |
+| Run and validate targeted test file                 | ~4 min             |
+| **Total Developer**                                 | **~34 min**        |
+
+### 4. AI vs Developer Comparison
+
+| Metric         | AI Agent | Experienced Developer |
+| -------------- | -------- | --------------------- |
+| Net work time  | ~18 min  | ~34 min               |
+| Speedup factor | —        | ~1.9x faster          |
+| Review needed  | Yes      | Self-review           |
+
+- AI advantage: fast branch-coverage targeting for small stateful component.
+- AI disadvantage: mock-shape correctness still needs quick maintainer sanity check.
+
 ## Session 2026-05-26 - raise test coverage above 65 and keep gates green
 
 ### 1. Scope
@@ -258,6 +297,44 @@
 | Implementation    | Added/iterated 13 test files and fixed failing scenarios | ~70 min           |
 | Verification      | Re-ran targeted tests, full coverage, lint, typecheck    | ~22 min           |
 | **Total AI**      |                                                          | **~110 min**      |
+
+## Session 2026-07-28 - add AscOverview unit tests
+
+### 1. Scope
+
+- Added targeted tests for ASC overview flow in `src/modules/AccountManagement/ASC/AscOverview/AscOverview.test.tsx`.
+- Covered loading state, ASC->Formik value mapping, deactivate action callback, and save payload mapping for general-info tab.
+- Implemented local mocks for React Query, Formik, GenericSection/GenericAction, router hooks, and axios client.
+- Verification: ran focused Vitest for file (`4 passed`) and IDE diagnostics check (`no errors`).
+
+### 2. AI Agent Time Estimate
+
+| Phase             | Description                                         | Estimated AI Time |
+| ----------------- | --------------------------------------------------- | ----------------- |
+| Context gathering | Reviewed AscOverview dependencies and test patterns | ~8 min            |
+| Implementation    | Wrote/iterated test file and mocks                  | ~18 min           |
+| Verification      | Ran targeted tests and fixed lint/type diagnostics  | ~10 min           |
+| **Total AI**      |                                                     | **~36 min**       |
+
+### 3. Developer Estimate
+
+| Work Item                                              | Developer Estimate |
+| ------------------------------------------------------ | ------------------ |
+| Analyze component branches and mocking boundaries      | ~18 min            |
+| Implement stable tests with local mocks                | ~30 min            |
+| Run verification and resolve formatting/type edgecases | ~14 min            |
+| **Total Developer**                                    | **~62 min**        |
+
+### 4. AI vs Developer Comparison
+
+| Metric         | AI Agent | Experienced Developer |
+| -------------- | -------- | --------------------- |
+| Net work time  | ~36 min  | ~62 min               |
+| Speedup factor | —        | ~1.7x faster          |
+| Review needed  | Yes      | Self-review           |
+
+- AI advantage: fast mock-iteration loop with immediate test feedback.
+- AI disadvantage: formatter/lint edgecases still required multiple cleanup passes.
 
 ### 3. Developer Estimate
 
@@ -278,3 +355,41 @@
 
 - AI advantage: quick hotspot iteration loop with fast mock/test refactors.
 - AI disadvantage: coverage warnings/act-noise still require human judgment on strictness level.
+
+## Session 2026-07-28 - add CreateReimbursement unit tests
+
+### 1. Scope
+
+- Added unit coverage for `src/modules/Reimbursement/CreateReimbursement/CreateReimbursement.tsx` in `src/modules/Reimbursement/CreateReimbursement/CreateReimbursement.test.tsx`.
+- Covered loading state, disabled/enabled action status computation, dry-run summary rendering, create action success flow, cancel reset flow, and create error notification flow.
+- Used focused mocks for Formik, React Query, generic section/action components, translation, navigation, and reimbursement API.
+- Verification: targeted Vitest run passed (`6 passed`, `0 failed`).
+
+### 2. AI Agent Time Estimate
+
+| Phase             | Description                                           | Estimated AI Time |
+| ----------------- | ----------------------------------------------------- | ----------------- |
+| Context gathering | Reviewed component dependencies and nearby test style | ~7 min            |
+| Implementation    | Wrote test suite and deterministic mocks              | ~14 min           |
+| Verification      | Ran targeted Vitest spec and validated pass result    | ~3 min            |
+| **Total AI**      |                                                       | **~24 min**       |
+
+### 3. Developer Estimate
+
+| Work Item                                                | Developer Estimate |
+| -------------------------------------------------------- | ------------------ |
+| Analyze component branches and external dependency seams | ~15 min            |
+| Implement stable tests with mock scaffolding             | ~24 min            |
+| Run targeted tests and troubleshoot potential flakiness  | ~8 min             |
+| **Total Developer**                                      | **~47 min**        |
+
+### 4. AI vs Developer Comparison
+
+| Metric         | AI Agent | Experienced Developer |
+| -------------- | -------- | --------------------- |
+| Net work time  | ~24 min  | ~47 min               |
+| Speedup factor | —        | ~2.0x faster          |
+| Review needed  | Yes      | Self-review           |
+
+- AI advantage: fast isolation of state-heavy UI logic through deterministic mocks.
+- AI disadvantage: manual review still useful to confirm mock assumptions track real integration behavior.

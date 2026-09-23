@@ -115,17 +115,31 @@ function AscList() {
               />
             }
           >
-            <button
-              type="button"
-              className="asc-action-button"
-              data-testid={`asc-action-edit-${asc.ascId}`}
-              onClick={() => {
-                navigate(`/asc-overview/${asc.ascId}`);
-              }}
-            >
-              <Icon iconName="edit" aria-hidden="true" />
-              <span>{t("editASC")}</span>
-            </button>
+            {asc.isDraft ? (
+              <button
+                type="button"
+                className="asc-action-button"
+                data-testid={`asc-action-edit-${asc.ascId}`}
+                onClick={() => {
+                  navigate(`/edit-asc/${asc.ascId}`);
+                }}
+              >
+                <Icon iconName="edit" aria-hidden="true" />
+                <span>{t("editASC")}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="asc-action-button"
+                data-testid={`asc-action-view-${asc.ascId}`}
+                onClick={() => {
+                  navigate(`/asc-overview/${asc.ascId}`);
+                }}
+              >
+                <Icon iconName="watch-on" aria-hidden="true" />
+                <span>{t("viewASC")}</span>
+              </button>
+            )}
           </ScrollablePopover>
         )}
         emptyListMessage="noAscProfilesFound"

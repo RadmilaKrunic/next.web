@@ -578,6 +578,7 @@
     "requestNr": "رقم الطلب (لإشارة نموذج RO)",
     "jobInfo": "معلومات الوظيفة",
     "phone": "هاتف",
+    "phoneMobileNumber": "رقم الهاتف / رقم الهاتف المحمول",
     "model": "طراز",
     "partBaretoolNumber": "رقم الجزء/الأداة العارية",
     "technicianNotes": "ملاحظات الفني",
@@ -608,6 +609,9 @@
     "reimbursementPeriod": "فترة السداد",
     "creditNoteOrderId": "رقم طلب إشعار الائتمان",
     "totalAmountToBeCredited": "المبلغ الذي سيتم اعتماده",
+    "totalAmountAfterTax": "المبلغ الإجمالي بعد الضريبة",
+    "reimbursementDisclaimer": "هذا المبلغ إرشادي وقابل للتغيير. سيتم إرسال المبلغ النهائي للتعويض إلى عنوان بريدك الإلكتروني الرسمي.",
+    "reimbursementAmount": "مبلغ التعويض",
     "monetarySettlement": "التسوية النقدية",
     "materialReimbursementCompleted": "اكتملت استرداد المواد",
     "boschStockReplacement": "استبدال مخزون بوش",
@@ -674,9 +678,8 @@
     "trOrderReceiptClause7": "ستتم مشاركة المعلومات المدرجة في الفاتورة واستخدامها أيضًا من قبل بوش.",
     "trOrderReceiptClause8": "أنت تتلقى هذا البريد الإلكتروني / الرسالة القصيرة لأنك مشترك مسجل في خدمة أدوات الطاقة من بوش.",
     "trOrderReceiptClause9": "من خلال توقيع هذا المستند، يُعتبر المستخدم قد قبل الشروط والأحكام المذكورة أعلاه.",
-    "trOrderReceiptClause10": "إذا لم يتمكن من إصلاح العطل في المنتج المشمول بالضمان خلال عشرة أيام عمل، سيتم تزويد المستهلك بمنتج مماثل حتى يتم الانتهاء من إصلاح الأداة الأصلية.",
+    "trOrderReceiptClause10": "إذا لم يكن من الممكن إصلاح عطل في منتج مشمول بالضمان خلال 30 يوم عمل، فسيتم توفير منتج مشابه للمستهلك حتى يتم الانتهاء من إصلاح الأداة الأصلية.",
     "trCostEstimateTitle": "ملاحظات مهمة",
-    "trCostEstimateTcLabel": "الشروط والأحكام لمقدمي خدمات ما بعد البيع",
     "trCostEstimateDisclaimerLabel": "إخلاء مسؤولية",
     "trCostEstimateDisclaimerPara1": "تعتبر أسعار المعلومات الضريبية الواردة في هذا الاقتباس لأغراض مرجعية فقط. ستكون المبالغ النهائية، بما في ذلك الضرائب القابلة للتطبيق، بناءً على الفاتورة الفعلية الصادرة عند إجراء التسوية.",
     "trCostEstimateDisclaimerPara2": "التقديرات المقدمة هي مجرد تقديرات. إذا، بعد فحص المنتج وعملية الإصلاح، تم تحديد أن هناك تكاليف إضافية مطلوبة، سيتم إبلاغ العميل وسيتم الحصول على موافقته.",
@@ -1162,6 +1165,11 @@
     "errorDiagnosticProServiceItemsNotEligibleForValidation": "تاريخ الشراء مطلوب لتحديد أهلية خدمة PRO. يرجى تقديم تاريخ الشراء للمتابعة.",
     "errorDiagnosticCannotDeleteApprovedChargeableItem": "حذف عنصر قابل للاحتساب تم الموافقة عليه غير مسموح به",
     "errorErpValidationMisingPricePartNumbers": "السعر غير متوفر",
-    "sparePartNumberNotFound": "رقم الجزء '{{id}}' غير موجود."
+    "sparePartNumberNotFound": "رقم الجزء '{{id}}' غير موجود.",
+    "previousMonth": "الشهر السابق",
+    "nextMonth": "الشهر المقبل",
+    "TOOL": "أداة",
+    "SPARE_PART": "قطعة غيار",
+    "ACCESSORY": "ملحق"
   }
 }

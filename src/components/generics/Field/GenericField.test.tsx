@@ -437,7 +437,6 @@ describe("GenericField", () => {
     autocompleteValidation: undefined as { current: Record<string, boolean> } | undefined,
     sparePartNotBelongsToTool: undefined as { current: Record<string, boolean> } | undefined,
     radioSourceCallbacks: undefined as Record<string, RadioSourceCallback> | undefined,
-    activeValueChangeFieldRef: undefined as { current: string | null } | undefined,
     warrantyPanelInfo: undefined as
       | { isIneligible?: boolean; hasPurchaseDate?: boolean; supportedWarrantyType: string }
       | undefined,
@@ -645,35 +644,6 @@ describe("GenericField", () => {
 
       await waitFor(() => expect(input).toHaveValue("0.00"));
     });
-
-    it("locks the active value-change field on focus and releases it on blur for guarded fields", async () => {
-      vi.useFakeTimers();
-      const field: Field = {
-        name: "onSummaryTotalAmountChange",
-        label: "Total",
-        type: "price",
-        subtype: "amount",
-        isRequired: false,
-        onValueChange: "onSummaryTotalAmountChange",
-        fieldMapping: { originalName: "onSummaryTotalAmountChange" },
-      };
-      const activeValueChangeFieldRef = { current: null as string | null };
-
-      renderWithContext(field, { activeValueChangeFieldRef }, { onSummaryTotalAmountChange: 5 });
-
-      const input = screen.getByTestId("text-field-onSummaryTotalAmountChange");
-      fireEvent.focus(input);
-      expect(activeValueChangeFieldRef.current).toBe("onSummaryTotalAmountChange");
-
-      fireEvent.blur(input);
-      act(() => {
-        vi.runAllTimers();
-      });
-      expect(activeValueChangeFieldRef.current).toBeNull();
-
-      vi.useRealTimers();
-    });
-  });
 
   describe("Email and Tel Fields", () => {
     it("renders email field", () => {

@@ -7,7 +7,7 @@ export function useListFilterHandlers(
   setQuickFilters: Dispatch<SetStateAction<QuickFilter[]>>,
   setAdvancedFilters: Dispatch<SetStateAction<Filter[]>>,
   setPagination: Dispatch<SetStateAction<{ page: number; pageSize: number }>>,
-  type?: "job" | "claim" | "approval" | "reimbursement",
+  type?: "job" | "claim" | "approval" | "reimbursement" | "client",
 ) {
   const handleToggleFilter = (key: string) => {
     setQuickFilters((prev) => {

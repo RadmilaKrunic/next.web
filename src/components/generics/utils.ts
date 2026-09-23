@@ -60,11 +60,7 @@ export const mapAreaDependentFields = (area: Area): Field[] => {
   if (area.isSubArea) {
     area.fields = area.fields.map((field) => {
       field.isSubField = area.isSubArea;
-      const existing = field.dependentFields ?? [];
-      const added = (area.dependentFields ?? []).filter(
-        (item) => !existing.some((dp) => dp.fieldName === item.fieldName),
-      );
-      field.dependentFields = [...existing, ...added];
+      field.dependentFields = [...(field.dependentFields || []), ...(area.dependentFields || [])];
       field.dependFieldCondition = area.dependFieldCondition;
       return field;
     });
@@ -267,13 +263,11 @@ export const setInitalSectionsAreasFields = (form: GenericForm): Section[] => {
   );
   const allAreas = form.sections.flatMap((section) => section.areas);
   return form.sections.map((section) => {
-    section.mapping = { originalName: section.name };
     if (section.isMultiple && section.index === undefined) {
       section.index = 0;
       section.name = `${section.name}#0`;
     }
     section.areas = section.areas.map((area) => {
-      area.mapping = { originalName: area.name };
       if ((section.isMultiple || area.isMultiple) && !area.name.includes(`${section.name}_`)) {
         area.name = `${section.name}_${area.name}`;
       }
@@ -355,6 +349,7 @@ export const mapFieldToFieldMapping = (field: Field): Field => {
     map,
     nameStartsWith,
   };
+
   return field;
 };
 
@@ -491,7 +486,6 @@ const processParentPath = (
 
   const isArray = parent.endsWith("#");
   const key = isArray ? parent.slice(0, -1) : parent;
-
   if (isArray) {
     const prefix = prefixes[prefixIndex];
     const nextCurrent = navigateArrayPath(current, key, fieldName, prefix);
@@ -734,8 +728,7 @@ export const updatePositionDropdownOptionsWithLimits = (
 };
 
 export const getAreasByName = (sections: Section[], areaName: string): Area[] => {
-  const areas = sections.flatMap((s) => s.areas);
-  return areas.filter((a) => a.name.includes(areaName));
+  return sections.flatMap((s) => s.areas.filter((a) => a.name === areaName));
 };
 
 export const getAreasBySectionName = (sections: Section[], sectionName: string): Area[] => {
@@ -752,7 +745,7 @@ export const getFieldsBySectionName = (sections: Section[], sectionName: string)
 export const getFieldsByAreaName = (sections: Section[], areaName: string): Field[] => {
   return sections
     .flatMap((s) => s.areas)
-    .filter((a) => a.name.includes(areaName))
+    .filter((a) => a.name === areaName)
     .flatMap((a) => a.fields);
 };
 export const getFieldsBySectionAndAreaName = (
@@ -761,8 +754,8 @@ export const getFieldsBySectionAndAreaName = (
   areaName: string,
 ): Field[] => {
   return sections
-    .filter((s) => s.name.includes(sectionName))
+    .filter((s) => s.name === sectionName)
     .flatMap((s) => s.areas)
-    .filter((a) => a.name.includes(areaName))
+    .filter((a) => a.name === areaName)
     .flatMap((a) => a.fields);
 };

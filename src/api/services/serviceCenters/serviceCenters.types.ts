@@ -41,6 +41,7 @@ export interface ServiceCenter {
     countryCode: string;
   };
   defaultCountry: string;
+  preferredSelectedCountry: string;
   bankAccount: {
     accountId: number;
     accountNumber: string;
@@ -96,6 +97,7 @@ export interface DraftServiceCenter {
       countryCode: string;
     };
     defaultCountry: string | null;
+    preferredSelectedCountry: string | null;
     zone: string | null;
     createdOn: string;
     logo: {

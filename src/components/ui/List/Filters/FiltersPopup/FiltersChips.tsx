@@ -15,7 +15,7 @@ const DATE_FORMAT = "dd.MM.yyyy";
 interface FiltersChipsProps {
   filters?: Section;
   locale?: Locale;
-  type?: "job" | "claim" | "approval" | "employee" | "asc";
+  type?: "job" | "claim" | "approval" | "employee" | "asc" | "client";
 }
 
 type FieldOptionMap = Record<string, Record<string, string>>;

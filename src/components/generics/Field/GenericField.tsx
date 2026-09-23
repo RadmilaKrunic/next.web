@@ -39,12 +39,7 @@ import { BareToolOption } from "api/services/orders/orders.types";
 import FieldError from "./components/FieldError";
 import { INELIGIBLE_JOB_TYPES } from "modules/JobManagement/warranty.utils";
 
-const LOCKED_VALUE_CHANGE_FIELDS_WHILE_EDITING = new Set([
-  "onSummaryTotalAmountChange",
-  "onSummaryNetAmountChange",
-  "onSummaryDiscountChange",
-  "onSummaryDiscountNetChange",
-]);
+const LOCKED_VALUE_CHANGE_FIELDS_WHILE_EDITING = new Set(["onRecalculatePrices"]);
 
 type GenericFieldProps = {
   field: Field;
@@ -66,14 +61,13 @@ interface FieldRenderCtx {
   formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>;
   t: TFunction<"translation", "app">;
   handleChange: (name: string, newValue: FieldValueType) => Promise<void>;
+  handleBlur: (name: string, newValue: FieldValueType) => Promise<void>;
   isPriceFocused: boolean;
   setIsPriceFocused: (v: boolean) => void;
   isPriceFocusedZero: boolean;
   setIsPriceFocusedZero: (v: boolean) => void;
   isPercentageField: boolean;
   isAmountField: boolean;
-  shouldLockValueChangeFieldWhileEditing: boolean;
-  activeValueChangeFieldRef?: RefObject<string | null>;
   onDeleteStart?: () => void;
   onDeleteEnd?: () => void;
   autocompleteValidation?: RefObject<Record<string, boolean>>;
@@ -87,9 +81,7 @@ interface FieldRenderCtx {
   };
   allowedPositions?: AllowedPosition[];
 }
-
-async function handleFieldChangeAsync(
-  name: string,
+const fieldValueChanged = async ( name: string,
   newValue: FieldValueType,
   setFieldValue: (
     field: string,
@@ -98,8 +90,7 @@ async function handleFieldChangeAsync(
   allFields: Field[],
   field: Field,
   formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>,
-  actionCallbacks: Record<string, (...args: unknown[]) => unknown>,
-): Promise<void> {
+) => {
   await setFieldValue(name, newValue);
 
   const sameDataField = allFields.find((f) => f.name === name);
@@ -128,11 +119,31 @@ async function handleFieldChangeAsync(
       }
     }
   }
+};
 
+const handleFieldChangeAsync = async (
+  name: string,
+  newValue: FieldValueType,
+  setFieldValue: (
+    field: string,
+    value: unknown,
+  ) => Promise<void | FormikErrors<Record<string, unknown>>>,
+  allFields: Field[],
+  field: Field,
+  formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>,
+  actionCallbacks: Record<string, (...args: unknown[]) => unknown>,
+): Promise<void> => {
+  await fieldValueChanged(name, newValue, setFieldValue, allFields, field, formikContext);
   if (field.onValueChange) {
     const handler = actionCallbacks[field.onValueChange];
     if (typeof handler === "function") {
-      const result = handler(newValue);
+      let result;
+      if (handler.length > 1) {
+        result = handler(name, newValue);
+      } else {
+        result = handler(newValue);
+      }
+
       if (result instanceof Promise) {
         result.catch((error: unknown) => {
           console.error(`onValueChange ${field.onValueChange} failed:`, error);
@@ -140,7 +151,33 @@ async function handleFieldChangeAsync(
       }
     }
   }
-}
+};
+const handleFieldBlurAsync = async (
+  name: string,
+  newValue: FieldValueType,
+  setFieldValue: (
+    field: string,
+    value: unknown,
+  ) => Promise<void | FormikErrors<Record<string, unknown>>>,
+  allFields: Field[],
+  field: Field,
+  formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>,
+  actionCallbacks: Record<string, (...args: unknown[]) => unknown>,
+): Promise<void> => {
+  await fieldValueChanged(name, newValue, setFieldValue, allFields, field, formikContext);
+  if (field.onBlur) {
+    const handler = actionCallbacks[field.onBlur];
+    if (typeof handler === "function") {
+      const result = handler(name, newValue);
+      console.log(`onBlur ${field.onBlur} result:`, result);
+      if (result instanceof Promise) {
+        result.catch((error: unknown) => {
+          console.error(`onBlur ${field.onBlur} failed:`, error);
+        });
+      }
+    }
+  }
+};
 
 function resolvePriceFieldText(
   rawValue: FieldValueType | null | undefined,
@@ -171,14 +208,13 @@ function renderTextPriceField(ctx: FieldRenderCtx): ReactElement {
     formikContext,
     t,
     handleChange,
+    handleBlur,
     isPriceFocused,
     setIsPriceFocused,
     isPriceFocusedZero,
     setIsPriceFocusedZero,
     isPercentageField,
     isAmountField,
-    shouldLockValueChangeFieldWhileEditing,
-    activeValueChangeFieldRef,
     isInfoIcon,
     infoText,
   } = ctx;
@@ -219,7 +255,7 @@ function renderTextPriceField(ctx: FieldRenderCtx): ReactElement {
           );
           if (shouldReturn) return;
           if (isPriceFocusedZero) setIsPriceFocusedZero(false);
-          void handleChange(name, e.target.value);
+          handleChange(name, e.target.value);
         }}
         value={fieldTextValue}
         disabled={effectiveIsDisabled}
@@ -227,9 +263,6 @@ function renderTextPriceField(ctx: FieldRenderCtx): ReactElement {
           if (type === "price" && !effectiveIsDisabled) {
             setIsPriceFocused(true);
             if (Number(values[name]) === 0) setIsPriceFocusedZero(true);
-          }
-          if (shouldLockValueChangeFieldWhileEditing && activeValueChangeFieldRef) {
-            activeValueChangeFieldRef.current = name;
           }
         }}
         onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
@@ -239,16 +272,9 @@ function renderTextPriceField(ctx: FieldRenderCtx): ReactElement {
             const currentVal = values[name];
             if (currentVal === "" || currentVal == null) void setFieldValue(name, 0);
           }
+          //remove this also
           onBlurActions(field, e, formikContext, t);
-          if (
-            shouldLockValueChangeFieldWhileEditing &&
-            activeValueChangeFieldRef?.current === name
-          ) {
-            setTimeout(() => {
-              if (activeValueChangeFieldRef?.current === name)
-                activeValueChangeFieldRef.current = null;
-            }, 0);
-          }
+          handleBlur(field?.name, e.target.value);
         }}
       />
       {isInfoIcon && <InfoIconWithTooltip name={name} infoText={infoText || ""} />}
@@ -309,7 +335,7 @@ function renderRadiogroupField(ctx: FieldRenderCtx): ReactElement {
       defaultValue={defaultValue ?? undefined}
       disabled={effectiveIsDisabled}
       onChange={(value: FieldValueType) => {
-        void handleChange(name, value);
+        handleChange(name, value);
       }}
     />
   );
@@ -341,7 +367,7 @@ function renderCheckboxField(ctx: FieldRenderCtx): ReactElement {
         checked={(values[name] as boolean) || false}
         disabled={effectiveIsDisabled}
         onChange={(e) => {
-          void handleChange(name, e.target.checked);
+          handleChange(name, e.target.checked);
         }}
       />
     </span>
@@ -411,7 +437,7 @@ function renderDropdownField(ctx: FieldRenderCtx): ReactElement {
         onChange={(value) => {
           if (typeof value === "string")
             updateDependentFields(field, formikContext, allFields, t, value);
-          void handleChange(name, value);
+          handleChange(name, value);
         }}
         onRawOptionSelect={
           subtype === "diagnosticFaultCode"
@@ -482,7 +508,7 @@ function renderUploadField(ctx: FieldRenderCtx): ReactElement {
 }
 
 function renderTextareaField(ctx: FieldRenderCtx): ReactElement {
-  const { field, fullWidth, className, restProps, effectiveIsDisabled, values, t, handleChange } =
+  const { field, fullWidth, className, restProps, effectiveIsDisabled, values, t, handleChange, handleBlur } =
     ctx;
   const { name, label } = field;
   return (
@@ -493,7 +519,10 @@ function renderTextareaField(ctx: FieldRenderCtx): ReactElement {
         name={name}
         disabled={effectiveIsDisabled}
         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-          void handleChange(name, e.target.value);
+          handleChange(name, e.target.value);
+        }}
+        onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
+          handleBlur(name, e.target.value);
         }}
         value={(values[name] as string) || ""}
         placeholder=""
@@ -726,7 +755,6 @@ function GenericField({ field, className, ...restProps }: Readonly<GenericFieldP
     sparePartNotBelongsToTool,
     radioSourceCallbacks,
     actionCallbacks,
-    activeValueChangeFieldRef,
     warrantyPanelInfo,
   } = useContext(GenericFormContext);
   const { allowedPositions, jobStatus } = useDiagnosticsContext();
@@ -753,8 +781,6 @@ function GenericField({ field, className, ...restProps }: Readonly<GenericFieldP
 
   const fullWidth = size === "3" ? "full-width" : "";
   const values = formValues;
-  const shouldLockValueChangeFieldWhileEditing =
-    !!field.onValueChange && LOCKED_VALUE_CHANGE_FIELDS_WHILE_EDITING.has(field.onValueChange);
   const translatedLabel = label ? t(label) : "";
 
   let labelSuffix = "";
@@ -775,7 +801,16 @@ function GenericField({ field, className, ...restProps }: Readonly<GenericFieldP
       formikContext,
       actionCallbacks,
     );
-
+  const handleBlur = (changeName: string, newValue: FieldValueType) =>
+    handleFieldBlurAsync(
+      changeName,
+      newValue,
+      setFieldValue,
+      allFields,
+      field,
+      formikContext,
+      actionCallbacks,
+    );
   const renderer = FIELD_RENDERERS[type];
   const ctx: FieldRenderCtx = {
     field,
@@ -790,14 +825,13 @@ function GenericField({ field, className, ...restProps }: Readonly<GenericFieldP
     formikContext,
     t,
     handleChange,
+    handleBlur,
     isPriceFocused,
     setIsPriceFocused,
     isPriceFocusedZero,
     setIsPriceFocusedZero,
     isPercentageField,
     isAmountField,
-    shouldLockValueChangeFieldWhileEditing,
-    activeValueChangeFieldRef,
     onDeleteStart,
     onDeleteEnd,
     autocompleteValidation,

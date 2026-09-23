@@ -290,7 +290,7 @@ export const postToggleJobHold = async (jobId: string): Promise<void> => {
 
 export interface ValidateAndSaveResponse {
   errorMessages: Record<string, string>[];
-  diagnostic?: JobDiagnostic;
+  diagnostic?: Record<string, string>[];
   materials?: JobDiagnostic["materials"];
   archivedMaterials?: JobDiagnostic["archivedMaterials"];
   actionType?: string;
@@ -325,6 +325,18 @@ export const postValidateAndSave = async (
     return response.data;
   } catch (error) {
     console.error(`Error validating and saving job ${jobId}:`, error);
+    throw error;
+  }
+};
+
+export const postRecalculatePrices = async (
+  payload: Record<string, unknown>,
+): Promise<ValidateAndSaveResponse> => {
+  try {
+    const response = await axiosClient.post(`/v1/diagnostic/prices/recalculate`, payload);
+    return response.data;
+  } catch (error) {
+    console.error(`Error recalculate prices: `, error);
     throw error;
   }
 };

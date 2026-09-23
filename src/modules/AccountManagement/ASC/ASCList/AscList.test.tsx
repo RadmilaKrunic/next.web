@@ -98,6 +98,7 @@ const baseAsc = (
   reimbursementConfig: [],
   reimbursementCreateOn: createdOn,
   reimbursementPeriodType: "MONTH",
+  preferredSelectedCountry: "ZA",
   address: {
     street: "Street",
     houseNumber: "10",
@@ -216,9 +217,9 @@ describe("AscList", () => {
     getAllASCsMock.mockResolvedValue([baseAsc("a77", "John", "2026-01-01T00:00:00Z")]);
 
     renderAscList();
-    await screen.findByTestId("asc-action-edit-a77");
+    await screen.findByTestId("asc-action-view-a77");
 
-    fireEvent.click(screen.getByTestId("asc-action-edit-a77"));
+    fireEvent.click(screen.getByTestId("asc-action-view-a77"));
 
     expect(navigateMock).toHaveBeenCalledWith("/asc-overview/a77");
   });

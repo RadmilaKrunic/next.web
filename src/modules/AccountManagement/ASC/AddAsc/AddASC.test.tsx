@@ -94,8 +94,16 @@ const {
   formInitStateRef: {
     current: {
       sections: [
-        { name: "generalInfo", index: 0 },
-        { name: "pricing", index: 1 },
+        {
+          name: "generalInfo",
+          index: 0,
+          areas: [{ name: "generalInfo_area", fields: [{ name: "name" }, { name: "email" }] }],
+        },
+        {
+          name: "pricing",
+          index: 1,
+          areas: [{ name: "pricing_area", fields: [{ name: "laPrice" }] }],
+        },
       ],
       initialFormValues: {
         name: "",
@@ -278,8 +286,16 @@ describe("AddASC", () => {
 
     formInitStateRef.current = {
       sections: [
-        { name: "generalInfo", index: 0 },
-        { name: "pricing", index: 1 },
+        {
+          name: "generalInfo",
+          index: 0,
+          areas: [{ name: "generalInfo_area", fields: [{ name: "name" }, { name: "email" }] }],
+        },
+        {
+          name: "pricing",
+          index: 1,
+          areas: [{ name: "pricing_area", fields: [{ name: "laPrice" }] }],
+        },
       ],
       initialFormValues: {
         name: "",
@@ -463,15 +479,16 @@ describe("AddASC", () => {
   });
 
   it("blocks submit and marks fields when validation fails", async () => {
-    validateByActionMock.mockReturnValue({ name: "required" });
+    validateByActionMock.mockReturnValue({ laPrice: "required" });
 
     render(<AddASC />);
     fireEvent.click(screen.getByTestId("action-submit"));
 
     await waitFor(() => {
-      expect(setErrorsMock).toHaveBeenCalledWith({ name: "required" });
-      expect(setTouchedMock).toHaveBeenCalledWith({ name: true });
-      expect(scrollToFirstErrorMock).toHaveBeenCalledWith(["name"]);
+      expect(setErrorsMock).toHaveBeenCalledWith({ laPrice: "required" });
+      expect(setTouchedMock).toHaveBeenCalledWith({ laPrice: true });
+      expect(scrollToFirstErrorMock).toHaveBeenCalledWith(["laPrice"]);
+      expect(screen.getByTestId("section-pricing")).toHaveAttribute("data-collapsed", "false");
       expect(mutateMock).not.toHaveBeenCalled();
       expect(stopValidationMock).not.toHaveBeenCalled();
     });
@@ -506,6 +523,28 @@ describe("AddASC", () => {
       expect(setErrorsMock).toHaveBeenCalledWith({ email: "required" });
       expect(setTouchedMock).toHaveBeenCalledWith({ email: true });
       expect(scrollToFirstErrorMock).toHaveBeenCalledWith(["email"]);
+      expect(mutateMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it("normalizes empty accountRoles to null before submit validation", async () => {
+    formikValuesRef.current = {
+      ...formikValuesRef.current,
+      accountRoles: [],
+    };
+    validateByActionMock.mockImplementation((_actionName, values) => {
+      expect(values.accountRoles).toBeNull();
+      return { accountRoles: "required" };
+    });
+
+    render(<AddASC />);
+    fireEvent.click(screen.getByTestId("action-submit"));
+
+    await waitFor(() => {
+      expect(setCurrentActionMock).toHaveBeenCalledWith("submit");
+      expect(setErrorsMock).toHaveBeenCalledWith({ accountRoles: "required" });
+      expect(setTouchedMock).toHaveBeenCalledWith({ accountRoles: true });
+      expect(scrollToFirstErrorMock).toHaveBeenCalledWith(["accountRoles"]);
       expect(mutateMock).not.toHaveBeenCalled();
     });
   });

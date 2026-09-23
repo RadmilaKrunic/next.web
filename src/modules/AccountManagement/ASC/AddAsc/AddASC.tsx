@@ -1,5 +1,8 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { GenericFormContext } from "../../../../components/generics/Form/GenericForm.context";
+import {
+  GenericFormContext,
+  type GenericFormContextType,
+} from "../../../../components/generics/Form/GenericForm.context";
 import { Form, Formik, FormikErrors } from "formik";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import GenericForm from "../../../../components/generics/Form/GenericForm.types";
@@ -12,6 +15,7 @@ import Field from "../../../../components/generics/Field/GenericField.types";
 import { ActivityIndicator } from "@bosch/react-frok";
 import { scrollToFirstError, scrollToTop } from "../../../../utils/scrollToError";
 import { getVisibleFieldsWithErrors } from "../../../../components/generics/Form/formValidation";
+import { getAllFieldsFromSection } from "../../../../components/generics/utils";
 import { useBreadcrumbs } from "../../../../hooks/useBreadcrumbs";
 import { useTranslation } from "react-i18next";
 import { SetErrorsType, SetFieldValueType, SetTouchedType } from "./AddAsc.types";
@@ -94,6 +98,16 @@ function AddASC() {
       autocompleteValidationRef,
     });
 
+  const normalizeValidationValues = useCallback((values: Record<string, unknown>) => {
+    return {
+      ...values,
+      accountRoles:
+        Array.isArray(values.accountRoles) && values.accountRoles.length === 0
+          ? null
+          : values.accountRoles,
+    };
+  }, []);
+
   const allMandatoryFieldsFilled = useCallback(
     (actionName: string, values: Record<string, unknown>) => {
       const errors = validateByAction(actionName, values);
@@ -105,6 +119,29 @@ function AddASC() {
     [allFields, validateByAction],
   );
 
+  const openSectionsWithValidationErrors = useCallback(
+    (errorFieldNames: string[]) => {
+      if (!errorFieldNames.length) return;
+
+      setOpenedSections((prev) => {
+        const next = { ...prev };
+
+        for (const section of sections) {
+          const sectionFieldNames = new Set(
+            getAllFieldsFromSection(section).map((field) => field.name),
+          );
+
+          if (errorFieldNames.some((fieldName) => sectionFieldNames.has(fieldName))) {
+            next[section.name] = true;
+          }
+        }
+
+        return next;
+      });
+    },
+    [sections],
+  );
+
   const handleAction = useCallback(
     async (
       actionName: string,
@@ -114,17 +151,20 @@ function AddASC() {
         setTouched: SetTouchedType;
       },
       onSuccess?: () => void | Promise<void>,
+      keepValidationActive = false,
     ) => {
       if (!allFields) return;
 
+      const normalizedValues = normalizeValidationValues(formikProps.values);
       setCurrentAction(actionName);
       startValidation(actionName);
       const { errors, visibleErrors, listOfErrors, hasErrors } = allMandatoryFieldsFilled(
         actionName,
-        formikProps.values,
+        normalizedValues,
       );
 
       if (hasErrors) {
+        openSectionsWithValidationErrors(visibleErrors);
         formikProps.setErrors(errors);
         const touchedFields = listOfErrors.reduce(
           (acc, key) => {
@@ -138,13 +178,23 @@ function AddASC() {
         return;
       }
 
-      stopValidation();
+      if (!keepValidationActive) {
+        stopValidation();
+      }
 
       if (onSuccess) {
         await onSuccess();
       }
     },
-    [allFields, startValidation, stopValidation, setCurrentAction, allMandatoryFieldsFilled],
+    [
+      allFields,
+      startValidation,
+      stopValidation,
+      setCurrentAction,
+      allMandatoryFieldsFilled,
+      normalizeValidationValues,
+      openSectionsWithValidationErrors,
+    ],
   );
 
   const onCancelForm = useCallback(
@@ -205,6 +255,7 @@ function AddASC() {
       accessoriesIncentive: serviceCenter.accessoriesIncentive,
       packagingCost: serviceCenter.packagingCost,
       defaultCountry: serviceCenter.defaultCountry,
+      preferredSelectedCountry: serviceCenter.preferredSelectedCountry,
       accountRoles: firstUser?.accountRoles?.map((role) => role.id) || [],
       firstName: firstUser?.firstName || "",
       lastName: firstUser?.lastName || "",
@@ -275,6 +326,7 @@ function AddASC() {
       scrollToTop();
     },
     onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ["ascProfiles"] });
       if (error?.response?.data?.detail === "userCreationFailed") {
         setMessages([{ type: "warning", text: t("ascDraftCreatedWithoutUser") }]);
         navigate("/asc-profiles");
@@ -381,7 +433,8 @@ function AddASC() {
           laPrice: +formValues.laPrice!,
           frPrice: +formValues.frPrice!,
           pkPrice: +formValues.pkPrice!,
-          defaultCountry: formValues.defaultCountry,
+          defaultCountry: user?.countryCode,
+          preferredSelectedCountry: formValues.preferredSelectedCountry,
           reimbursementConfig: mapReimbursementFormValuesToApiPayload(
             formValues,
             countryConfiguration?.reimbursementConfig || [],
@@ -418,6 +471,7 @@ function AddASC() {
       mapReimbursementFormValuesToApiPayload,
       countryConfiguration?.reimbursementConfig,
       mapFirstUserToApiPayload,
+      user?.countryCode,
     ],
   );
 
@@ -494,10 +548,12 @@ function AddASC() {
             pricing: true,
             generalInfo: false,
           }));
+          setCurrentAction("next");
+          startValidation("next");
         },
       );
     },
-    [handleAction],
+    [handleAction, setCurrentAction, startValidation],
   );
 
   const onNextSectionConfiguration = useCallback(
@@ -509,18 +565,20 @@ function AddASC() {
       },
     ) => {
       void handleAction(
-        "nextSectionConfiguration",
+        "generalinfonext",
         { values: formValues, setErrors: helpers.setErrors, setTouched: helpers.setTouched },
         () => {
           setOpenedSections((prev) => ({
             ...prev,
             boschInternalConfiguration: true,
-            pricing: false,
+            generalInfo: false,
           }));
+          setCurrentAction("boschconfignext");
+          startValidation("boschconfignext");
         },
       );
     },
-    [handleAction],
+    [handleAction, setCurrentAction, startValidation],
   );
 
   const onNextSectionReimbursement = useCallback(
@@ -532,7 +590,7 @@ function AddASC() {
       },
     ) => {
       void handleAction(
-        "nextSectionReimbursement",
+        "boschconfignext",
         { values: formValues, setErrors: helpers.setErrors, setTouched: helpers.setTouched },
         () => {
           setOpenedSections((prev) => ({
@@ -540,10 +598,12 @@ function AddASC() {
             reimbursement: true,
             boschInternalConfiguration: false,
           }));
+          setCurrentAction("next");
+          startValidation("next");
         },
       );
     },
-    [handleAction],
+    [handleAction, setCurrentAction, startValidation],
   );
 
   const onNextSectionAddAdmin = useCallback(
@@ -599,7 +659,7 @@ function AddASC() {
         ) => {
           onSaveDraft(formValues, { setErrors, setTouched });
         },
-      },
+      } as GenericFormContextType["actionCallbacks"],
       autocompleteValidation: autocompleteValidationRef,
     }),
     [

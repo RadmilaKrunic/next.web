@@ -65,7 +65,7 @@ export const getAscStatusMessages = (t: (key: string) => string): Record<string,
 });
 
 export const getStatusMessages = (
-  type: "job" | "claim" | "sparePart" | "employee" | "ASC",
+  type: "job" | "claim" | "sparePart" | "employee" | "ASC" | "client",
   t: (key: string) => string,
 ): Record<string, string> => {
   if (type === "claim") {

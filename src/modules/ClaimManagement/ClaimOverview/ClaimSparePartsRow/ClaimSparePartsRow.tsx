@@ -5,11 +5,10 @@ import { useFormikContext } from "formik";
 import { useHasPermission } from "hooks/useHasPermission";
 import Field from "components/generics/Field/GenericField.types";
 import { getPositionAutofill } from "hooks/useDiagnosticsManager";
-import { WARRANTY_GATED_TYPES } from "hooks/diagnostics/diagnosticFieldHelpers";
-import {
-  resolveDiscountFieldNames,
-  useSparePartsRowCommon,
-} from "modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.shared";
+// import {
+//   resolveDiscountFieldNames,
+//   useSparePartsRowCommon,
+// } from "modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.shared";
 import {
   SparePartsMainFields,
   SparePartsCollapsedSection,
@@ -18,6 +17,8 @@ import { PERMISSIONS } from "utils/Permissions";
 import { useClaimContext } from "../ClaimContext";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 import "modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.scss";
+
+const TYPE_OPTIONS_DISABLED_FOR_INVALID_SPARE_PART = new Set(["WARRANTY", "SERVICE_OFFERING"]);
 
 function ClaimSparePartsRow({
   fields,
@@ -37,7 +38,7 @@ function ClaimSparePartsRow({
     allowedPositions,
     positionDropdownOptions,
     isResyncingRef,
-    discountBase,
+  //  discountBase,
     canDeleteRows,
     automaticRows,
     materials,
@@ -102,26 +103,26 @@ function ClaimSparePartsRow({
     return { ...field, isDisabled: true };
   };
 
-  const {
-    discountHiddenFieldName,
-    discountAmountHiddenFieldName,
-    activeDiscountFieldName,
-    discountSiblingFieldName,
-  } = resolveDiscountFieldNames(fields, discountBase);
+  // const {
+  //   discountHiddenFieldName,
+  //   discountAmountHiddenFieldName,
+  //   activeDiscountFieldName,
+  //   discountSiblingFieldName,
+  // } = resolveDiscountFieldNames(fields, discountBase);
 
-  const nonPriceInputKey = useSparePartsRowCommon({
-    fields,
-    activeDiscountFieldName,
-    discountSiblingFieldName,
-    discountHiddenFieldName,
-    discountAmountHiddenFieldName,
-    areaNamePrefix,
-    isResyncingRef,
-    discountBase,
-    values,
-    markRowDirty,
-    areaIndex,
-  });
+  // const nonPriceInputKey = useSparePartsRowCommon({
+  //   fields,
+  //   activeDiscountFieldName,
+  //   discountSiblingFieldName,
+  //   discountHiddenFieldName,
+  //   discountAmountHiddenFieldName,
+  //   areaNamePrefix,
+  //   isResyncingRef,
+  //   discountBase,
+  //   values,
+  //   markRowDirty,
+  //   areaIndex,
+  // });
 
   const isFirstRowRender = useRef(true);
   useEffect(() => {
@@ -131,7 +132,7 @@ function ClaimSparePartsRow({
     }
     if (isResyncingRef.current || !arePricesValidated) return;
     markRowDirty(areaIndex);
-  }, [nonPriceInputKey, markRowDirty, areaIndex, isResyncingRef, arePricesValidated]);
+  }, [/* nonPriceInputKey, */ markRowDirty, areaIndex, isResyncingRef, arePricesValidated]);
 
   const mainFields = fields.filter(
     (field) => !collapsableFieldNames.has(field.fieldMapping?.originalName || ""),
@@ -202,7 +203,7 @@ function ClaimSparePartsRow({
           ...field,
           options: field.options.map((option) => {
             const optionValue = String(option.value ?? "").toUpperCase();
-            if (!WARRANTY_GATED_TYPES.has(optionValue)) return option;
+            if (!TYPE_OPTIONS_DISABLED_FOR_INVALID_SPARE_PART.has(optionValue)) return option;
             return { ...option, disabled: true };
           }),
         };

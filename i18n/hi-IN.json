@@ -578,6 +578,7 @@
     "requestNr": "अनुरोध क्रमांक (आर ओ फॉर्म के लिए देखें। क्रमांक।)",
     "jobInfo": "कार्य जानकारी",
     "phone": "फोन",
+    "phoneMobileNumber": "फोन / मोबाइल फोन नंबर",
     "model": "मॉडल",
     "partBaretoolNumber": "भाग/बेर टूल संख्या",
     "technicianNotes": "तकनीशियन नोट्स",
@@ -608,6 +609,9 @@
     "reimbursementPeriod": "प्रतिपूर्ति अवधि",
     "creditNoteOrderId": "क्रेडिट नोट ऑर्डर आईडी",
     "totalAmountToBeCredited": "जिन्हें क्रेडिट किया जाना है वह राशि",
+    "totalAmountAfterTax": "कर के बाद कुल राशि",
+    "reimbursementDisclaimer": "यह राशि संकेतात्मक है और बदल सकती है। अंतिम प्रतिपूर्ति राशि आपके आधिकारिक ईमेल पते पर भेजी जाएगी।",
+    "reimbursementAmount": "प्रतिपूर्ति राशि",
     "monetarySettlement": "मौद्रिक निपटान",
     "materialReimbursementCompleted": "सामग्री प्रतिपूर्ति पूरी हो गई",
     "boschStockReplacement": "बॉश स्टॉक प्रतिस्थापन",
@@ -674,9 +678,8 @@
     "trOrderReceiptClause7": "चालान पर सूचीबद्ध जानकारी को भी बॉश द्वारा साझा किया जाएगा और इसका उपयोग किया जाएगा।",
     "trOrderReceiptClause8": "आप यह ई-मेल/SMS प्राप्त कर रहे हैं क्योंकि आप बॉश पावर टूल्स सेवा के एक पंजीकृत उपभोक्ता हैं।",
     "trOrderReceiptClause9": "इस दस्तावेज़ पर हस्ताक्षर करके, उपयोगकर्ता को ऊपर दी गई नियम और शर्तों को स्वीकार कर लिया गया माना जाता है।",
-    "trOrderReceiptClause10": "यदि वारंटी के अंतर्गत कवर किए गए उत्पाद की खराबी को दस व्यावसायिक दिनों के भीतर ठीक नहीं किया जा सकता है, तो उपभोक्ता को मूल उपकरण की मरम्मत पूरी होने तक समान उत्पाद प्रदान किया जाएगा।",
+    "trOrderReceiptClause10": "यदि वारंटी के तहत कवर किए गए उत्पाद का खराबी 30 व्यावसायिक दिनों के भीतर ठीक नहीं की जा सकती है, तो उपभोक्ता को मूल उपकरण के मरम्मत के पूरा होने तक एक समान उत्पाद प्रदान किया जाएगा।",
     "trCostEstimateTitle": "महत्वपूर्ण नोट्स",
-    "trCostEstimateTcLabel": "एएससी की शर्तें और नियम",
     "trCostEstimateDisclaimerLabel": "अस्वीकृति",
     "trCostEstimateDisclaimerPara1": "इस कोटेशन में दी गई मूल्य और कर जानकारी केवल संदर्भ के उद्देश्यों के लिए है। अंतिम राशि, लागू करों सहित, निपटान के समय जारी किए गए असली चालान पर आधारित होगी।",
     "trCostEstimateDisclaimerPara2": "दी गई गणनाएँ केवल अनुमान हैं। यदि, उत्पाद और मरम्मत प्रक्रिया के निरीक्षण के बाद, यह निर्धारित किया जाता है कि अतिरिक्त लागत की आवश्यकता है, तो ग्राहक को सूचित किया जाएगा और उनकी स्वीकृति प्राप्त की जाएगी।",
@@ -1162,6 +1165,11 @@
     "errorDiagnosticProServiceItemsNotEligibleForValidation": "PRO सेवा की पात्रता निर्धारित करने के लिए खरीदारी की तारीख आवश्यक है। कृपया जारी रखने के लिए खरीदारी की तारीख प्रदान करें।",
     "errorDiagnosticCannotDeleteApprovedChargeableItem": "पहले से स्वीकृत चार्जेबल वस्तु को हटाना अनुमति नहीं है।",
     "errorErpValidationMisingPricePartNumbers": "कीमत उपलब्ध नहीं है।",
-    "sparePartNumberNotFound": "Part number '{{id}}' not found."
+    "sparePartNumberNotFound": "भाग संख्या '{{id}}' नहीं मिली।",
+    "previousMonth": "पिछला महीना",
+    "nextMonth": "अगला महीना",
+    "TOOL": "Tool",
+    "SPARE_PART": "Spare Part",
+    "ACCESSORY": "Accessory"
   }
 }

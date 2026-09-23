@@ -17,6 +17,11 @@ export interface Customer {
   deliveryAddress: Address;
   billingAddress: Address;
   useBillingAddressForDelivery: boolean;
+  // Not returned by the current API response. Populate when the backend/data model supports it.
+  assetsCount?: number;
+  status?: string;
+  isActive?: boolean;
+  createdOn?: string;
 }
 
 export interface Address {
@@ -29,4 +34,18 @@ export interface Address {
   stateProvinceRegion: string;
   postalCode: string;
   countryCode: string;
+}
+
+export interface UpdateCustomerRequest {
+  firstName?: unknown;
+  lastName?: unknown;
+  email?: unknown;
+  phoneNumber?: unknown;
+  communicationMedium?: unknown;
+  type?: string;
+  ascId?: string;
+  language?: string;
+  locale?: string;
+  clientId?: string;
+  billingAddress?: Partial<Address>;
 }

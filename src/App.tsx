@@ -14,10 +14,6 @@ import { ActivityIndicator } from "@bosch/react-frok";
 import { getCountryConfig } from "./api/services/countryConfiguration/countryConfiguration";
 import { getUIConfiguration } from "api/services/uiConfiguration/action";
 import { Message, MessagesContext } from "./contexts/messagescontext";
-import { ItemPolicyContext } from "./contexts/itemPolicyContext";
-import { useItemPolicyQuery } from "./api/services/itemPolicy/hooks";
-import { useFeatureFlag } from "./hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "./utils/featureFlags";
 import { AnalyticsProvider } from "@/analytics";
 import ConsentModal from "./components/ui/ConsentModal/ConsentModal";
 
@@ -72,12 +68,6 @@ function App() {
     retry: false,
   });
 
-  const isBackendDiagnosticsEnabled = useFeatureFlag(FEATURE_FLAGS.DIAGNOSTICS_BACKEND_DRIVEN);
-  const { data: itemPolicy } = useItemPolicyQuery(
-    data?.countryCode || "",
-    isBackendDiagnosticsEnabled,
-  );
-
   if (isLoading || !data || (data.countryCode && (isLoadingCountryConfig || isLoadingUIConfig))) {
     return (
       <div className="loading-container">
@@ -92,15 +82,13 @@ function App() {
         <div className="app-container -light-mode">
           <SideNav />
           <div className="app-content">
-            <ItemPolicyContext.Provider value={itemPolicy ?? null}>
-              <BreadcrumbsContext.Provider value={breadcrumbsValue}>
-                <MessagesContext.Provider value={messagesValue}>
-                  <BassHeader />
-                  <Main />
-                  <Footer />
-                </MessagesContext.Provider>
-              </BreadcrumbsContext.Provider>
-            </ItemPolicyContext.Provider>
+            <BreadcrumbsContext.Provider value={breadcrumbsValue}>
+              <MessagesContext.Provider value={messagesValue}>
+                <BassHeader />
+                <Main />
+                <Footer />
+              </MessagesContext.Provider>
+            </BreadcrumbsContext.Provider>
           </div>
         </div>
         <ConsentModal isOpen={data.consent?.isConsentUpdateRequired ?? false} />

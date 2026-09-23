@@ -1,3 +1,8 @@
+# NOTE: at deploy time the pipeline applies overrides from the
+# bassnext.pipelines repo (resource-config/<service>/<env>.yaml) ON TOP of
+# this file. In particular resources, probes, hpa, pdb and configMapData
+# entries here can differ from what actually runs; check resource-config
+# for the effective per-environment values.
 replicaCount: 1
 
 ingress:

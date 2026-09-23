@@ -1,10 +1,8 @@
 import { ReactNode } from "react";
 import { Job } from "modules/JobManagement/JobList/JobList.types";
 import StatusIndicator from "components/ui/StatusIndicator/StatusIndicator";
-import { Icon } from "@bosch/react-frok";
-import { CUSTOMER_TYPE_ICON_NAME } from "../../../../utils/customerTypeIcon";
 import { formatDateToDisplay } from "../../../../utils/dateFormatter";
-import { getCustomerDisplayName } from "../../../../utils/customerUtils";
+import { getCustomerNameWithIcon } from "../../../../utils/customerUtils";
 
 export type ApprovalColumnKey =
   | "jobId"
@@ -36,8 +34,6 @@ export interface ApprovalColumnConfiguration {
   isChecked: boolean;
   order: number;
 }
-
-export type CustomerType = "INDIVIDUAL_PRIVATE" | "INDIVIDUAL_PRO" | "COMPANY" | "DEALERSHIP";
 
 export const getApprovalColumns = (
   t: (key: string) => string,
@@ -82,17 +78,7 @@ export const getApprovalColumns = (
       const customer = job.customer;
       if (!customer) return "-";
 
-      const customerDisplayName = getCustomerDisplayName(customer);
-      if (customerDisplayName === "-") return "-";
-
-      const iconName = CUSTOMER_TYPE_ICON_NAME[customer.customerType as CustomerType] ?? "user";
-
-      return (
-        <>
-          <Icon iconName={iconName} className="user-icon" />
-          {customerDisplayName}
-        </>
-      );
+      return getCustomerNameWithIcon(customer);
     },
   },
 

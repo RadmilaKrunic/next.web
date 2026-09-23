@@ -198,7 +198,7 @@ function CreateJob() {
 
   useEffect(() => {
     if (isEditMode && !draftOpenenFirstTime && allFields) {
-      const { hasErrors } = allMandatoryFieldsFilled("next", initialFormValues ?? {});
+      const { hasErrors } = allMandatoryFieldsFilled("next", initialFormValues);
       if (!hasErrors) {
         setOpenAssetIndices(new Set([1]));
         setIsCustomerOpen(false);
@@ -513,10 +513,10 @@ function CreateJob() {
         }
       }
 
-      const updatedValues = Object.keys(initialFormValues ?? {}).reduce(
+      const updatedValues = Object.keys(initialFormValues).reduce(
         (acc, key) => {
           if (!key.startsWith(sectionName)) {
-            acc[key] = initialFormValues?.[key];
+            acc[key] = initialFormValues[key];
           }
           return acc;
         },
@@ -595,8 +595,8 @@ function CreateJob() {
       setAssetsAccessories([]);
       lastWarrantyPayloadKeyRef.current = {};
       if (helpers) {
-        for (const key of Object.keys(initialFormValues ?? {})) {
-          helpers.setFieldValue(key, initialFormValues?.[key]);
+        for (const key of Object.keys(initialFormValues)) {
+          helpers.setFieldValue(key, initialFormValues[key]);
         }
       }
     },
@@ -799,7 +799,7 @@ function CreateJob() {
     <GenericFormContext.Provider value={genericFormContextValue}>
       <CreateJobContext.Provider value={createJobContextValue}>
         <Formik
-          initialValues={initialFormValues ?? {}}
+          initialValues={initialFormValues}
           onSubmit={(values, { setErrors, setTouched }) => {
             if (isSubmittingOrderRef.current) return;
 

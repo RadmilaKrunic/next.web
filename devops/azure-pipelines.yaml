@@ -1,12 +1,15 @@
 
 trigger:
   - master
-  - release/*
 resources:
   repositories:
   - repository: templates
     type: git
     name: BASSNext/bassnext.pipelines     # ProjectName/RepoName
+    ref: refs/heads/master
+  - repository: shared_templates          # required by the copilot_review CI stage (templates/copilot-review.yaml@templates)
+    type: git
+    name: pt-shared/pt-shared.pipeline.templates
     ref: refs/heads/master
 
 extends:

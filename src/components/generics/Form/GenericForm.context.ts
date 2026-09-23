@@ -48,7 +48,6 @@ export interface GenericFormContextType {
   onAreaValueChange?: (areaName: string, formValues?: Record<string, unknown>) => void;
   autocompleteValidation?: React.RefObject<Record<string, boolean>>;
   sparePartNotBelongsToTool?: React.RefObject<Record<string, boolean>>;
-  activeValueChangeFieldRef?: React.RefObject<string | null>;
   warrantyPanelInfo?: WarrantyPanelInfo;
   isRepairAnswerLocked?: boolean;
 }
@@ -64,7 +63,6 @@ export const GenericFormContext = createContext<GenericFormContextType>({
   onAreaValueChange: undefined,
   autocompleteValidation: undefined,
   sparePartNotBelongsToTool: undefined,
-  activeValueChangeFieldRef: undefined,
   warrantyPanelInfo: undefined,
   isRepairAnswerLocked: undefined,
 });

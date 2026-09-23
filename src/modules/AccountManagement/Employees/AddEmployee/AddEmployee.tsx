@@ -175,7 +175,10 @@ function AddEmployee() {
             },
           );
         },
-        onCancel: () => onCancelForm(),
+        onCancel: () => {
+          onCancelForm(formValues, { setFieldValue: helpers.setFieldValue });
+          navigate("/employee-list");
+        },
       };
 
       const action = actionMap[actionName];
@@ -183,7 +186,7 @@ function AddEmployee() {
         action();
       }
     },
-    [onSubmitEmployee, onCancelForm, handleAction],
+    [onSubmitEmployee, handleAction, navigate, onCancelForm],
   );
 
   const genericFormContextValue = useMemo(
@@ -200,7 +203,10 @@ function AddEmployee() {
       mandatoryFields,
       setMandatoryFields: () => {},
       actionCallbacks: {
-        onSubmit: onSubmitEmployee,
+        onSubmit: (formValues?: Record<string, unknown>) => {
+          if (!formValues) return;
+          onSubmitEmployee(formValues);
+        },
         onCancel: onCancelForm,
       },
       autocompleteValidation: autocompleteValidationRef,

@@ -1,5 +1,5 @@
 import axiosClient from "api/axios-client/axiosClient";
-const localCountryConfigFiles = import.meta.glob("../../../../data/countryConfiguration*.json");
+
 interface TaxRate {
   type: string;
   rate: number;
@@ -81,18 +81,6 @@ export interface CountryConfig {
 }
 
 export const getCountryConfig = async (countryCode: string) => {
-  if (import.meta.env.DEV && !import.meta.env.TEST) {
-    const key = `../../../../data/countryConfiguration${countryCode.toUpperCase()}.json`;
-    const loader = localCountryConfigFiles[key];
-    if (loader) {
-      const data = (await loader()) as { default: CountryConfig };
-      return data.default;
-    }
-    console.warn(
-      `[CountryConfig] No local file found for country "${countryCode}". ` +
-        `Expected: data/countryConfiguration${countryCode.toUpperCase()}.json`,
-    );
-  }
   try {
     const response = await axiosClient.get(`/v1/countries/${countryCode}/country-configuration`);
     return response.data;

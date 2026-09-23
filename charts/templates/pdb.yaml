@@ -1,23 +1,28 @@
-# {{- if .Values.pdb }}{{ if .Values.pdb.enabled }}
-# # PDB - Pod disruption budget: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
-# apiVersion: policy/v1
-# kind: PodDisruptionBudget
-# metadata:
-#   name: {{ include "app.fullname" . }}
-#   labels:
-#     app: {{ include "app.name" . }}
-#     chart: {{ include "app.chart" . }}
-#     release: {{ .Release.Name }}
-#     heritage: {{ .Release.Service }}
-# spec:
-#   # do not set PDB if there is only one replica
-#   {{- if eq (.Values.replicaCount | toDecimal) 1 }}
-#   minAvailable: 0
-#   {{- else }}
-#   minAvailable: {{ .Values.pdb.minAvailable }}
-#   {{- end }}
-#   selector:
-#     matchLabels:
-#       app: {{ include "app.name" . }}
-#       release: {{ .Release.Name }}
-# {{- end }}{{ end }}
+{{- /* Effective replica floor: HPA minReplicas when autoscaling, else replicaCount */}}
+{{- $floor := int (.Values.replicaCount | default 0) }}
+{{- if and .Values.hpa .Values.hpa.enabled }}
+{{- $floor = int (.Values.hpa.minReplicas | default 0) }}
+{{- end }}
+{{- if and .Values.pdb .Values.pdb.enabled (ge $floor 2) }}
+# PDB: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+# Disabled by default in values.yaml; enable per environment via the
+# resource-config overrides once that environment runs at least 2 replicas.
+# Safety guard: even when enabled, the PDB only renders if the replica floor
+# (hpa.minReplicas when autoscaling, replicaCount otherwise) is at least 2,
+# because minAvailable 1 with a single replica blocks node drains.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    app: {{ include "app.name" . }}
+    chart: {{ include "app.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ include "app.name" . }}
+      release: {{ .Release.Name }}
+{{- end }}

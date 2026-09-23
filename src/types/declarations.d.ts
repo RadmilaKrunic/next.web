@@ -2,7 +2,6 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL: string;
-  readonly VITE_FF_DIAGNOSTICS_BACKEND_DRIVEN?: string;
 }
 
 export interface ImportMeta {

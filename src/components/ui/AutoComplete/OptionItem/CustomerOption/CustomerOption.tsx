@@ -1,6 +1,6 @@
 import { Icon } from "@bosch/react-frok";
 import { Customer } from "../../../../../api/services/customers/customers.types";
-import { CUSTOMER_TYPE_ICON_NAME } from "../../../../../utils/customerTypeIcon";
+import { getCustomerTypeIcon } from "../../../../../utils/customerUtils";
 
 interface CustomerOptionProps {
   option: Customer;
@@ -20,7 +20,7 @@ function CustomerOption({
       className={`auto-complete-option ${isHighlighted ? "highlighted" : ""}`}
       onClick={() => onSelect(option)}
     >
-      <Icon iconName={CUSTOMER_TYPE_ICON_NAME[option.customerType]} className="option-avatar" />
+      <Icon iconName={getCustomerTypeIcon(option)} className="option-avatar" />
       <div className="option-content">
         <div className="option-name">
           {option.firstName} {option.lastName}

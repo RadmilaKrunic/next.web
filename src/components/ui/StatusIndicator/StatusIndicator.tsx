@@ -9,7 +9,7 @@ function StatusIndicator({
 }: Readonly<{
   status: string;
   showStatusMessage?: boolean;
-  type?: "job" | "claim" | "sparePart" | "employee" | "ASC";
+  type?: "job" | "claim" | "sparePart" | "employee" | "ASC" | "client";
 }>) {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
 

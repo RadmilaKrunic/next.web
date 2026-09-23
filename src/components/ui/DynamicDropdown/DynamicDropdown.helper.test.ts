@@ -265,6 +265,13 @@ describe("translateStaticOptions", () => {
     expect(result).toHaveLength(1);
   });
 
+  it("does not prepend a placeholder for serviceCenterType dropdowns", () => {
+    const opts = [{ value: "ASC", name: "ASC" }];
+    const result = translateStaticOptions("serviceCenterType", opts, mockT);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ value: "ASC", name: "ASC" });
+  });
+
   it("does not add a duplicate placeholder when caller already provided one", () => {
     const opts = [
       { value: "", name: "" },

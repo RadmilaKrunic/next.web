@@ -876,56 +876,6 @@ describe("useDiagnosticsManager hook behavior", () => {
     expect(mocks.setInitialFormValues).toHaveBeenCalled();
   });
 
-  it("deleting a row does not leave a same-position sibling with the deleted row's stale values", async () => {
-    // Regression test for the case the old shift-by-key reindexing existed to handle:
-    // two rows sharing the same position, deleting the first one. onDeleteRow now just
-    // filters `materials` and forces Effect 3's full recomputation instead of manually
-    // renaming Formik keys — this asserts that still produces the surviving row's own
-    // values at index 0, not a stale copy of the row that got deleted.
-    const row1Fields: Field[] = [
-      makeField("diagnosticData_diagnosticsSpareParts#1_position", "diagnosticPosition"),
-      makeField("diagnosticData_diagnosticsSpareParts#1_sparePartNumber", "diagnosticPartNumber"),
-      makeField("diagnosticData_diagnosticsSpareParts#1_quantity", "diagnosticQuantity"),
-    ];
-    const row1Area = makeArea("diagnosticData_diagnosticsSpareParts#1", row1Fields, 1);
-
-    const { props, mocks } = createHookProps({
-      tabs: [makeDiagnosticsTab([diagnosticsArea, row1Area, archivedArea])],
-      allFields: [...diagnosticFields, ...row1Fields, ...archivedFields],
-      formValues: {
-        "diagnosticData_diagnosticsSpareParts#0_position": "SP",
-        "diagnosticData_diagnosticsSpareParts#0_sparePartNumber": "AAA",
-        "diagnosticData_diagnosticsSpareParts#1_position": "SP",
-        "diagnosticData_diagnosticsSpareParts#1_sparePartNumber": "BBB",
-      },
-    });
-    const { result } = renderHook(() => useDiagnosticsManager(props));
-
-    act(() => {
-      result.current.setMaterials([
-        makeItem({ position: "SP", partNumber: "AAA", quantity: 1 }),
-        makeItem({ position: "SP", partNumber: "BBB", quantity: 5 }),
-      ]);
-    });
-
-    act(() => {
-      result.current.onDeleteRow("diagnosticData_diagnosticsSpareParts#0");
-    });
-
-    await waitFor(() => {
-      expect(result.current.materials).toHaveLength(1);
-    });
-    expect(result.current.materials[0].partNumber).toBe("BBB");
-
-    // Thread every setInitialFormValues call through in order (some come from Effect 3b's
-    // archived-row sync, fired in the same batch) the way React would apply them for real.
-    const merged = mocks.setInitialFormValues.mock.calls.reduce(
-      (acc, [arg]) => (typeof arg === "function" ? arg(acc) : { ...acc, ...arg }),
-      {} as Record<string, unknown>,
-    );
-    expect(merged["diagnosticData_diagnosticsSpareParts#0_sparePartNumber"]).toBe("BBB");
-  });
-
   it("restores archived row as pending and unvalidated", async () => {
     const { props, mocks } = createHookProps({
       diagnosticData: {

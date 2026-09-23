@@ -7,8 +7,8 @@ vi.mock("@bosch/react-frok", () => ({
   Icon: ({ iconName }: { iconName: string }) => <span data-testid={`icon-${iconName}`} />,
 }));
 
-vi.mock("../../../../../utils/customerTypeIcon", () => ({
-  CUSTOMER_TYPE_ICON_NAME: { PRIVATE: "user", COMPANY: "building", DEALERSHIP: "store" },
+vi.mock("../../../../../utils/customerUtils", () => ({
+  getCustomerTypeIcon: vi.fn(() => "user"),
 }));
 
 const mockCustomer: Customer = {

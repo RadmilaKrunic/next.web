@@ -578,6 +578,7 @@
     "requestNr": "Zahtev br(za RO obrazac up. br.)",
     "jobInfo": "Informacije o poslu",
     "phone": "Telefon",
+    "phoneMobileNumber": "Telefon / Mobilni broj",
     "model": "Model",
     "partBaretoolNumber": "Broj dela/ alata",
     "technicianNotes": "Napomene tehnika",
@@ -608,6 +609,9 @@
     "reimbursementPeriod": "Period nadoknade",
     "creditNoteOrderId": "ID narudžbe kreditne note",
     "totalAmountToBeCredited": "Iznos koji treba knjižiti",
+    "totalAmountAfterTax": "Ukupan iznos nakon poreza",
+    "reimbursementDisclaimer": "Ovaj iznos je indikativan i podložan promenama. Konačan iznos nadoknade biće poslat na vašu zvaničnu email adresu.",
+    "reimbursementAmount": "Iznos nadoknade",
     "monetarySettlement": "Novčano poravnanje",
     "materialReimbursementCompleted": "Završena nadoknada materijala",
     "boschStockReplacement": "Zamena Bosch zaliha",
@@ -674,9 +678,8 @@
     "trOrderReceiptClause7": "Informacije navedene na fakturi takođe će biti podeljene i korišćene od strane Boscha.",
     "trOrderReceiptClause8": "Primate ovu E-poštu / SMS jer ste registrovani pretplatnik Bosch Power Tools Service-a.",
     "trOrderReceiptClause9": "Potpisivanjem ovog dokumenta, korisnik se smatra da je prihvatio navedene uslove i odredbe.",
-    "trOrderReceiptClause10": "Ako kvar proizvoda pokrivenog garancijom ne može da se otkloni u roku od deset radnih dana, potrošaču će biti obezbeđen sličan proizvod do završetka popravke originalnog alata.",
+    "trOrderReceiptClause10": "Ako se kvar proizvoda koji je pod garancijom ne može otkloniti u roku od 30 radnih dana, biće obezbeđen sličan proizvod potrošaču dok se ne završi popravka originalnog alata.",
     "trCostEstimateTitle": "Važne napomene",
-    "trCostEstimateTcLabel": "Uslovi i odredbe ASC-a",
     "trCostEstimateDisclaimerLabel": "Odricanje od odgovornosti",
     "trCostEstimateDisclaimerPara1": "Informacije o cenama i porezima date u ovoj ponudi su samo za referencu. Konačni iznosi, uključujući primenljive poreze, biće zasnovani na stvarnoj fakturi izdatnoj u trenutku plaćanja.",
     "trCostEstimateDisclaimerPara2": "Pružene kalkulacije su samo procene. Ako se, nakon inspekcije proizvoda i procesa popravke, utvrdi da su potrebni dodatni troškovi, kupac će biti obavešten i njihov pristanak će biti dobijen.",
@@ -1162,6 +1165,11 @@
     "errorDiagnosticProServiceItemsNotEligibleForValidation": "Datum kupovine je obavezan za određivanje podobnosti za PRO uslugu. Molimo vas da navedete datum kupovine da biste nastavili.",
     "errorDiagnosticCannotDeleteApprovedChargeableItem": "Brisanje već odobrenog stavke za naplatu nije dozvoljeno",
     "errorErpValidationMisingPricePartNumbers": "Cena nije dostupna",
-    "sparePartNumberNotFound": "Part number '{{id}}' not found."
+    "sparePartNumberNotFound": "Broj dela '{{id}}' nije pronađen.",
+    "previousMonth": "Prošli mesec",
+    "nextMonth": "Sledeći mesec",
+    "TOOL": "Tool",
+    "SPARE_PART": "Spare Part",
+    "ACCESSORY": "Accessory"
   }
 }

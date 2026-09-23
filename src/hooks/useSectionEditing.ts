@@ -1,4 +1,5 @@
-import { useState, useCallback, Dispatch, SetStateAction } from "react";
+import { useState, useCallback } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import Field from "components/generics/Field/GenericField.types";
 import Section from "components/generics/Section/GenericSection.types";
 import { Accessory } from "hooks/useAccessoriesManager";
@@ -11,7 +12,7 @@ interface UseSectionEditingProps {
   assetsAccessories: Accessory[];
   setAssetsAccessories: Dispatch<SetStateAction<Accessory[]>>;
   mergedJobData: unknown;
-  setInitialFormValues: Dispatch<SetStateAction<Record<string, unknown> | null>> | null;
+  setInitialFormValues: Dispatch<SetStateAction<Record<string, unknown>>>;
 }
 
 export const useSectionEditing = ({
@@ -72,7 +73,7 @@ export const useSectionEditing = ({
 
       if (reloadData && mergedJobData && allFields) {
         const dataMapped = convertAPIDataToFormValues(mergedJobData, allFields);
-        setInitialFormValues?.(dataMapped);
+        setInitialFormValues(dataMapped);
       }
     },
     [

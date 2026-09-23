@@ -578,6 +578,7 @@
     "requestNr": "Nr do pedido (Para referência no formulário RO)",
     "jobInfo": "Informações do Trabalho",
     "phone": "Telefone",
+    "phoneMobileNumber": "Número de telefone / celular",
     "model": "Modelo",
     "partBaretoolNumber": "Número da peça/Baretool",
     "technicianNotes": "Notas do técnico",
@@ -608,6 +609,9 @@
     "reimbursementPeriod": "Período de reembolso",
     "creditNoteOrderId": "ID do pedido de nota de crédito",
     "totalAmountToBeCredited": "O valor a ser creditado",
+    "totalAmountAfterTax": "Valor total após impostos",
+    "reimbursementDisclaimer": "Esse valor é indicativo e está sujeito a alterações. O valor final do reembolso será enviado para seu endereço de e-mail oficial.",
+    "reimbursementAmount": "Valor do reembolso",
     "monetarySettlement": "Liquidação monetária",
     "materialReimbursementCompleted": "Reembolso de material concluído",
     "boschStockReplacement": "Substituição de estoque Bosch",
@@ -674,9 +678,8 @@
     "trOrderReceiptClause7": "As informações listadas na fatura também serão compartilhadas e utilizadas pela Bosch.",
     "trOrderReceiptClause8": "Você está recebendo este E-mail / SMS porque é um assinante registrado do Serviço de Ferramentas Elétricas da Bosch.",
     "trOrderReceiptClause9": "Ao assinar este documento, o usuário é considerado como tendo aceitado os termos e condições descritos acima.",
-    "trOrderReceiptClause10": "Se a falha de um produto coberto pela garantia não puder ser corrigida dentro de dez dias úteis, um produto similar será fornecido ao consumidor até que o reparo da ferramenta original seja concluído.",
+    "trOrderReceiptClause10": "Se a falha de um produto coberto pela garantia não puder ser corrigida dentro de 30 dias úteis, um produto similar será fornecido ao consumidor até que o reparo da ferramenta original seja concluído.",
     "trCostEstimateTitle": "Notas Importantes",
-    "trCostEstimateTcLabel": "T&C dos ASC's",
     "trCostEstimateDisclaimerLabel": "Aviso Legal",
     "trCostEstimateDisclaimerPara1": "As informações de preço e impostos fornecidas nesta cotação são apenas para fins de referência. Os valores finais, incluindo os impostos aplicáveis, serão baseados na fatura real emitida no momento da liquidação.",
     "trCostEstimateDisclaimerPara2": "Os cálculos fornecidos são apenas estimativas. Se, após a inspeção do produto e do processo de reparo, for determinado que custos adicionais são necessários, o cliente será informado e sua aprovação será obtida.",
@@ -1162,6 +1165,11 @@
     "errorDiagnosticProServiceItemsNotEligibleForValidation": "A data de compra é necessária para determinar a elegibilidade para o serviço PRO. Por favor, forneça a data de compra para prosseguir.",
     "errorDiagnosticCannotDeleteApprovedChargeableItem": "Excluir item cobrável já aprovado não é permitido",
     "errorErpValidationMisingPricePartNumbers": "Preço não disponível",
-    "sparePartNumberNotFound": "Número da peça '{{id}}' não encontrado."
+    "sparePartNumberNotFound": "Número da peça '{{id}}' não encontrado.",
+    "previousMonth": "Mês anterior",
+    "nextMonth": "Próximo mês",
+    "TOOL": "Tool",
+    "SPARE_PART": "Spare Part",
+    "ACCESSORY": "Accessory"
   }
 }

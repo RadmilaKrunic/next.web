@@ -5,7 +5,7 @@ import { JobsCardProps } from "./JobsCard.types";
 import { useTranslation } from "react-i18next";
 import { useJobs } from "api/services/jobs/hooks";
 import { useMemo, useState } from "react";
-import { CUSTOMER_TYPE_ICON_NAME } from "utils/customerTypeIcon";
+import { CUSTOMER_TYPE_ICON_NAME } from "utils/customerUtils";
 import { formatDateToDisplay } from "utils/dateFormatter";
 import { flattenJobForSearch } from "modules/JobManagement/JobList/JobList.utils";
 import { useHasPermission } from "@/hooks/useHasPermission";

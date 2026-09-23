@@ -1,5 +1,5 @@
 import axiosClient from "../../axios-client/axiosClient";
-import { Customer } from "./customers.types";
+import { Customer, UpdateCustomerRequest } from "./customers.types";
 import axios, { AxiosResponse } from "axios";
 
 const customersAxiosClient = axios.create({
@@ -53,4 +53,44 @@ export const getCustomerByCompanyName = async (
   companyName: string,
 ): Promise<Customer[] | null> => {
   return searchCustomers(ascId, { companyName }, "Error fetching customer by company name:");
+};
+
+export const getCustomersByAsc = async (ascId: string): Promise<Customer[]> => {
+  try {
+    const response: AxiosResponse<Customer[]> = await customersAxiosClient.get<Customer[]>(
+      `/asc/${ascId}`,
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      `Error fetching customers for ASC: ${(axios.isAxiosError(error) && error.message) || String(error)}`,
+    );
+  }
+};
+
+export const getCustomerById = async (customerId: string): Promise<Customer> => {
+  try {
+    const response: AxiosResponse<Customer> = await customersAxiosClient.get<Customer>(
+      `/${customerId}`,
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      `Error fetching customer by id: ${(axios.isAxiosError(error) && error.message) || String(error)}`,
+    );
+  }
+};
+
+export const createClient = async (payload: UpdateCustomerRequest): Promise<Customer> => {
+  try {
+    const response: AxiosResponse<Customer> = await customersAxiosClient.put<Customer>(
+      `/${payload.clientId}`,
+      payload,
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      `Error updating client: ${(axios.isAxiosError(error) && error.message) || String(error)}`,
+    );
+  }
 };

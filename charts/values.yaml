@@ -1,3 +1,8 @@
+# NOTE: at deploy time the pipeline applies overrides from the
+# bassnext.pipelines repo (resource-config/<service>/<env>.yaml) ON TOP of
+# this file. In particular resources, probes, hpa, pdb and configMapData
+# entries here can differ from what actually runs; check resource-config
+# for the effective per-environment values.
 nameOverride: "bass-web"
 fullnameOverride: "bass-web"
 
@@ -40,7 +45,9 @@ actuator:
   port: 3000
 
 pdb:
-  enabled: true
+  # disabled by default; enable per environment from resource-config
+  # when that environment runs minReplicas >= 2
+  enabled: false
   minAvailable: 1
 
 datadog:

@@ -49,6 +49,7 @@ export interface Price {
   taxAmount: number;
   totalAmount: number;
   unitPrice: number;
+  discountAmount: number;
 }
 
 export interface Material {

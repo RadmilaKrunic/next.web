@@ -578,6 +578,7 @@
     "requestNr": "请求编号（用于RO表格参考编号）",
     "jobInfo": "作业信息",
     "phone": "电话",
+    "phoneMobileNumber": "电话 / 手机号码",
     "model": "型号",
     "partBaretoolNumber": "零件/裸工具编号",
     "technicianNotes": "技术员备注",
@@ -608,6 +609,9 @@
     "reimbursementPeriod": "报销期限",
     "creditNoteOrderId": "信用凭证订单 ID",
     "totalAmountToBeCredited": "待冲账金额",
+    "totalAmountAfterTax": "税后总金额",
+    "reimbursementDisclaimer": "该金额仅供参考，可能会更改。最终报销金额将发送至您的官方电子邮箱。",
+    "reimbursementAmount": "报销金额",
     "monetarySettlement": "货币结算",
     "materialReimbursementCompleted": "材料报销已完成",
     "boschStockReplacement": "博世库存更换",
@@ -674,9 +678,8 @@
     "trOrderReceiptClause7": "发票上列出的信息还将由博世共享和使用。",
     "trOrderReceiptClause8": "您收到此电子邮件/SMS是因为您是博世电动工具服务的注册订阅者。",
     "trOrderReceiptClause9": "通过签署此文档，用户被视为接受上述条款和条件。",
-    "trOrderReceiptClause10": "如果在保修范围内的产品故障在十个工作日内无法修复，则会提供类似产品给消费者，直至原工具的维修完成。",
+    "trOrderReceiptClause10": "如果保修范围内的产品故障在30个工作日内无法修复，将向消费者提供一款类似的产品，直至原工具的修理完成。",
     "trCostEstimateTitle": "重要说明",
-    "trCostEstimateTcLabel": "ASC的条款与条件",
     "trCostEstimateDisclaimerLabel": "免责声明",
     "trCostEstimateDisclaimerPara1": "本报价中提供的价格和税费信息仅供参考。最终金额，包括适用的税费将基于结算时开具的实际发票。",
     "trCostEstimateDisclaimerPara2": "提供的计算仅为估算。如果在对产品和维修过程进行检查后确定需要额外费用，将通知客户并征得其批准。",
@@ -1162,6 +1165,11 @@
     "errorDiagnosticProServiceItemsNotEligibleForValidation": "需要购买日期以确定专业服务资格。请提供购买日期以继续。",
     "errorDiagnosticCannotDeleteApprovedChargeableItem": "不允许删除已批准的收费项目",
     "errorErpValidationMisingPricePartNumbers": "价格不可用",
-    "sparePartNumberNotFound": "部件编号 '{{id}}' 未找到。"
+    "sparePartNumberNotFound": "部件编号 '{{id}}' 未找到。",
+    "previousMonth": "上个月",
+    "nextMonth": "下个月",
+    "TOOL": "工具",
+    "SPARE_PART": "备件",
+    "ACCESSORY": "配件"
   }
 }

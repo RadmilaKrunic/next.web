@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { useContext, useEffect, useRef } from "react";
 import { useFormikContext } from "formik";
@@ -402,11 +402,6 @@ vi.mock("api/services/jobs/action", async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // This suite exercises the pre-backend-driven client price/status logic throughout;
-  // isBackendDiagnosticsEnabled (utils/featureFlags, read directly by JobOverview.tsx,
-  // not mocked here) must not be left to whatever VITE_FF_DIAGNOSTICS_BACKEND_DRIVEN
-  // happens to resolve to in the ambient environment.
-  vi.stubEnv("VITE_FF_DIAGNOSTICS_BACKEND_DRIVEN", "false");
   locationStateMock.value = null;
   warrantyCheckDataMock.value = null;
   initialFormValuesMock.value = {};
@@ -421,10 +416,6 @@ beforeEach(() => {
   discountBaseMock.value = "NET_PRICE";
   triggerValueMock.value = 0;
   hasExistingDiagnosticMock.value = false;
-});
-
-afterEach(() => {
-  vi.unstubAllEnvs();
 });
 
 describe("JobOverview", () => {
@@ -1569,7 +1560,6 @@ async function readFormValues(): Promise<Record<string, unknown>> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv("VITE_FF_DIAGNOSTICS_BACKEND_DRIVEN", "false");
   locationStateMock.value = null;
   editingSectionsMock.value = new Set<string>();
   tabsDataMock.value = [

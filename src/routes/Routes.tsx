@@ -25,6 +25,7 @@ import AddASC from "../modules/AccountManagement/ASC/AddAsc/AddASC";
 import AscList from "../modules/AccountManagement/ASC/ASCList/AscList";
 import AscOverview from "../modules/AccountManagement/ASC/AscOverview/AscOverview";
 import CreateReimbursement from "../modules/Reimbursement/CreateReimbursement/CreateReimbursement";
+import ClientOverview from "@/modules/Clients/ClientOverview/ClientOverview";
 
 const ErrorFallback = () => <div>Something went wrong.</div>;
 
@@ -143,6 +144,16 @@ function AppRoutes() {
           <ProtectedRoute requiredPermissions={[PERMISSIONS.CLIENT.CAN_VIEW_LIST]}>
             <ErrorBoundaryWrapper>
               <Clients />
+            </ErrorBoundaryWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client-overview/:clientId"
+        element={
+          <ProtectedRoute requiredPermissions={[PERMISSIONS.CLIENT.CAN_VIEW_LIST]}>
+            <ErrorBoundaryWrapper>
+              <ClientOverview />
             </ErrorBoundaryWrapper>
           </ProtectedRoute>
         }

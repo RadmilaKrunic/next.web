@@ -27,8 +27,22 @@ export const getMandatoryFieldsForForm = (form: GenericForm, actionName: string)
 const areAllFieldsEmpty = (fieldNames: string[], values: Record<string, unknown>): boolean => {
   return fieldNames.every((fieldName) => {
     const value = values[fieldName];
-    return value === undefined || value === null || value === "";
+    return (
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      (Array.isArray(value) && value.length === 0)
+    );
   });
+};
+
+const isEmptyValue = (value: unknown): boolean => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0)
+  );
 };
 
 const checkDependencyCondition = (
@@ -419,7 +433,7 @@ function validateSingleField({
   }
 
   const value = values[fieldName];
-  const hasValue = !(value === undefined || value === null || value === "");
+  const hasValue = !isEmptyValue(value);
   const isCurrentFieldEmpty = !hasValue;
 
   const isMandatoryForAction = mandatoryFields.some(

@@ -109,6 +109,7 @@ interface Field {
   maxFileSizeInMb?: number;
   requiredDocuments?: RequiredDocument[];
   prefix?: string;
+  onBlur?: string;
   //not from uiConfiguration, added only for validation and mapping
   fieldMapping?: FieldMapping;
 }

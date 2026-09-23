@@ -578,6 +578,7 @@
     "requestNr": "Anforderungs-Nr. (Für RO-Form Nr.)",
     "jobInfo": "Job-Info",
     "phone": "Telefon",
+    "phoneMobileNumber": "Telefonnummer / Handy",
     "model": "Modell",
     "partBaretoolNumber": "Teil-/Werkzeugnummer",
     "technicianNotes": "Technikerhinweise",
@@ -608,6 +609,9 @@
     "reimbursementPeriod": "Erstattungszeitraum",
     "creditNoteOrderId": "Gutschriftauftrag-ID",
     "totalAmountToBeCredited": "Der Betrag, der gutgeschrieben werden soll",
+    "totalAmountAfterTax": "Gesamtbetrag nach Steuern",
+    "reimbursementDisclaimer": "Dieser Betrag ist indikativ und kann sich ändern. Der endgültige Erstattungsbetrag wird an Ihre offizielle E-Mail-Adresse gesendet.",
+    "reimbursementAmount": "Erstattungsbetrag",
     "monetarySettlement": "Monetäre Abrechnung",
     "materialReimbursementCompleted": "Materialrückerstattung abgeschlossen",
     "boschStockReplacement": "Bosch-Stock-Austausch",
@@ -674,9 +678,8 @@
     "trOrderReceiptClause7": "Die Informationen, die auf der Rechnung aufgeführt sind, werden ebenfalls von Bosch geteilt und verwendet.",
     "trOrderReceiptClause8": "Sie erhalten diese E-Mail / SMS, weil Sie ein registrierter Abonnent des Bosch Power Tools Service sind.",
     "trOrderReceiptClause9": "Durch die Unterzeichnung dieses Dokuments gilt der Benutzer als akzeptiert, dass die oben genannten Bedingungen und Konditionen akzeptiert wurden.",
-    "trOrderReceiptClause10": "Wenn der Defekt eines Produkts, das unter die Garantie fällt, nicht innerhalb von zehn Geschäftstagen behoben werden kann, wird dem Verbraucher ein ähnliches Produkt zur Verfügung gestellt, bis die Reparatur des ursprünglichen Werkzeugs abgeschlossen ist.",
+    "trOrderReceiptClause10": "Wenn der Defekt eines Produkts, das unter Garantie steht, innerhalb von 30 Geschäftstagen nicht behoben werden kann, wird dem Verbraucher ein ähnliches Produkt zur Verfügung gestellt, bis die Reparatur des ursprünglichen Werkzeugs abgeschlossen ist.",
     "trCostEstimateTitle": "Wichtige Hinweise",
-    "trCostEstimateTcLabel": "AGB der ASC",
     "trCostEstimateDisclaimerLabel": "Haftungsausschluss",
     "trCostEstimateDisclaimerPara1": "Die Preis- und Steuerinformationen, die in diesem Angebot bereitgestellt werden, dienen nur zu Referenzzwecken. Die endgültigen Beträge, einschließlich der anwendbaren Steuern, basieren auf der tatsächlichen Rechnung, die zum Zeitpunkt der Abrechnung ausgestellt wird.",
     "trCostEstimateDisclaimerPara2": "Die angegebenen Berechnungen sind nur Schätzungen. Wenn nach der Inspektion des Produkts und des Reparaturprozesses festgestellt wird, dass zusätzliche Kosten erforderlich sind, wird der Kunde informiert und seine Zustimmung wird eingeholt.",
@@ -1162,6 +1165,11 @@
     "errorDiagnosticProServiceItemsNotEligibleForValidation": "Das Kaufdatum ist erforderlich, um die Berechtigung für den PRO-Service festzustellen. Bitte geben Sie das Kaufdatum an, um fortzufahren.",
     "errorDiagnosticCannotDeleteApprovedChargeableItem": "Das Löschen eines bereits genehmigten kostenpflichtigen Artikels ist nicht erlaubt",
     "errorErpValidationMisingPricePartNumbers": "Der Preis ist nicht verfügbar",
-    "sparePartNumberNotFound": "Part number '{{id}}' not found."
+    "sparePartNumberNotFound": "Teilenummer '{{id}}' nicht gefunden.",
+    "previousMonth": "Vorheriger Monat",
+    "nextMonth": "Nächster Monat",
+    "TOOL": "Tool",
+    "SPARE_PART": "Spare Part",
+    "ACCESSORY": "Accessory"
   }
 }

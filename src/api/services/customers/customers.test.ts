@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockGet = vi.hoisted(() => vi.fn());
+const mockPut = vi.hoisted(() => vi.fn());
 
 vi.mock("axios", () => ({
   default: {
-    create: vi.fn(() => ({ get: mockGet, defaults: {} })),
+    create: vi.fn(() => ({ get: mockGet, put: mockPut, defaults: {} })),
     isAxiosError: vi.fn((err) => !!(err && typeof err === "object" && "message" in err)),
   },
   isAxiosError: vi.fn((err) => !!(err && typeof err === "object" && "message" in err)),
@@ -21,9 +22,13 @@ import {
   getCustomerByLastName,
   getCustomerByDealershipName,
   getCustomerByCompanyName,
+  getCustomersByAsc,
+  getCustomerById,
+  createClient,
 } from "./customers";
 
 const mockCustomers = [{ id: "1", firstName: "John", lastName: "Doe" }];
+const mockCustomer = { id: "1", firstName: "John", lastName: "Doe" };
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -91,6 +96,71 @@ describe("getCustomerByCompanyName", () => {
     mockGet.mockRejectedValueOnce({ message: "fail" });
     await expect(getCustomerByCompanyName("ASC01", "Company")).rejects.toThrow(
       "Error fetching customer by company name:",
+    );
+  });
+});
+
+describe("getCustomersByAsc", () => {
+  it("returns customers on success", async () => {
+    mockGet.mockResolvedValueOnce({ data: mockCustomers });
+    const result = await getCustomersByAsc("ASC01");
+    expect(result).toEqual(mockCustomers);
+    expect(mockGet).toHaveBeenCalledWith("/asc/ASC01");
+  });
+
+  it("throws error with axios message on failure", async () => {
+    mockGet.mockRejectedValueOnce({ message: "Network error" });
+    await expect(getCustomersByAsc("ASC01")).rejects.toThrow(
+      "Error fetching customers for ASC: Network error",
+    );
+  });
+
+  it("throws error with stringified error when not an axios error", async () => {
+    mockGet.mockRejectedValueOnce("plain string failure");
+    await expect(getCustomersByAsc("ASC01")).rejects.toThrow(
+      "Error fetching customers for ASC: plain string failure",
+    );
+  });
+});
+
+describe("getCustomerById", () => {
+  it("returns a customer on success", async () => {
+    mockGet.mockResolvedValueOnce({ data: mockCustomer });
+    const result = await getCustomerById("1");
+    expect(result).toEqual(mockCustomer);
+    expect(mockGet).toHaveBeenCalledWith("/1");
+  });
+
+  it("throws error with message on failure", async () => {
+    mockGet.mockRejectedValueOnce({ message: "not found" });
+    await expect(getCustomerById("1")).rejects.toThrow("Error fetching customer by id: not found");
+  });
+});
+
+describe("createClient", () => {
+  const payload = {
+    clientId: "1",
+    firstName: "John",
+    lastName: "Doe",
+    email: "john@example.com",
+  } as never;
+
+  it("sends a PUT request with the payload and returns the updated customer", async () => {
+    mockPut.mockResolvedValueOnce({ data: mockCustomer });
+    const result = await createClient(payload);
+    expect(result).toEqual(mockCustomer);
+    expect(mockPut).toHaveBeenCalledWith("/1", payload);
+  });
+
+  it("throws error with axios message on failure", async () => {
+    mockPut.mockRejectedValueOnce({ message: "duplicate email" });
+    await expect(createClient(payload)).rejects.toThrow("Error updating client: duplicate email");
+  });
+
+  it("throws error with stringified error when not an axios error", async () => {
+    mockPut.mockRejectedValueOnce("plain string failure");
+    await expect(createClient(payload)).rejects.toThrow(
+      "Error updating client: plain string failure",
     );
   });
 });

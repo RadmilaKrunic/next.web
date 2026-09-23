@@ -1,4 +1,4 @@
-export type OverviewType = "job" | "claim" | "employee" | "ASC";
+export type OverviewType = "job" | "claim" | "employee" | "ASC" | "client";
 
 export interface OverviewHeaderItem {
   icon: string;

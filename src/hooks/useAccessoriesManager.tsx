@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, Dispatch, SetStateAction } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Field from "../components/generics/Field/GenericField.types";
 import { mapFieldToFieldMapping } from "../components/generics/utils";
 
@@ -17,7 +17,12 @@ interface UseAccessoriesManagerProps {
   mode: "create" | "view" | "edit";
   allFields: Field[] | null;
   setAllFields: (fields: Field[] | null | ((prev: Field[] | null) => Field[] | null)) => void;
-  setInitialFormValues: Dispatch<SetStateAction<Record<string, unknown> | null>> | null;
+  setInitialFormValues: (
+    values: Record<string, unknown> | ((prev: Record<string, unknown>) => Record<string, unknown>),
+  ) => void;
+  // Unified parameter for both single and multi-job scenarios
+  // Single job: [{ accessories: [...] }] (jobIndex is undefined)
+  // Multi job: [{ jobIndex: 0, accessories: [...] }, { jobIndex: 1, accessories: [...] }]
   apiJobsAccessories?: JobAccessories[];
   convertAPIDataToFormValues?: (apiData: unknown, fields: Field[]) => Record<string, unknown>;
   apiData?: unknown;
@@ -156,7 +161,7 @@ export const useAccessoriesManager = ({
     if (accessoryTemplateFields.length === 0) {
       setPreviousJobsState(currentJobsState);
       // Map data even if no accessory template fields found
-      if (convertAPIDataToFormValues && apiData && setInitialFormValues) {
+      if (convertAPIDataToFormValues && apiData) {
         const dataMapped = convertAPIDataToFormValues(apiData, allFields);
         setInitialFormValues(dataMapped);
       }
@@ -209,7 +214,7 @@ export const useAccessoriesManager = ({
       // After fields are added, map API data to the new fields
       if (convertAPIDataToFormValues && apiData) {
         const dataMapped = convertAPIDataToFormValues(apiData, updatedFields);
-        setInitialFormValues?.(dataMapped);
+        setInitialFormValues(dataMapped);
       }
 
       return updatedFields;
@@ -238,7 +243,7 @@ export const useAccessoriesManager = ({
       {} as Record<string, unknown>,
     );
 
-    setInitialFormValues?.((prev) => ({ ...prev, ...newValues }));
+    setInitialFormValues((prev) => ({ ...prev, ...newValues }));
 
     const updatedFields = (() => {
       if (!allFields) return newFieldMapping;

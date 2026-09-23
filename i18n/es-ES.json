@@ -578,6 +578,7 @@
     "requestNr": "Número de solicitud (Para la referencia del formulario RO)",
     "jobInfo": "Información del trabajo",
     "phone": "Teléfono",
+    "phoneMobileNumber": "Número de teléfono / Móvil",
     "model": "Modelo",
     "partBaretoolNumber": "Número de parte/herramienta desnuda",
     "technicianNotes": "Notas del técnico",
@@ -608,6 +609,9 @@
     "reimbursementPeriod": "Período de reembolso",
     "creditNoteOrderId": "ID de la nota de crédito",
     "totalAmountToBeCredited": "El monto a acreditar",
+    "totalAmountAfterTax": "Monto total después de impuestos",
+    "reimbursementDisclaimer": "Este monto es indicativo y está sujeto a cambios. El monto de reembolso final se enviará a su dirección de correo electrónico oficial.",
+    "reimbursementAmount": "Monto de reembolso",
     "monetarySettlement": "Liquidación monetaria",
     "materialReimbursementCompleted": "Reembolso de material completado",
     "boschStockReplacement": "Reemplazo de stock Bosch",
@@ -674,9 +678,8 @@
     "trOrderReceiptClause7": "La información enumerada en la factura también será compartida y utilizada por Bosch.",
     "trOrderReceiptClause8": "Está recibiendo este correo electrónico / SMS porque es un suscriptor registrado del Servicio de Herramientas Eléctricas Bosch.",
     "trOrderReceiptClause9": "Al firmar este documento, se considera que el usuario ha aceptado los términos y condiciones mencionados anteriormente.",
-    "trOrderReceiptClause10": "Si el fallo de un producto cubierto por garantía no puede resolverse dentro de diez días hábiles, se proporcionará un producto similar al consumidor hasta que se complete la reparación de la herramienta original.",
+    "trOrderReceiptClause10": "Si la falla de un producto cubierto por la garantía no puede ser rectificada dentro de 30 días hábiles, se proporcionará un producto similar al consumidor hasta que se complete la reparación de la herramienta original.",
     "trCostEstimateTitle": "Notas Importantes",
-    "trCostEstimateTcLabel": "T&C de ASC",
     "trCostEstimateDisclaimerLabel": "Descargo de responsabilidad",
     "trCostEstimateDisclaimerPara1": "La información de precios e impuestos proporcionada en este presupuesto es solo para fines de referencia. Los montos finales, incluidos los impuestos aplicables, se basarán en la factura real emitida en el momento de la liquidación.",
     "trCostEstimateDisclaimerPara2": "Los cálculos proporcionados son solo estimaciones. Si, tras la inspección del producto y el proceso de reparación, se determina que se requieren costos adicionales, se informará al cliente y se obtendrá su aprobación.",
@@ -1162,6 +1165,11 @@
     "errorDiagnosticProServiceItemsNotEligibleForValidation": "La fecha de compra es obligatoria para determinar la elegibilidad para el servicio PRO. Por favor, proporcione la fecha de compra para continuar.",
     "errorDiagnosticCannotDeleteApprovedChargeableItem": "No se permite eliminar un artículo cobrable ya aprobado",
     "errorErpValidationMisingPricePartNumbers": "El precio no está disponible",
-    "sparePartNumberNotFound": "Part number '{{id}}' not found."
+    "sparePartNumberNotFound": "Número de parte '{{id}}' no encontrado.",
+    "previousMonth": "Mes anterior",
+    "nextMonth": "Próximo mes",
+    "TOOL": "Tool",
+    "SPARE_PART": "Spare Part",
+    "ACCESSORY": "Accessory"
   }
 }

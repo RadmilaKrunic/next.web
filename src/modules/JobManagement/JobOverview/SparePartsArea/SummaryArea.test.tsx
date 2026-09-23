@@ -135,7 +135,6 @@ const allFields = [
 
 function renderSummary(values?: Record<string, unknown>) {
   const setFieldValue = vi.fn();
-  const activeValueChangeFieldRef = { current: null };
   const mergedValues = {
     summaryType: "chargeable",
     discountBase: "GROSS_PRICE",
@@ -165,14 +164,13 @@ function renderSummary(values?: Record<string, unknown>) {
           mandatoryFields: null,
           setMandatoryFields: vi.fn(),
           actionCallbacks: {},
-          activeValueChangeFieldRef,
         },
       },
       React.createElement(SummaryArea, { area }),
     ),
   );
 
-  return { setFieldValue, values: mergedValues, activeValueChangeFieldRef, ...view };
+  return { setFieldValue, values: mergedValues,  ...view };
 }
 
 describe("SummaryArea", () => {

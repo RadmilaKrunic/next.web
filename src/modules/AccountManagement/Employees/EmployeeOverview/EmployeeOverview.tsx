@@ -83,7 +83,7 @@ function EmployeeOverview() {
     const formFieldValues: Record<string, unknown> = {
       firstName: employeeData.firstName,
       lastName: employeeData.lastName,
-      email: employeeData.email,
+      email: employeeData.email ?? "",
       phoneNumber: employeeData.phoneNumber,
       accountRoles: employeeData.accountRoles.map((role: any) => role.id),
       employeeCode: employeeData.employeeCode,

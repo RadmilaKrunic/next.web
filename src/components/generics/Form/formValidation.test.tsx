@@ -255,6 +255,31 @@ describe("formValidation", () => {
       expect(errors.email).toBe("Email is required");
     });
 
+    it("adds error for empty mandatory multi-select field", () => {
+      const fields = [
+        createMockField({
+          name: "accountRoles",
+          label: "role",
+          type: "dropdown",
+          multiSelect: true,
+          fieldMapping: { originalName: "accountRoles" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      const mandatoryFields = ["accountRoles"];
+      const values = { accountRoles: [] };
+
+      validateByAction({
+        errors,
+        mandatoryFields,
+        values,
+        fields,
+        t: mockT,
+      });
+
+      expect(errors.accountRoles).toBe("role is required");
+    });
+
     it("does not validate non-mandatory fields", () => {
       const fields = [
         createMockField({
@@ -309,7 +334,7 @@ describe("formValidation", () => {
 
     it("validates pattern with base64 encoded regex", () => {
       // Base64 encoded pattern for email: ^[^\s@]+@[^\s@]+\.[^\s@]+$
-      const emailPattern = btoa("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+      const emailPattern = btoa(String.raw`^[^\s@]+@[^\s@]+\.[^\s@]+$`);
       const fields = [
         createMockField({
           name: "email",

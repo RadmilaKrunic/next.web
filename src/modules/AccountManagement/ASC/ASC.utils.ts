@@ -11,6 +11,7 @@ export const mapGeneralInfo = (generalInfo: Record<string, any>) => {
   generalInfoData.gst = generalInfo.gst;
   generalInfoData.companyVATNumber = generalInfo.companyVATNumber;
   generalInfoData.isActive = generalInfo.isActive;
+  generalInfoData.preferredSelectedCountry = generalInfo.preferredSelectedCountry;
   generalInfoData.address = {
     street: generalInfo.streetName,
     houseNumber: generalInfo.houseNumber,

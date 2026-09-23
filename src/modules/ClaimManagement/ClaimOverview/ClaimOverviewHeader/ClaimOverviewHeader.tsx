@@ -2,11 +2,9 @@ import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { formatSubtext } from "components/ui/OverviewHeader/OverviewHeader.helpers";
 import { useQueryClient } from "@tanstack/react-query";
-import { CUSTOMER_TYPE_ICON_NAME } from "utils/customerTypeIcon";
 import { formatDateToDisplay } from "utils/dateFormatter";
-import { getCustomerDisplayName } from "utils/customerUtils";
+import { getCustomerDisplayName, CUSTOMER_TYPE_ICON_NAME, CustomerType } from "utils/customerUtils";
 import OverviewHeader from "components/ui/OverviewHeader/OverviewHeader";
-import { CustomerType } from "modules/JobManagement/JobList/JobListTable/JobListColumns.config";
 import { ClaimItem } from "../Claims.types";
 
 function ClaimOverviewHeader() {

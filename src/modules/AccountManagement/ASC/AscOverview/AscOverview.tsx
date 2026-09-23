@@ -172,6 +172,7 @@ function AscOverview() {
       accessoriesIncentive: asc.accessoriesIncentive,
       packagingCost: asc.packagingCost,
       defaultCountry: asc.defaultCountry,
+      preferredSelectedCountry: asc.preferredSelectedCountry,
       reimbursementConfig:
         asc.reimbursementConfig?.map((config) => {
           return {
@@ -274,6 +275,9 @@ function AscOverview() {
 
       if (updatedValues.reimbursementPeriodType === "CUSTOM") {
         updatedValues.reimbursementCreateOn = null;
+      }
+      if (updatedValues.reimbursementPeriodType !== "CUSTOM") {
+        updatedValues.reimbursementCreateOn = updatedValues.reimbursementCreateOn || "1";
       }
 
       delete updatedValues["state"];

@@ -245,5 +245,4 @@ export interface JobDiagnostic {
     totalAmount: number;
     discountAmount: number;
   };
-  errorMessages?: Record<string, string>[];
 }

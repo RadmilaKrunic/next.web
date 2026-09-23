@@ -32,6 +32,7 @@ import {
   postCustomerAnswer,
   updateJobAttachments,
   postPurchaseDate,
+  postRecalculatePrices,
 } from "./action";
 import { SpecialMaterial } from "modules/JobManagement/JobOverview/AddSpecialMaterialModal/SpecialMeterialItem/SpecialMaterialItem";
 
@@ -227,6 +228,15 @@ export const usePostValidateAndSave = (
   return useMutation({
     mutationFn: ({ jobId, payload }: { jobId: string; payload: Record<string, unknown> }) =>
       postValidateAndSave(jobId, payload),
+    ...options,
+  });
+};
+
+export const usePostRecalculatePrices = (
+  options?: UseMutationOptions<ValidateAndSaveResponse, Error, Record<string, unknown>>,
+) => {
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) => postRecalculatePrices(payload),
     ...options,
   });
 };

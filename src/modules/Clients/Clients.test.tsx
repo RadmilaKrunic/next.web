@@ -10,15 +10,19 @@ vi.mock("../../hooks/useBreadcrumbs", () => ({
   useBreadcrumbs: vi.fn(),
 }));
 
+vi.mock("./ClientsList/ClientsList", () => ({
+  default: () => <h1>clients list</h1>,
+}));
+
 import Clients from "./Clients";
 
 describe("Clients", () => {
-  it("renders heading", () => {
+  it("renders ClientsList", () => {
     render(
       <MemoryRouter>
         <Clients />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("heading")).toBeInTheDocument();
+    expect(screen.getByRole("heading")).toBeInTheDocument(); // iz mocka
   });
 });
