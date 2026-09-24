@@ -50,6 +50,43 @@ describe("useMultipleArea", () => {
     expect(result.current.rows[0].name).toBe("tab_row#0");
   });
 
+  it("does not re-run when only buildRowValues gets a new closure — regression test for an infinite render loop", () => {
+    // Every real caller passes an inline buildRowValues, recreated on every
+    // render. If the effect depended on it directly, its own setInitialFormValues
+    // call would re-render the caller, produce a new closure, and re-trigger the
+    // effect forever ("Maximum update depth exceeded").
+    const setInitialFormValues = vi.fn();
+    const setTabs = vi.fn();
+    const setAllFields = vi.fn();
+    const list = [{ partNumber: "A" }];
+
+    const { rerender } = renderHook(
+      ({ buildRowValues }) =>
+        useMultipleArea({
+          list,
+          areaName: "row",
+          sectionName: "tab",
+          tabs: makeTabs(1),
+          setTabs,
+          setAllFields,
+          setInitialFormValues,
+          skipFormResetRef: { current: false },
+          buildRowValues,
+        }),
+      { initialProps: { buildRowValues: () => ({ "tab_row#0_partNumber": "A" }) } },
+    );
+
+    expect(setInitialFormValues).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      rerender({ buildRowValues: () => ({ "tab_row#0_partNumber": "B" }) });
+    });
+
+    expect(setInitialFormValues).toHaveBeenCalledTimes(1);
+    expect(setTabs).not.toHaveBeenCalled();
+    expect(setAllFields).not.toHaveBeenCalled();
+  });
+
   it("grows: clones the template for each new list item and appends fields/areas", () => {
     const setTabs = vi.fn();
     const setAllFields = vi.fn();
