@@ -13,11 +13,15 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("components/generics/utils", () => ({
-  setDuplicatedArea: vi.fn((area) => area),
-  mapFieldToFieldMapping: vi.fn((field) => field),
-  syncFieldsToTabs: vi.fn((tabs) => tabs),
-}));
+vi.mock("components/generics/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("components/generics/utils")>();
+  return {
+    ...actual,
+    setDuplicatedArea: vi.fn((area) => area),
+    mapFieldToFieldMapping: vi.fn((field) => field),
+    syncFieldsToTabs: vi.fn((tabs) => tabs),
+  };
+});
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useBareSalesRelation } from "api/services/bareSalesRelation/hooks";
@@ -175,7 +179,12 @@ const archivedArea = makeArea("diagnosticData_archivedSpareParts#0", archivedFie
 interface HookOverride {
   permissions?: string[];
   allowedPositions?: AllowedPosition[];
-  diagnosticData?: { jobId?: string; materials?: unknown[]; archivedMaterials?: unknown[] };
+  diagnosticData?: {
+    jobId?: string;
+    materials?: unknown[];
+    archivedMaterials?: unknown[];
+    priceSummaryDetailed?: unknown;
+  };
   allFields?: Field[];
   tabs?: Section[];
   formValues?: Record<string, unknown>;
@@ -974,5 +983,114 @@ describe("useDiagnosticsManager hook behavior", () => {
     const { result } = renderHook(() => useDiagnosticsManager(props));
 
     expect(result.current.canArchiveOnDelete).toBe(false);
+  });
+
+  // ── priceSummaryDetailed.byJobType → diagnosticsSummaryDetailed rows ───────
+  describe("priceSummaryDetailed sync", () => {
+    const summaryField = makeField(
+      "diagnosticData_diagnosticsSummaryDetailed#0_summarySuggestedNetPrice",
+      "diagnosticSummarySuggestedNetPrice",
+      {
+        fieldMapping: {
+          originalName: "summarySuggestedNetPrice",
+          prefixes: ["diagnosticsSummaryDetailed#"],
+          parentMap: ["diagnostic", "priceSummaryDetailed", "byJobType#", "total"],
+          map: "suggestedNetPrice",
+          nameStartsWith: "diagnosticData_diagnosticsSummaryDetailed#0_",
+        },
+      },
+    );
+    const summaryArea = makeArea(
+      "diagnosticData_diagnosticsSummaryDetailed#0",
+      [summaryField],
+      0,
+    );
+
+    it("maps byJobType onto the row via attributeMapping, not the materials subtype dictionary", async () => {
+      const { props, mocks } = createHookProps({
+        tabs: [makeDiagnosticsTab([diagnosticsArea, archivedArea, summaryArea])],
+        allFields: [...diagnosticFields, ...archivedFields, summaryField],
+        diagnosticData: {
+          priceSummaryDetailed: {
+            total: { suggestedNetPrice: 0, discount: 0, netAmount: 0, taxAmount: 0, grossAmount: 0, totalAmount: 0, discountAmount: 0 },
+            byJobType: [
+              {
+                jobType: "CHARGEABLE",
+                total: {
+                  suggestedNetPrice: 123.45,
+                  discount: 0,
+                  netAmount: 100,
+                  taxAmount: 23.45,
+                  grossAmount: 123.45,
+                  totalAmount: 123.45,
+                  discountAmount: 0,
+                },
+                materialRelated: {
+                  suggestedNetPrice: 0,
+                  discount: 0,
+                  netAmount: 0,
+                  taxAmount: 0,
+                  grossAmount: 0,
+                  totalAmount: 0,
+                  discountAmount: 0,
+                },
+                serviceRelated: {
+                  suggestedNetPrice: 0,
+                  discount: 0,
+                  netAmount: 0,
+                  taxAmount: 0,
+                  grossAmount: 0,
+                  totalAmount: 0,
+                  discountAmount: 0,
+                },
+              },
+            ],
+          },
+        },
+      });
+
+      renderHook(() => useDiagnosticsManager(props));
+
+      await waitFor(() => {
+        const calls = mocks.setInitialFormValues.mock.calls as Array<
+          [(prev: Record<string, unknown>) => Record<string, unknown>]
+        >;
+        const mapped = calls
+          .map(([updater]) => updater({}))
+          .find(
+            (values) =>
+              values["diagnosticData_diagnosticsSummaryDetailed#0_summarySuggestedNetPrice"] !==
+              undefined,
+          );
+        expect(mapped?.["diagnosticData_diagnosticsSummaryDetailed#0_summarySuggestedNetPrice"]).toBe(
+          123.45,
+        );
+      });
+    });
+
+    it("defaults the row's fields to empty when the API has not returned a priceSummaryDetailed yet", async () => {
+      const { props, mocks } = createHookProps({
+        tabs: [makeDiagnosticsTab([diagnosticsArea, archivedArea, summaryArea])],
+        allFields: [...diagnosticFields, ...archivedFields, summaryField],
+        diagnosticData: { jobId: "J-1" },
+      });
+
+      renderHook(() => useDiagnosticsManager(props));
+
+      await waitFor(() => {
+        const calls = mocks.setInitialFormValues.mock.calls as Array<
+          [(prev: Record<string, unknown>) => Record<string, unknown>]
+        >;
+        const mapped = calls
+          .map(([updater]) => updater({}))
+          .find(
+            (values) =>
+              "diagnosticData_diagnosticsSummaryDetailed#0_summarySuggestedNetPrice" in values,
+          );
+        expect(mapped?.["diagnosticData_diagnosticsSummaryDetailed#0_summarySuggestedNetPrice"]).toBe(
+          "",
+        );
+      });
+    });
   });
 });

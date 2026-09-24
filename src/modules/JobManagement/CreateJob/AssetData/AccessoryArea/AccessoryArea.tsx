@@ -6,6 +6,7 @@ import { useContext, useEffect, useRef, type Dispatch, type SetStateAction } fro
 import { CreateJobContext, type Accessory } from "../../CreateJob.context";
 import GenericField from "../../../../../components/generics/Field/GenericField";
 import { useFormikContext } from "formik";
+import { reindexFieldSet } from "../../../../../components/generics/multipleArea";
 
 const ASSET_PREFIX = "assetData#";
 const ACCESSORY_PREFIX = "accessory#";
@@ -113,20 +114,20 @@ function AccessoryArea({ area, readOnly = false }: AccessoryAreaProps) {
     const updatedAssetsAccessories = accessories
       .filter((_, i) => i !== indexToRemove)
       .map((a) => {
-        if (a.accessoriesIndex > `${indexToRemove}`) {
-          const newAccessoryIndex = Number.parseInt(a.accessoriesIndex, 10) - 1;
-          a.fields.forEach((field) => {
-            const oldValue = formikContext.values[field.name];
-            delete formikContext.values[field.name];
-            field.name = field.name.replace(
-              `accessory#${a.accessoriesIndex}`,
-              `accessory#${newAccessoryIndex}`,
-            );
-            formikContext.values[field.name] = oldValue;
-          });
-          a.accessoriesIndex = `${newAccessoryIndex}`;
-        }
-        return a;
+        const currentIndex = Number.parseInt(a.accessoriesIndex, 10);
+        if (currentIndex <= indexToRemove) return a;
+
+        const newAccessoryIndex = currentIndex - 1;
+        const oldFieldNames = a.fields.map((field) => field.name);
+        const fields = reindexFieldSet(a.fields, "accessory#", currentIndex, newAccessoryIndex);
+        fields.forEach((field, i) => {
+          const oldName = oldFieldNames[i];
+          if (oldName === field.name) return;
+          const oldValue = formikContext.values[oldName];
+          delete formikContext.values[oldName];
+          formikContext.values[field.name] = oldValue;
+        });
+        return { ...a, accessoriesIndex: `${newAccessoryIndex}`, fields };
       });
 
     setAssetsAccessories([
@@ -139,23 +140,21 @@ function AccessoryArea({ area, readOnly = false }: AccessoryAreaProps) {
     }
   };
 
-  const duplicateAccessory = (index: number) => {
+  const duplicateAccessory = (index: number): Accessory => {
     const acc = assetsAccessories.find((a) => a.assetIndex === assetsIndex);
 
     if (!acc) return { assetIndex: assetsIndex, accessoriesIndex: `${index}`, fields: [] };
 
-    const newFields = acc.fields.map((field) => {
-      const newField = { ...field };
-      newField.name = newField.name.replace(
-        `accessory#${acc.accessoriesIndex}`,
-        `accessory#${index}`,
-      );
-      return newField;
-    });
+    const fields = reindexFieldSet(
+      acc.fields,
+      "accessory#",
+      Number.parseInt(acc.accessoriesIndex, 10),
+      index,
+    );
     return {
       assetIndex: assetsIndex,
       accessoriesIndex: `${index}`,
-      fields: newFields,
+      fields,
     };
   };
   const accessoriesForDisplay = assetsAccessories.filter((a) => a.assetIndex === assetsIndex);

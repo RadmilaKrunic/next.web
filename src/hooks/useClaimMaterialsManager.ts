@@ -9,45 +9,21 @@ import type {
 import type { GenericOptionProps } from "components/generics/Field/GenericField.types";
 import Field from "components/generics/Field/GenericField.types";
 import Section from "components/generics/Section/GenericSection.types";
-import Area from "components/generics/Area/GenericArea.types";
-import { setDuplicatedArea, mapFieldToFieldMapping } from "components/generics/utils";
+import {
+  removeMultipleAreaRow,
+  replaceMultipleAreaRows,
+  applyRowChangesToValues,
+} from "components/generics/multipleArea";
 import {
   type MaterialItem,
   type ImportedMaterial,
   buildRowValues,
 } from "hooks/useDiagnosticsManager";
+import { useMultipleArea } from "hooks/useMultipleArea";
 import type { Material } from "modules/ClaimManagement/ClaimOverview/Claims.types";
 //import { calculatePrices } from "utils/priceCalculator";
 import { PERMISSIONS } from "utils/Permissions";
 import type { HeaderUserData } from "api/services/header/action";
-
-type AreaFields = {
-  area: Area;
-  fields: Field[];
-};
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function computeClaimsUpdatedFields(
-  needed: number,
-  currentFields: Field[],
-  extraFields: Field[],
-  removeFieldNames: Set<string>,
-): Field[] {
-  if (needed > 0) return [...currentFields, ...extraFields];
-  if (needed < 0) return currentFields.filter((f) => !removeFieldNames.has(f.name));
-  return currentFields;
-}
-
-function computeClaimsFinalAreas(
-  needed: number,
-  sparePartsAreas: Area[],
-  newAreas: Area[],
-  removeNames: Set<string>,
-): Area[] {
-  if (needed > 0) return [...sparePartsAreas, ...newAreas];
-  if (needed < 0) return sparePartsAreas.filter((a) => !removeNames.has(a.name));
-  return sparePartsAreas;
-}
 
 const claimMaterialToMaterialItem = (m: Material): MaterialItem => {
   const price = m.price ?? ({} as Material["price"]);
@@ -275,11 +251,9 @@ export const useClaimMaterialsManager = ({
   materialsRef.current = materials;
   const archivedMaterialsRef = useRef(archivedMaterials);
   archivedMaterialsRef.current = archivedMaterials;
-  const archivedTemplateRef = useRef<Area | null>(null);
   const discountBaseValueRef = useRef(discountBaseValue);
   discountBaseValueRef.current = discountBaseValue;
   const forceRebuildRef = useRef(false);
-  const archivedForceRebuildRef = useRef(false);
   // Tracks the last claimMaterials reference we synced into `materials` state.
   // Prevents Effect 1 from double-running when Effect 2 causes a re-render
   // (same claimMaterials reference → skip) while still allowing re-runs when
@@ -298,14 +272,12 @@ export const useClaimMaterialsManager = ({
     setMaterials([]);
     setArchivedMaterials([]);
     forceRebuildRef.current = false;
-    archivedForceRebuildRef.current = false;
   }, [claimId]);
 
   // ── Sync archived materials from API response ──────────────────────────
   useEffect(() => {
     if (!claimArchivedMaterials || lastSyncedArchivedRef.current === claimArchivedMaterials) return;
     lastSyncedArchivedRef.current = claimArchivedMaterials;
-    archivedForceRebuildRef.current = true;
     setArchivedMaterials(claimArchivedMaterials);
   }, [claimArchivedMaterials]);
 
@@ -327,253 +299,68 @@ export const useClaimMaterialsManager = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claimMaterials]);
 
-  // ── Effect 2: materials[] → areas + allFields + initialFormValues ──────
-  useEffect(() => {
-    if (materials.length === 0) return;
-
-    // Use a fresh snapshot from the refs to avoid stale closures racing
-    // with useDiagnosticsManager which shares the same setTabs / setAllFields.
-    const currentTabs = tabsRef.current;
-    const currentFields = allFieldsRef.current ?? [];
-
-    const claimsTab = currentTabs.find((t) => t.name === "claims");
-    if (!claimsTab) return;
-
-    const sparePartsAreas = claimsTab.areas.filter(
-      (a) =>
-        a.isMultiple &&
-        a.name.includes("claimSpareParts") &&
-        !a.name.includes("claimArchivedSpareParts"),
-    );
-    if (sparePartsAreas.length === 0) return;
-
-    const templateArea = sparePartsAreas[0];
-    const currentCount = sparePartsAreas.length;
-    const targetCount = materials.length;
-    const needed = targetCount - currentCount;
-
-    // Build the new areas and extra fields outside of state setters
-    let extraFields: Field[] = [];
-    const newAreas: Area[] = [];
-    let removeNames = new Set<string>();
-    let removeFieldNames = new Set<string>();
-
-    if (needed > 0) {
-      const maxIndex = sparePartsAreas.reduce((max, a: Area) => Math.max(max, a.index ?? 0), 0);
-      for (let i = 0; i < needed; i++) {
-        const cloned = structuredClone(templateArea);
-        cloned.label = "";
-        const area = setDuplicatedArea(cloned, maxIndex + 1 + i, claimsTab.name);
-        const areaFields = area.fields.map((f) => mapFieldToFieldMapping(f));
-        newAreas.push(area);
-        extraFields = [...extraFields, ...areaFields];
-      }
-    } else if (needed < 0) {
-      const toRemove = sparePartsAreas.slice(targetCount);
-      removeNames = new Set(toRemove.map((a: Area) => a.name));
-      removeFieldNames = new Set(toRemove.flatMap((a: Area) => a.fields.map((f) => f.name)));
-    }
-
-    // Compute the final set of areas/fields for building row values
-    const allUpdatedFields = computeClaimsUpdatedFields(
-      needed,
-      currentFields,
-      extraFields,
-      removeFieldNames,
-    );
-    const finalClaimsAreas = computeClaimsFinalAreas(
-      needed,
-      sparePartsAreas,
-      newAreas,
-      removeNames,
-    );
-
-    let rowValues: Record<string, unknown> = {};
-    materials.forEach((item, idx) => {
-      const area = finalClaimsAreas[idx];
-      if (!area) return;
-      const areaFieldNames = new Set(area.fields.map((af) => af.name));
-      const areaFields = allUpdatedFields.filter((f) => areaFieldNames.has(f.name));
-      if (idx < currentCount && !forceRebuildRef.current) {
-        const existingValues = Object.fromEntries(
-          areaFields
-            .filter((f) => f.name in formValuesRef.current)
-            .map((f) => [f.name, formValuesRef.current[f.name]]),
-        );
-        rowValues = { ...rowValues, ...existingValues };
-      } else {
-        rowValues = { ...rowValues, ...buildRowValues(areaFields, item) };
-      }
-    });
-
-    const keepClaimArea = (a: Area) => !removeNames.has(a.name);
-    if (needed !== 0 || forceRebuildRef.current) {
-      skipFormResetRef.current = true;
-      // Functional updaters so we compose correctly with useDiagnosticsManager
-      // which shares the same setAllFields / setTabs.
-      if (needed > 0) {
-        setAllFields((prev) => [...(prev ?? []), ...extraFields]);
-        setTabs((prev) =>
-          prev.map((tab) =>
-            tab.name === "claims" ? { ...tab, areas: [...tab.areas, ...newAreas] } : tab,
-          ),
-        );
-      } else {
-        setAllFields((prev) => (prev ?? []).filter((f) => !removeFieldNames.has(f.name)));
-        setTabs((prev) =>
-          prev.map((tab) =>
-            tab.name === "claims" ? { ...tab, areas: tab.areas.filter(keepClaimArea) } : tab,
-          ),
-        );
-      }
-    }
-
-    const rowKeys = new Set(Object.keys(rowValues));
-    // Signal price-calculation hooks to skip recalculation while we write
-    // server-returned values into the form. Without this guard the hooks fire
-    // immediately on the Formik reinitialize and overwrite the BE values with
-    // locally-computed prices (visible as "prices show correctly only on 2nd validate").
-    isResyncingRef.current = true;
-    if (forceRebuildRef.current) {
-      setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
-    } else {
-      setInitialFormValues((prev) => {
-        const withoutOldRows = Object.fromEntries(
-          Object.entries(prev).filter(
-            ([k]) => !k.startsWith("claims_claimSpareParts") || rowKeys.has(k),
-          ),
-        );
-        return { ...withoutOldRows, ...rowValues };
-      });
-    }
-    forceRebuildRef.current = false;
-    // Release the resyncing guard after React has flushed all effects that
-    // react to the new initialFormValues (price-calculation useEffects).
-    setTimeout(() => {
-      isResyncingRef.current = false;
-    }, 50);
-  }, [
-    materials,
-    setAllFields,
+  // ── Materials[] → claimSpareParts rows ──────────────────────────────────
+  useMultipleArea({
+    list: materials,
+    areaName: "claimSpareParts",
+    sectionName: "claims",
+    tabs,
     setTabs,
+    setAllFields,
     setInitialFormValues,
-    formValuesRef,
     skipFormResetRef,
-    isResyncingRef,
-  ]);
+    buildRowValues: ({ list, rows, previousCount }) => {
+      // Signal price-calculation hooks to skip recalculation while we write
+      // server-returned values into the form. Without this guard the hooks fire
+      // immediately on the Formik reinitialize and overwrite the BE values with
+      // locally-computed prices (visible as "prices show correctly only on 2nd validate").
+      isResyncingRef.current = true;
 
-  const populateNeeded = (
-    needed: number,
-    templateArea: Area,
-    baseIndex: number,
-    tabName: string,
-  ): AreaFields[] => {
-    const temp: AreaFields[] = [];
-    for (let i = 0; i < needed; i++) {
-      const cloned = structuredClone(templateArea);
-      if (baseIndex + 1 + i !== 0) cloned.label = "";
-      const area = setDuplicatedArea(cloned, baseIndex + 1 + i, tabName);
-      const areaFields = area.fields.map((f) => mapFieldToFieldMapping(f));
-      temp.push({ area, fields: areaFields });
-    }
-    return temp;
-  };
-  const reorderAreas = (tabs: Section[], newAreas: Area[]): Section[] => {
-    return tabs.map((tab: Section) => {
-      if (tab.name !== "claims") return tab;
-      const insertAt =
-        tab.areas.reduce(
-          (last, a, i) => (a.name.includes("claimArchivedSpareParts") ? i : last),
-          -1,
-        ) + 1;
-      const updated = [...tab.areas.slice(0, insertAt), ...newAreas, ...tab.areas.slice(insertAt)];
-      return { ...tab, areas: updated };
-    });
-  };
-  const removeArchivedAreaNames = (tabs: Section[], removeArchivedNames: Set<string>) => {
-    return tabs.map((tab) =>
-      tab.name === "claims"
-        ? { ...tab, areas: tab.areas.filter((a) => !removeArchivedNames.has(a.name)) }
-        : tab,
-    );
-  };
+      const rowValues = rows.reduce<Record<string, unknown>>((acc, row, idx) => {
+        const item = list[idx];
+        if (!item) return acc;
+        if (idx < previousCount && !forceRebuildRef.current) {
+          const existingValues = Object.fromEntries(
+            row.fields
+              .filter((f) => f.name in formValuesRef.current)
+              .map((f) => [f.name, formValuesRef.current[f.name]]),
+          );
+          return { ...acc, ...existingValues };
+        }
+        return { ...acc, ...buildRowValues(row.fields, item) };
+      }, {});
 
-  // ── Effect 3b: archivedMaterials[] → claimArchivedSpareParts areas ─────
-  useEffect(() => {
-    const currentTabs = tabsRef.current;
-    const currentFields = allFieldsRef.current ?? [];
+      forceRebuildRef.current = false;
+      // Release the resyncing guard after React has flushed all effects that
+      // react to the new initialFormValues (price-calculation useEffects).
+      setTimeout(() => {
+        isResyncingRef.current = false;
+      }, 50);
 
-    const claimsTab = currentTabs.find((t) => t.name === "claims");
-    if (!claimsTab) return;
+      return rowValues;
+    },
+  });
 
-    const archivedAreas = claimsTab.areas.filter(
-      (a) => a.isMultiple && a.name.includes("claimArchivedSpareParts"),
-    );
-    // Cache template before any guard so we can recreate areas after
-    // the last archived row is restored and removes the template from tabs.
-    if (archivedAreas.length > 0) {
-      archivedTemplateRef.current ??= structuredClone(archivedAreas[0]);
-    }
-    const templateArea = archivedAreas[0] ?? archivedTemplateRef.current;
-    if (!templateArea) return;
-
-    const targetCount = archivedMaterials.length;
-    const currentCount = archivedAreas.length;
-    const needed = targetCount - currentCount;
-    if (needed === 0 && !archivedForceRebuildRef.current) return;
-
-    let newAreasAndFields: AreaFields[] = [];
-    let removeArchivedNames = new Set<string>();
-    let removeArchivedFieldNames = new Set<string>();
-
-    if (needed > 0) {
-      const baseIndex =
-        archivedAreas.length === 0
-          ? -1
-          : archivedAreas.reduce((max, a) => Math.max(max, a.index ?? 0), 0);
-      newAreasAndFields = populateNeeded(needed, templateArea, baseIndex, claimsTab.name);
-    } else if (needed < 0) {
-      const toRemove = archivedAreas.slice(targetCount);
-      removeArchivedNames = new Set(toRemove.map((a) => a.name));
-      removeArchivedFieldNames = new Set(toRemove.flatMap((a) => a.fields.map((f) => f.name)));
-    }
-
-    const visibleArchivedAreas =
-      needed >= 0
-        ? [...archivedAreas, ...newAreasAndFields.map((x) => x.area)]
-        : archivedAreas.filter((a) => !removeArchivedNames.has(a.name));
-    const newFieldsToAdd = newAreasAndFields.flatMap((x) => x.fields);
-
-    const existingArchivedFields = currentFields.filter(
-      (f) => f.name.includes("claimArchivedSpareParts") && !removeArchivedFieldNames.has(f.name),
-    );
-    const allArchivedFields = [...existingArchivedFields, ...newFieldsToAdd];
-
-    let rowValues: Record<string, unknown> = {};
-    archivedMaterials.forEach((material, idx) => {
-      const item = claimMaterialToMaterialItem(material);
-      const area = visibleArchivedAreas[idx];
-      if (!area) return;
-      const areaFieldNameSet = new Set(area.fields.map((af) => af.name));
-      const areaFields = allArchivedFields.filter((f) => areaFieldNameSet.has(f.name));
-      rowValues = { ...rowValues, ...buildRowValues(areaFields, item) };
-    });
-
-    if (needed !== 0 || archivedForceRebuildRef.current) {
-      skipFormResetRef.current = true;
-      if (needed > 0) {
-        setAllFields((prev) => [...(prev ?? []), ...newFieldsToAdd]);
-        const newAreas = newAreasAndFields.map((x) => x.area);
-        setTabs((prev) => reorderAreas(prev, newAreas));
-      } else if (needed < 0) {
-        setAllFields((prev) => (prev ?? []).filter((f) => !removeArchivedFieldNames.has(f.name)));
-        setTabs((prev) => removeArchivedAreaNames(prev, removeArchivedNames));
-      }
-    }
-
-    setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
-    archivedForceRebuildRef.current = false;
-  }, [archivedMaterials, setAllFields, setTabs, setInitialFormValues, skipFormResetRef]);
+  // ── ArchivedMaterials[] → claimArchivedSpareParts rows ──────────────────
+  // Unlike active rows, the archived section fully disappears (minRows: 0)
+  // until something has actually been archived.
+  useMultipleArea({
+    list: archivedMaterials,
+    areaName: "claimArchivedSpareParts",
+    sectionName: "claims",
+    tabs,
+    setTabs,
+    setAllFields,
+    setInitialFormValues,
+    skipFormResetRef,
+    minRows: 0,
+    buildRowValues: ({ list, rows }) =>
+      rows.reduce<Record<string, unknown>>((acc, row, idx) => {
+        const material = list[idx];
+        if (!material) return acc;
+        return { ...acc, ...buildRowValues(row.fields, claimMaterialToMaterialItem(material)) };
+      }, {}),
+  });
 
   // ── onAddRow ───────────────────────────────────────────────────────────
   const onAddRow = useCallback(
@@ -633,7 +420,7 @@ export const useClaimMaterialsManager = ({
   // ── onDeleteRow ────────────────────────────────────────────────────────
   const onDeleteRow = useCallback(
     (areaName: string) => {
-      let currentTabs = tabsRef.current;
+      const currentTabs = tabsRef.current;
       const currentFields = allFieldsRef.current ?? [];
 
       const claimsTab = currentTabs.find((t) => t.name === "claims");
@@ -648,29 +435,42 @@ export const useClaimMaterialsManager = ({
       const areaIndex = sparePartsAreas.findIndex((a) => a.name === areaName);
       if (areaIndex === -1) return;
 
-      const areaToRemove = sparePartsAreas[areaIndex];
-      const fieldNamesToRemove = new Set(areaToRemove.fields.map((f) => f.name));
-
       // ── Archive the deleted material ───────────────────────────────────
       const materialItem = materialsRef.current[areaIndex];
       if (materialItem) {
-        archivedForceRebuildRef.current = true;
         setArchivedMaterials((prev) => [...prev, materialItemToMaterial(materialItem)]);
       }
 
-      const updatedValues = { ...formValuesRef.current };
-      fieldNamesToRemove.forEach((name) => {
-        delete updatedValues[name];
-      });
-      currentTabs = currentTabs.map((tab) =>
-        tab.name === "claims"
-          ? { ...tab, areas: tab.areas.filter((a) => a.name !== areaName) }
-          : tab,
+      // Remove the row and re-index the rest so field names — and the array
+      // indices mapValuesToAPI derives from them — stay contiguous.
+      const { areas, removedFieldNames, renamedFields } = removeMultipleAreaRow(
+        sparePartsAreas,
+        areaName,
+        claimsTab.name,
       );
+      const oldFamilyFieldNames = new Set(
+        sparePartsAreas.flatMap((a) => a.fields.map((f) => f.name)),
+      );
+      const remainingFields = [
+        ...currentFields.filter((f) => !oldFamilyFieldNames.has(f.name)),
+        ...areas.flatMap((a) => a.fields),
+      ];
+      const updatedValues = applyRowChangesToValues(
+        formValuesRef.current,
+        removedFieldNames,
+        renamedFields,
+      );
+
       skipFormResetRef.current = true;
       setInitialFormValues(updatedValues);
-      setAllFields(currentFields.filter((f) => !fieldNamesToRemove.has(f.name)));
-      setTabs(currentTabs);
+      setAllFields(remainingFields);
+      setTabs(
+        currentTabs.map((tab) =>
+          tab.name === "claims"
+            ? { ...tab, areas: replaceMultipleAreaRows(tab.areas, "claimSpareParts", areas) }
+            : tab,
+        ),
+      );
       setMaterials((prev) => normalizeMaterialOrders(prev.filter((_, i) => i !== areaIndex)));
       setArePricesValidated(false);
     },
@@ -770,7 +570,6 @@ export const useClaimMaterialsManager = ({
       const restoredItem = claimMaterialToMaterialItem(materialToRestore);
       forceRebuildRef.current = true;
       setMaterials((prev) => [...prev, restoredItem]);
-      archivedForceRebuildRef.current = true;
       setArchivedMaterials((prev) => prev.filter((_, i) => i !== areaIndex));
       setArePricesValidated(false);
     },
@@ -789,7 +588,6 @@ export const useClaimMaterialsManager = ({
     const areaIndex = archivedAreas.findIndex((a) => a.name === areaName);
     if (areaIndex === -1) return;
 
-    archivedForceRebuildRef.current = true;
     setArchivedMaterials((prev) => prev.filter((_, i) => i !== areaIndex));
   }, []);
 
