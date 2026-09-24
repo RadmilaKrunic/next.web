@@ -48,6 +48,15 @@ export const getCustomArea = (area: Area) => {
     return <ClaimSummaryArea area={area} />;
   }
 
+  // Checked before the "diagnosticsSummary" substring match below, which would
+  // otherwise also catch this and mount a second, unrelated SummaryArea per
+  // byJobType row — SummaryArea reads only diagnosticsSpareParts/claimSpareParts
+  // fields, never this area's own fields, so there's nothing for it to render
+  // here. Hidden until a dedicated component consumes priceSummaryDetailed.byJobType.
+  if (area.name.includes("diagnosticsSummaryDetailed")) {
+    return <></>;
+  }
+
   if (area.name.includes("diagnosticsSummary")) {
     return <SummaryArea area={area} />;
   }

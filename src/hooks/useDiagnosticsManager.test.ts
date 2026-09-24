@@ -1068,7 +1068,7 @@ describe("useDiagnosticsManager hook behavior", () => {
       });
     });
 
-    it("defaults the row's fields to empty when the API has not returned a priceSummaryDetailed yet", async () => {
+    it("removes the #0 template row (no empty placeholder submitted) when the API has not returned a priceSummaryDetailed yet", async () => {
       const { props, mocks } = createHookProps({
         tabs: [makeDiagnosticsTab([diagnosticsArea, archivedArea, summaryArea])],
         allFields: [...diagnosticFields, ...archivedFields, summaryField],
@@ -1078,19 +1078,20 @@ describe("useDiagnosticsManager hook behavior", () => {
       renderHook(() => useDiagnosticsManager(props));
 
       await waitFor(() => {
-        const calls = mocks.setInitialFormValues.mock.calls as Array<
-          [(prev: Record<string, unknown>) => Record<string, unknown>]
-        >;
-        const mapped = calls
-          .map(([updater]) => updater({}))
-          .find(
-            (values) =>
-              "diagnosticData_diagnosticsSummaryDetailed#0_summarySuggestedNetPrice" in values,
-          );
-        expect(mapped?.["diagnosticData_diagnosticsSummaryDetailed#0_summarySuggestedNetPrice"]).toBe(
-          "",
-        );
+        const tabsUpdater = mocks.setTabs.mock.calls
+          .map(([updater]) => updater as (prev: Section[]) => Section[])
+          .find((updater) => {
+            const diagnosticTab = updater(props.tabs)[0];
+            return !diagnosticTab.areas.some((a) => a.name.includes("diagnosticsSummaryDetailed"));
+          });
+        expect(tabsUpdater).toBeDefined();
       });
+
+      const noRowValuesCall = mocks.setInitialFormValues.mock.calls.every(([updater]) => {
+        const updated = (updater as (prev: object) => Record<string, unknown>)({});
+        return !("diagnosticData_diagnosticsSummaryDetailed#0_summarySuggestedNetPrice" in updated);
+      });
+      expect(noRowValuesCall).toBe(true);
     });
   });
 });

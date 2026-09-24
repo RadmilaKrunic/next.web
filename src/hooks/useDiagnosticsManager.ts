@@ -1148,6 +1148,11 @@ export const useDiagnosticsManager = ({
     setAllFields,
     setInitialFormValues,
     skipFormResetRef,
+    // Unlike the row families above, there's no "always show one entry row" UX
+    // here (it's hidden — see CustomAreasMapper), and an empty placeholder row
+    // would submit an empty priceSummaryDetailed.byJobType[0] on every save.
+    // Only materialize rows once the API actually returns some.
+    minRows: 0,
     buildRowValues: ({ list, rows }) =>
       convertAPIDataToFormValues(
         { diagnostic: { priceSummaryDetailed: { byJobType: list } } },

@@ -95,6 +95,12 @@ describe("getCustomArea", () => {
     expect(result).not.toBeNull();
   });
 
+  it("does not mount SummaryArea a second time for diagnosticsSummaryDetailed rows", () => {
+    const result = getCustomArea(makeArea("diagnosticData_diagnosticsSummaryDetailed#0"));
+    expect(result).not.toBeNull(); // renders (an empty fragment), not the default null passthrough
+    expect(JSON.stringify(result)).not.toContain("summary-area");
+  });
+
   it("returns ArchivedSparePartsArea for archivedSpareParts", () => {
     const result = getCustomArea(makeArea("archivedSpareParts"));
     expect(result).not.toBeNull();
