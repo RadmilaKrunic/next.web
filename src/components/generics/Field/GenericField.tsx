@@ -293,6 +293,7 @@ function renderNumberField(ctx: FieldRenderCtx): ReactElement {
     effectiveIsDisabled,
     values,
     setFieldValue,
+    handleBlur,
   } = ctx;
   const { name } = field;
   return (
@@ -309,6 +310,9 @@ function renderNumberField(ctx: FieldRenderCtx): ReactElement {
         }}
         minValue={field.minValue || 0}
         prefix={field?.prefix || ""}
+        onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+          handleBlur(name, e.target.value);
+        }}
       />
       <FieldError name={name} />
     </span>

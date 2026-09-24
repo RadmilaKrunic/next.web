@@ -103,6 +103,15 @@ import {
 import { usePositionDropdownSync } from "hooks/usePositionDropdownSync";
 import { useSectionEditing } from "hooks/useSectionEditing";
 import { DiagnosticsContext } from "./DiagnosticsContext";
+// import {
+//   SUMMARY_TYPE_FILTER,
+//   aggregateRowPrices,
+//   distributeGrossToRows,
+//   distributeNetToRows,
+//   calculateSummaryTotalAmountDistribution,
+//   calculateSummaryNetAmountDistribution,
+//   roundToTwo,
+// } from "utils/priceCalculator";
 import { MessagesContext } from "../../../contexts/messagescontext";
 import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
@@ -127,6 +136,19 @@ interface WarrantyInfoContentData extends WarrantyInfoPayload {
   allowedWarrantyRepairCount: number;
   recommendation?: string;
 }
+
+// function patchPayloadFromCache(
+//   payload: Record<string, unknown>,
+//   cached: JobDiagnostic | undefined,
+// ): void {
+//   if (!cached) return;
+//   if (cached.status && (payload.status === null || payload.status === undefined)) {
+//     payload.status = cached.status;
+//   }
+//   if (cached.diagnosticId && !payload.diagnosticId) {
+//     payload.diagnosticId = cached.diagnosticId;
+//   }
+// }
 
 const buildJobOverviewWarrantyCheckPayload = (
   values: Record<string, unknown>,
@@ -792,6 +814,7 @@ export default function JobOverview() {
           ...validatedDiagnostic,
         });
       }
+      console.log("formValuesRef.current ", formValuesRef.current);
       if (data.errorMessages && data.errorMessages.length > 0) {
         const uniqueErrorKeys = [
           ...new Set(
@@ -866,7 +889,6 @@ export default function JobOverview() {
         //this should be removed
         resyncMaterialsFromAPI(false);
         setMessages((prev) => [...prev, { text: errorText, type: "error", duration: 5000 }]);
-        scrollToTop();
         return;
       }
 
@@ -887,7 +909,6 @@ export default function JobOverview() {
         },
       ]);
       setArePricesValidated(false);
-      scrollToTop();
     },
   });
   const [selectedTab, setSelectedTab] = useState<string>("");
@@ -1491,10 +1512,8 @@ export default function JobOverview() {
 
   const onRecalculatePrices = useCallback(
     (fieldName: string, value: unknown) => {
-      // Guard against overlapping requests: a recalculation already in flight owns the
-      // next resync — firing another one here would race it and flicker the UI.
-      if (recalculatePricesMutation.isPending) return;
       if (!allFieldsRef.current) return;
+      console.log("allFieldsRef.current:", allFieldsRef.current);
       const field = allFieldsRef.current?.find((f) => f.name === fieldName);
       if (!field) return;
       const isJobType = field.fieldMapping?.originalName === "type";
@@ -1507,8 +1526,10 @@ export default function JobOverview() {
             f.fieldMapping?.nameStartsWith === field.fieldMapping?.nameStartsWith &&
             f.subtype === "diagnosticMaterialId",
         )?.name ?? "";
+      console.log("Material ID Field:", matrerialIdFieldName);
       const materialId = formValuesRef.current?.[matrerialIdFieldName];
       const payload = buildDiagnosticPayload(formValuesRef.current, allFieldsRef.current);
+      console.log("Price changed for field:", field.name, "New value:", value);
       payload.countryCode = jobData?.order?.countryCode;
       payload.changes = [];
       if (!isJobType) {
@@ -1516,16 +1537,23 @@ export default function JobOverview() {
           {
             type: field.fieldMapping?.originalName?.replace("Material", ""),
             lineId: materialId,
-            value: isMaterial ? value : null,
-            scope: isMaterial
-              ? {
-                  positions: ["SP", "PN", "AC"],
-                  jobTypes: ["CHARGEABLE"],
-                }
-              : null,
+            // value: isMaterial ? value : null,
+            // scope: isMaterial
+            //   ? {
+            //       positions: ["SP", "PN", "AC"],
+            //       jobTypes: ["CHARGEABLE"],
+            //     }
+            //   : null,
           },
         ];
       }
+      // payload.changes.forEach((change, index) => {
+      //   console.log(`Change key: ${index}, value:`, change);
+      //   if(change) {
+      //     Object.keys(change).forEach((key) => {
+      //   }
+      // });
+      console.log("Updated payload:", payload);
       recalculatePricesMutation.mutate(payload);
     },
     [buildDiagnosticPayload, jobData?.order?.countryCode, recalculatePricesMutation],
@@ -1693,33 +1721,110 @@ export default function JobOverview() {
     ],
   );
 
+  // const onSummaryDiscountChange = useCallback(
+  //   (newDiscountValue: unknown) => {
+  //     if (discountBase !== "GROSS_PRICE") return;
+
+  //     const fields = allFieldsRef.current;
+  //     const setFV = setFieldValueRef.current;
+  //     if (!fields || !setFV) return;
+
+  //     const values = formValuesRef.current;
+  //     const grossField = fields.find((f) => f.subtype === "diagnosticSummaryGrossAmountMaterial");
+  //     const totalField = fields.find((f) => f.subtype === "diagnosticSummaryTotalAmountMaterial");
+  //     const typeField = fields.find((f) => f.subtype === "diagnosticSummaryType");
+
+  //     const discountPercent = Math.max(0, roundToTwo(Number(newDiscountValue) || 0));
+  //     const currentSummaryType = (values[typeField?.name ?? ""] as string) || "totalSummary";
+  //     const typeFilter =
+  //       SUMMARY_TYPE_FILTER[currentSummaryType] ?? SUMMARY_TYPE_FILTER.totalSummary;
+
+  //     const grossAmountSum = grossField ? Number(values[grossField.name]) || 0 : 0;
+  //     const newAmountToDistribute = roundToTwo(grossAmountSum * (1 - discountPercent / 100));
+
+  //     const activeDiscountMaterialField = fields.find(
+  //       (f) =>
+  //         f.subtype === "diagnosticSummaryDiscountMaterial" &&
+  //         f.dependentFields?.some((df) => df.fieldValue === "GROSS_PRICE"),
+  //     );
+  //     if (activeDiscountMaterialField) setFV(activeDiscountMaterialField.name, discountPercent);
+
+  //     isDistributingRef.current = true;
+  //     if (totalField) setFV(totalField.name, newAmountToDistribute);
+  //     distributeGrossToRows(discountPercent, typeFilter, values, setFV, fields);
+  //   },
+  //   [discountBase],
+  // );
+  // const onSummaryDiscountNetChange = useCallback(
+  //   (newDiscountValue: unknown) => {
+  //     if (discountBase !== "NET_PRICE") return;
+
+  //     const fields = allFieldsRef.current;
+  //     const setFV = setFieldValueRef.current;
+  //     if (!fields || !setFV) return;
+
+  //     const values = formValuesRef.current;
+
+  //     const suggestedNetField = fields.find(
+  //       (f) => f.subtype === "diagnosticSummarySuggestedNetPriceMaterial",
+  //     );
+  //     const netField = fields.find((f) => f.subtype === "diagnosticSummaryNetAmountMaterial");
+  //     const hiddenDiscountField = fields.find(
+  //       (f) => f.subtype === "diagnosticSummaryDiscountMaterialHidden",
+  //     );
+  //     const typeField = fields.find((f) => f.subtype === "diagnosticSummaryType");
+
+  //     const discountPercent = Math.max(0, Number(newDiscountValue) || 0);
+  //     const currentSummaryType = (values[typeField?.name ?? ""] as string) || "totalSummary";
+  //     const typeFilter =
+  //       SUMMARY_TYPE_FILTER[currentSummaryType] ?? SUMMARY_TYPE_FILTER.totalSummary;
+
+  //     const suggestedNetPriceSum = suggestedNetField
+  //       ? Number(values[suggestedNetField.name]) || 0
+  //       : 0;
+
+  //     const newAmountToDistribute = roundToTwo(suggestedNetPriceSum * (1 - discountPercent / 100));
+
+  //     const activeDiscountNetMaterialField = fields.find(
+  //       (f) =>
+  //         f.subtype === "diagnosticSummaryDiscountNetMaterial" &&
+  //         f.dependentFields?.some((df) => df.fieldValue === "NET_PRICE"),
+  //     );
+  //     if (activeDiscountNetMaterialField)
+  //       setFV(activeDiscountNetMaterialField.name, discountPercent);
+
+  //     isDistributingRef.current = true;
+  //     if (netField) setFV(netField.name, newAmountToDistribute);
+  //     if (hiddenDiscountField) setFV(hiddenDiscountField.name, discountPercent);
+  //     distributeNetToRows(discountPercent, typeFilter, values, setFV, fields);
+  //   },
+  //   [discountBase],
+  // );
+
   useEffect(() => {
     setFieldValueRef.current?.("discountBase", discountBase);
   }, [discountBase]);
 
-  // Releases the resync guard (isResyncingRef/skipFormResetRef) two frames after Formik
-  // applies fresh initial values, so dirty-marking and dependent effects don't stay
-  // permanently suppressed after a validate-and-save / recalculate-prices resync.
-  useEffect(() => {
-    if (!isResyncingRef.current && !skipFormResetRef.current) return;
-    if (clearResyncRafRef.current !== null) {
-      cancelAnimationFrame(clearResyncRafRef.current);
-    }
-    // Clear fallback timeout if RAF fires (normal path)
-    if (resyncFallbackTimeoutRef.current !== null) {
-      clearTimeout(resyncFallbackTimeoutRef.current);
-      resyncFallbackTimeoutRef.current = null;
-    }
-    clearResyncRafRef.current = requestAnimationFrame(() => {
-      clearResyncRafRef.current = requestAnimationFrame(() => {
-        clearResyncRafRef.current = null;
-        isResyncingRef.current = false;
-        skipFormResetRef.current = false;
-        onResyncCompleteRef.current?.();
-        onResyncCompleteRef.current = null;
-      });
-    });
-  }, [initialFormValues, skipFormResetRef]);
+  // useEffect(() => {
+  //   if (!isResyncingRef.current && !skipFormResetRef.current) return;
+  //   if (clearResyncRafRef.current !== null) {
+  //     cancelAnimationFrame(clearResyncRafRef.current);
+  //   }
+  //   // Clear fallback timeout if RAF fires (normal path)
+  //   if (resyncFallbackTimeoutRef.current !== null) {
+  //     clearTimeout(resyncFallbackTimeoutRef.current);
+  //     resyncFallbackTimeoutRef.current = null;
+  //   }
+  //   clearResyncRafRef.current = requestAnimationFrame(() => {
+  //     clearResyncRafRef.current = requestAnimationFrame(() => {
+  //       clearResyncRafRef.current = null;
+  //       isResyncingRef.current = false;
+  //       skipFormResetRef.current = false;
+  //       onResyncCompleteRef.current?.();
+  //       onResyncCompleteRef.current = null;
+  //     });
+  //   });
+  // }, [initialFormValues, skipFormResetRef]);
 
   const enableValidate = useCallback(() => {
     if (validateAndSaveMutation.isPending) return false;
@@ -1807,6 +1912,110 @@ export default function JobOverview() {
 
   const showProductDetails = useCallback(() => !isRepairAnswerLocked, [isRepairAnswerLocked]);
   const showAddRow = useCallback(() => !isRepairAnswerLocked, [isRepairAnswerLocked]);
+  // const onSummaryTotalAmountChange = useCallback(
+  //   (newTotalAmountValue: unknown) => {
+  //     if (discountBase !== "GROSS_PRICE") return;
+  //     // Guard: prevent re-entry if already distributing
+  //     if (isDistributingRef.current) return;
+
+  //     const fields = allFieldsRef.current;
+  //     const setFV = setFieldValueRef.current;
+  //     if (!fields || !setFV) return;
+
+  //     const values = formValuesRef.current;
+  //     const grossField = fields.find((f) => f.subtype === "diagnosticSummaryGrossAmountMaterial");
+  //     const totalSummaryField = fields.find((f) => f.subtype === "diagnosticSummaryTotalAmount");
+  //     const discountField = fields.find((f) => f.subtype === "diagnosticSummaryDiscountMaterial");
+  //     const hiddenDiscountField = fields.find(
+  //       (f) => f.subtype === "diagnosticSummaryDiscountMaterialHidden",
+  //     );
+  //     const typeField = fields.find((f) => f.subtype === "diagnosticSummaryType");
+
+  //     const rawTotalAmountValue = Math.max(0, Number(newTotalAmountValue) || 0);
+  //     const currentSummaryType = (values[typeField?.name ?? ""] as string) || "totalSummary";
+  //     const typeFilter =
+  //       SUMMARY_TYPE_FILTER[currentSummaryType] ?? SUMMARY_TYPE_FILTER.totalSummary;
+  //     const currentGrossAmountSum = grossField ? Number(values[grossField.name]) || 0 : 0;
+
+  //     // Clamp: total amount cannot exceed gross amount sum (discount cannot go negative)
+  //     const totalAmountValue =
+  //       currentGrossAmountSum > 0
+  //         ? Math.min(rawTotalAmountValue, currentGrossAmountSum)
+  //         : rawTotalAmountValue;
+
+  //     const newDiscount = calculateSummaryTotalAmountDistribution(
+  //       totalAmountValue,
+  //       currentGrossAmountSum,
+  //     );
+
+  //     const materialTotalField = fields.find(
+  //       (f) => f.subtype === "diagnosticSummaryTotalAmountMaterial",
+  //     );
+  //     if (materialTotalField) setFV(materialTotalField.name, totalAmountValue);
+  //     if (discountField) setFV(discountField.name, newDiscount);
+  //     if (hiddenDiscountField) setFV(hiddenDiscountField.name, newDiscount);
+  //     if (totalSummaryField) setFV(totalSummaryField.name, totalAmountValue);
+  //     isDistributingRef.current = true;
+  //     distributeGrossToRows(newDiscount, typeFilter, values, setFV, fields);
+  //   },
+  //   [discountBase],
+  // );
+
+  // const onSummaryNetAmountChange = useCallback(
+  //   (newNetAmountValue: unknown) => {
+  //     if (discountBase !== "NET_PRICE") return;
+  //     // Guard: prevent re-entry if already distributing
+  //     if (isDistributingRef.current) return;
+
+  //     const fields = allFieldsRef.current;
+  //     const setFV = setFieldValueRef.current;
+  //     if (!fields || !setFV) return;
+
+  //     const values = formValuesRef.current;
+
+  //     const suggestedNetField = fields.find(
+  //       (f) => f.subtype === "diagnosticSummarySuggestedNetPriceMaterial",
+  //     );
+  //     const discountField = fields.find(
+  //       (f) => f.subtype === "diagnosticSummaryDiscountNetMaterial",
+  //     );
+  //     const hiddenDiscountField = fields.find(
+  //       (f) => f.subtype === "diagnosticSummaryDiscountMaterialHidden",
+  //     );
+  //     const typeField = fields.find((f) => f.subtype === "diagnosticSummaryType");
+
+  //     const rawNetAmountValue = Math.max(0, Number(newNetAmountValue) || 0);
+  //     const currentSummaryType = (values[typeField?.name ?? ""] as string) || "totalSummary";
+  //     const typeFilter =
+  //       SUMMARY_TYPE_FILTER[currentSummaryType] ?? SUMMARY_TYPE_FILTER.totalSummary;
+
+  //     const suggestedNetPriceSum = suggestedNetField
+  //       ? Number(values[suggestedNetField.name]) || 0
+  //       : 0;
+
+  //     // Clamp: net amount cannot exceed suggested net price sum (discount cannot go negative)
+  //     const netAmountValue =
+  //       suggestedNetPriceSum > 0
+  //         ? Math.min(rawNetAmountValue, suggestedNetPriceSum)
+  //         : rawNetAmountValue;
+
+  //     const newDiscount = calculateSummaryNetAmountDistribution(
+  //       netAmountValue,
+  //       suggestedNetPriceSum,
+  //     );
+
+  //     const materialNetField = fields.find(
+  //       (f) => f.subtype === "diagnosticSummaryNetAmountMaterial",
+  //     );
+  //     if (materialNetField) setFV(materialNetField.name, netAmountValue);
+  //     if (discountField) setFV(discountField.name, newDiscount);
+  //     if (hiddenDiscountField) setFV(hiddenDiscountField.name, newDiscount);
+
+  //     isDistributingRef.current = true;
+  //     distributeNetToRows(newDiscount, typeFilter, values, setFV, fields);
+  //   },
+  //   [discountBase],
+  // );
   const hasPricesPopulated = useMemo(
     () =>
       materials.some(
@@ -1999,6 +2208,10 @@ export default function JobOverview() {
         onHold,
         onGoToNextStep,
         onCustomerAnswer,
+        // onSummaryDiscountChange,
+        // onSummaryDiscountNetChange,
+        // onSummaryTotalAmountChange,
+        // onSummaryNetAmountChange,
         enableAddingSparePart,
         enableAddingSpecialMaterials,
         enableProductDetails,
@@ -2142,7 +2355,7 @@ export default function JobOverview() {
       jobStatus: currentStatus,
       discountBase,
       automaticRows,
-      isValidating: validateAndSaveMutation.isPending || recalculatePricesMutation.isPending,
+      isValidating: validateAndSaveMutation.isPending,
     }),
     [
       materials,
@@ -2174,7 +2387,6 @@ export default function JobOverview() {
       discountBase,
       automaticRows,
       validateAndSaveMutation.isPending,
-      recalculatePricesMutation.isPending,
     ],
   );
 
@@ -2197,10 +2409,13 @@ export default function JobOverview() {
     },
     [discountBase, setInitialFormValues, buildFaultCodeDropdowns],
   );
+  //refactor
   useEffect(() => {
     const mergedJobDataChanged = mergedJobData !== prevMergedJobDataRef.current;
 
     if (mergedJobDataChanged && mergedJobData && allFields && allFields.length > 0) {
+      console.log("mergedJobData changed:", mergedJobData);
+      console.log("prevMergedJobDataRef.current:", prevMergedJobDataRef.current);
       prevMergedJobDataRef.current = mergedJobData;
       syncData(mergedJobData, allFields);
     }

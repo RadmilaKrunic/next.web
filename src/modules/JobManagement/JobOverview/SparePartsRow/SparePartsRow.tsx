@@ -260,6 +260,45 @@ function SparePartsRow({
     return match ? Number.parseInt(match[1], 10) : 0;
   })();
 
+  // const {
+  //   discountHiddenFieldName,
+  //   discountAmountHiddenFieldName,
+  //   activeDiscountFieldName,
+  //   discountSiblingFieldName,
+  // } = resolveDiscountFieldNames(fields, discountBase);
+
+  // // On initial load (isResyncingRef = true): sync the active visible discount field from the
+  // // hidden discount field (which has attributeMapping and is populated from API data).
+  // // The visible discount fields have no attributeMapping so default to 0 in Formik;
+  // // buildRowValues also sets them, but this is a safeguard for any edge case where they remain 0.
+  // const prevDiscountHiddenRef = useRef<number>(0);
+  // useEffect(() => {
+  //   if (!isResyncingRef.current) return;
+  //   if (!discountBase || !discountHiddenFieldName || !activeDiscountFieldName) return;
+  //   const hiddenVal = Number(values[discountHiddenFieldName]) || 0;
+  //   if (hiddenVal === prevDiscountHiddenRef.current) return;
+  //   prevDiscountHiddenRef.current = hiddenVal;
+  //   if (hiddenVal === 0) return;
+  //   const activeVal = Number(values[activeDiscountFieldName]) || 0;
+  //   if (Math.abs(activeVal - hiddenVal) < 0.0001) return;
+  //   void setFieldValue(activeDiscountFieldName, hiddenVal);
+  //   // also sync sibling so both modes are correct
+  //   const siblingName = fields.find(
+  //     (f) =>
+  //       f.subtype === "diagnosticDiscount" &&
+  //       !f.dependentFields?.some((df) => df.fieldValue === (discountBase ?? "GROSS_PRICE")),
+  //   )?.name;
+  //   if (siblingName) void setFieldValue(siblingName, hiddenVal);
+  // }, [
+  //   discountBase,
+  //   discountHiddenFieldName,
+  //   activeDiscountFieldName,
+  //   values,
+  //   setFieldValue,
+  //   isResyncingRef,
+  //   fields,
+  // ]);
+
   const prevPositionRef = useRef<string | null>(null);
   useEffect(() => {
     if (prevPositionRef.current === null) {
@@ -275,7 +314,7 @@ function SparePartsRow({
       if (partNumberFieldName) void setFieldValue(partNumberFieldName, autofill.partNumber);
       if (descriptionFieldName) void setFieldValue(descriptionFieldName, autofill.description);
     }
-    if (areaIndex === 1 && !isResyncingRef.current) {
+    if (areaIndex === 1 && !isResyncingRef.current && !prevPartNumberRef.current) {
       isResyncingRef.current = true;
     }
     setMaterials((prev) =>
@@ -301,6 +340,266 @@ function SparePartsRow({
     isResyncingRef,
   ]);
 
+  // Clear price fields when part number changes in a validated row
+  const prevPartNumberRef = useRef<string | null>(null);
+  //const prevMaterialIdRef = useRef<string | undefined>(undefined);
+
+  // const resetPartNumberDependentFields = useCallback(() => {
+  //   if (areaIndex === 1 && !isResyncingRef.current && !prevPartNumberRef.current) {
+  //     isResyncingRef.current = true;
+  //   }
+  //   const fieldNames = [
+  //     getFieldBySubtype("diagnosticUnitPrice"),
+  //     getFieldBySubtype("diagnosticTax"),
+  //     getFieldBySubtype("diagnosticNetAmount"),
+  //     getFieldBySubtype("diagnosticGrossAmount"),
+  //     getFieldBySubtype("diagnosticTotalAmount"),
+  //     getFieldBySubtype("diagnosticTaxAmount"),
+  //     getFieldBySubtype("diagnosticSuggestedNetPrice"),
+  //     activeDiscountFieldName,
+  //     discountSiblingFieldName,
+  //     discountHiddenFieldName,
+  //     discountAmountHiddenFieldName,
+  //   ].filter((name): name is string => !!name);
+  //   const valuesOnFields: { key: string; value: 0 | null }[] = fieldNames.map((item) => {
+  //     return { key: item, value: 0 };
+  //   });
+  //   valuesOnFields?.push({ key: materialIdField?.name || "", value: null });
+  //   isResyncingRef.current = true;
+  //   void Promise.all(valuesOnFields.map((item) => setFieldValue(item.key, item.value))).finally(
+  //     () => {
+  //       isResyncingRef.current = false;
+  //     },
+  //   );
+
+  //   const currentStatusValue = statusField ? values[statusField.name] : undefined;
+  //   const wasRevisedOrRejected =
+  //     typeof currentStatusValue === "string" && RESETTABLE_ROW_STATUSES.has(currentStatusValue);
+  //   if (areaIndex === 1 && !isResyncingRef.current && !prevPartNumberRef.current) {
+  //     isResyncingRef.current = true;
+  //   }
+  //   setMaterials((prev) =>
+  //     prev.map((m, i) =>
+  //       i === areaIndex
+  //         ? {
+  //             ...m,
+  //             partNumber: partNumberValue,
+  //             unitPrice: 0,
+  //             tax: 0,
+  //             netAmount: 0,
+  //             grossAmount: 0,
+  //             totalAmount: 0,
+  //             taxAmount: 0,
+  //             suggestedNetPrice: 0,
+  //             discount: 0,
+  //             discountAmount: 0,
+  //             materialId: undefined,
+  //             ...(wasRevisedOrRejected ? { status: "PENDING" } : {}),
+  //           }
+  //         : m,
+  //     ),
+  //   );
+  // }, [
+  //   getFieldBySubtype,
+  //   setFieldValue,
+  //   isResyncingRef,
+  //   activeDiscountFieldName,
+  //   discountSiblingFieldName,
+  //   discountHiddenFieldName,
+  //   discountAmountHiddenFieldName,
+  //   materialIdField,
+  //   setMaterials,
+  //   areaIndex,
+  //   partNumberValue,
+  //   statusField,
+  //   values,
+  // ]);
+
+  // const resetPartNumberDependentFieldsRef = useRef(resetPartNumberDependentFields);
+  // resetPartNumberDependentFieldsRef.current = resetPartNumberDependentFields;
+
+  // useEffect(() => {
+  //   const action = resolvePartNumberChangeAction(
+  //     prevPartNumberRef.current,
+  //     partNumberValue,
+  //     isResyncingRef.current,
+  //   );
+
+  //   if (action === "none") {
+  //     prevMaterialIdRef.current = materialId;
+  //     return;
+  //   }
+
+  //   prevPartNumberRef.current = partNumberValue;
+  //   prevMaterialIdRef.current = materialId;
+
+  //   if (action === "reset") {
+  //     resetPartNumberDependentFieldsRef.current();
+  //   }
+  // }, [partNumberValue, materialId, isResyncingRef]);
+
+  // const preserveFields = useMemo(
+  //   () => [
+  //     getFieldBySubtype("diagnosticDiscountHidden"),
+  //     getFieldBySubtype("diagnosticDiscountNetHidden"),
+  //     getFieldBySubtype("diagnosticDiscount"),
+  //     getFieldBySubtype("diagnosticTotalAmountHidden"),
+  //     getFieldBySubtype("diagnosticTotalAmount"),
+  //     getFieldBySubtype("diagnosticNetAmount"),
+  //   ],
+  //   [getFieldBySubtype],
+  // );
+  // const prevPriceRef = useRef<Record<string, any> | null>(null);
+  // const prevTypeRef = useRef<string | null>(null);
+  // useEffect(() => {
+  //   if (
+  //     EDITABLE_WITH_CONDITION_TYPES.has(prevTypeRef.current ?? "") ||
+  //     EDITABLE_TYPES.has(prevTypeRef.current ?? "")
+  //   ) {
+  //     if (prevPriceRef.current !== null) return;
+  //     prevPriceRef.current = preserveFields.map((field) => ({
+  //       name: field,
+  //       value: values[field] ?? null,
+  //     }));
+  //     return;
+  //   }
+  //   if (prevPriceRef.current === null) return;
+
+  //   prevPriceRef.current.forEach((field: any) => {
+  //     void setFieldValue(field.name, field.value);
+  //   });
+  //   prevPriceRef.current = null;
+  // }, [preserveFields, values, setFieldValue]);
+
+  // useEffect(() => {
+  //   const buildSiblingChargeableDiscounts = (): number[] => {
+  //     const discountHiddenFields = allFormFields.filter(
+  //       (field) =>
+  //         field.subtype === "diagnosticDiscountHidden" &&
+  //         field.fieldMapping?.nameStartsWith &&
+  //         field.fieldMapping?.nameStartsWith !== areaNamePrefix,
+  //     );
+
+  //     const result: number[] = [];
+  //     for (const field of discountHiddenFields) {
+  //       const siblingPrefix = field.fieldMapping?.nameStartsWith;
+  //       const siblingTypeField = allFormFields.find(
+  //         (f) => f.fieldMapping?.nameStartsWith === siblingPrefix && f.subtype === "diagnosticType",
+  //       );
+  //       const siblingPositionField = allFormFields.find(
+  //         (f) =>
+  //           f.fieldMapping?.nameStartsWith === siblingPrefix && f.subtype === "diagnosticPosition",
+  //       );
+  //       const siblingType = siblingTypeField
+  //         ? ((values[siblingTypeField.name] as string) ?? "")
+  //         : "";
+  //       const siblingPosition = siblingPositionField
+  //         ? ((values[siblingPositionField.name] as string) ?? "")
+  //         : "";
+  //       if (
+  //         siblingType.toUpperCase() === "CHARGEABLE" &&
+  //         !PROTECTED_POSITIONS.has(siblingPosition)
+  //       ) {
+  //         result.push(Number(values[field.name] ?? 0));
+  //       }
+  //     }
+  //     return result;
+  //   };
+
+  //   const currentType = rowTypeValue;
+
+  //   if (prevTypeRef.current === null) {
+  //     prevTypeRef.current = currentType;
+  //     return;
+  //   }
+
+  //   const previousType = prevTypeRef.current;
+  //   prevTypeRef.current = currentType;
+
+  //   if (!previousType || previousType === currentType) return;
+  //   if (isResyncingRef.current) return;
+
+  //   const discountPercent = resolveDiscountOnJobTypeChange(
+  //     previousType,
+  //     currentType,
+  //     positionValue,
+  //     buildSiblingChargeableDiscounts(),
+  //   );
+
+  //   const currentStatusValue = statusField ? values[statusField.name] : undefined;
+  //   const wasRevisedOrRejected =
+  //     typeof currentStatusValue === "string" && RESETTABLE_ROW_STATUSES.has(currentStatusValue);
+  //   if (areaIndex === 1 && !isResyncingRef.current && !prevPartNumberRef.current) {
+  //     isResyncingRef.current = true;
+  //   }
+  //   if (discountPercent === null) {
+  //     if (wasRevisedOrRejected) {
+  //       setMaterials((prev) =>
+  //         prev.map((m, i) =>
+  //           i === areaIndex ? { ...m, type: currentType, status: "PENDING" } : m,
+  //         ),
+  //       );
+  //     }
+  //     return;
+  //   }
+
+  //   const grossAmountFieldName = getFieldBySubtype("diagnosticGrossAmount");
+  //   const grossAmount = grossAmountFieldName ? Number(values[grossAmountFieldName]) || 0 : 0;
+  //   const discountAmount = (grossAmount * discountPercent) / 100;
+
+  //   prevPriceRef.current = null;
+
+  //   void setFieldValue(activeDiscountFieldName, discountPercent);
+  //   if (discountSiblingFieldName) void setFieldValue(discountSiblingFieldName, discountPercent);
+  //   if (discountHiddenFieldName) void setFieldValue(discountHiddenFieldName, discountPercent);
+  //   if (discountAmountHiddenFieldName)
+  //     void setFieldValue(discountAmountHiddenFieldName, discountAmount);
+
+  //   setMaterials((prev) =>
+  //     prev.map((m, i) =>
+  //       i === areaIndex
+  //         ? {
+  //             ...m,
+  //             discount: discountPercent,
+  //             type: currentType,
+  //             ...(wasRevisedOrRejected ? { status: "PENDING" } : {}),
+  //           }
+  //         : m,
+  //     ),
+  //   );
+  // }, [
+  //   rowTypeValue,
+  //   isResyncingRef,
+  //   allFormFields,
+  //   values,
+  //   activeDiscountFieldName,
+  //   discountSiblingFieldName,
+  //   discountHiddenFieldName,
+  //   discountAmountHiddenFieldName,
+  //   setFieldValue,
+  //   positionValue,
+  //   areaNamePrefix,
+  //   getFieldBySubtype,
+  //   setMaterials,
+  //   areaIndex,
+  //   statusField,
+  // ]);
+
+  // const nonPriceInputKey = useSparePartsRowCommon({
+  //   fields,
+  //   activeDiscountFieldName,
+  //   discountSiblingFieldName,
+  //   discountHiddenFieldName,
+  //   discountAmountHiddenFieldName,
+  //   areaNamePrefix,
+  //   isResyncingRef,
+  //   discountBase,
+  //   values,
+  //   markRowDirty,
+  //   areaIndex,
+  //   isValidating,
+  // });
+
   const arePricesValidatedRef = useRef(arePricesValidated);
   arePricesValidatedRef.current = arePricesValidated;
 
@@ -320,6 +619,7 @@ function SparePartsRow({
   }, [
     areaName,
     setRevisedRejectedRowPending,
+   // nonPriceInputKey,
     markRowDirty,
     areaIndex,
     statusField,

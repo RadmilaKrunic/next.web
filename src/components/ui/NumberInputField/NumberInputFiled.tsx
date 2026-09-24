@@ -14,6 +14,7 @@ export default function NumberInputFiled({
   disabled = false,
   minValue,
   prefix,
+  onBlur,
 }: Readonly<{
   name: string;
   label: string;
@@ -23,6 +24,7 @@ export default function NumberInputFiled({
   disabled?: boolean;
   minValue?: number;
   prefix?: string;
+  onBlur: (e: React.FocusEvent<HTMLInputElement>) => void;
 }>) {
   const stepValue = step || 1;
   const min = minValue ?? 0;
@@ -85,6 +87,21 @@ export default function NumberInputFiled({
     }
   };
 
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+
+    if (val === "") {
+      setInputValue("");
+      onBlur(e);
+      return;
+    }
+
+    const numValue = Number(val);
+    if (!Number.isNaN(numValue) && numValue >= min) {
+      setInputValue(val);
+      onBlur(e);
+    }
+  };
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Backspace" && e.key !== "Delete") return;
     const input = e.target as HTMLInputElement;
@@ -123,17 +140,7 @@ export default function NumberInputFiled({
             setInputValue("");
           }
         }}
-        onBlur={() => {
-          isFocusedRef.current = false;
-          if (inputValue === "") {
-            const restoreValue = min.toString();
-            setInputValue(restoreValue);
-            const syntheticEvent = {
-              target: { value: restoreValue, name },
-            } as React.ChangeEvent<HTMLInputElement>;
-            onChange(syntheticEvent);
-          }
-        }}
+        onBlur={handleBlur}
         disabled={disabled}
       />
       <Button

@@ -15,6 +15,7 @@ import {
   mapFieldToFieldMapping,
   syncFieldsToTabs,
 } from "components/generics/utils";
+// import { calculatePrices } from "utils/priceCalculator";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useBareSalesRelation } from "api/services/bareSalesRelation/hooks";
@@ -22,6 +23,7 @@ import { PERMISSIONS } from "utils/Permissions";
 import type { HeaderUserData } from "api/services/header/action";
 import { MessagesContext } from "../contexts/messagescontext";
 import { scrollToTop } from "../utils/scrollToError";
+import { SummaryDetailAll } from "@/modules/JobManagement/JobList/JobList.types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -177,11 +179,43 @@ enum QuantitySource {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+// const computePricesForItem = (item: MaterialItem, mode?: discountBase): MaterialItem => {
+//   if (item.unitPrice <= 0) return item;
+//   const result = calculatePrices(
+//     {
+//       quantity: item.quantity,
+//       unitPrice: item.unitPrice,
+//       taxPercent: item.tax,
+//       discountPercent: item.discount,
+//       grossAmount: 0,
+//       netAmount: 0,
+//       suggestedNetPrice: 0,
+//       totalAmount: 0,
+//       taxAmount: 0,
+//     },
+//     "unitPrice",
+//     item.unitPrice,
+//     mode,
+//   );
+//   return {
+//     ...item,
+//     netAmount: result.netAmount,
+//     suggestedNetPrice: result.suggestedNetPrice,
+//     tax: result.taxPercent,
+//     taxAmount: result.taxAmount,
+//     grossAmount: result.grossAmount,
+//     discount: result.discountPercent,
+//     discountAmount: result.discountAmount,
+//     totalAmount: result.totalAmount,
+//   };
+// };
+
 const buildEmptyMaterial = (
   position: string,
   jobType: string,
   quantity: number,
   t: TFunction<"translation", "app">,
+  // mode?: discountBase,
 ): MaterialItem => {
   const autofill = getPositionAutofill(t)[position];
   const base: MaterialItem = {
@@ -397,13 +431,13 @@ function withSpecialMaterialSpOption(params: {
 
 function computeFinalSparePartsAreas(
   needed: number,
-  sparePartsAreas: Area[],
+  oldAreas: Area[],
   newAreas: Area[],
   removeAreaNames: Set<string>,
 ): Area[] {
-  if (needed > 0) return [...sparePartsAreas, ...newAreas];
-  if (needed < 0) return sparePartsAreas.filter((a) => !removeAreaNames.has(a.name));
-  return sparePartsAreas;
+  if (needed > 0) return [...oldAreas, ...newAreas];
+  if (needed < 0) return oldAreas.filter((a) => !removeAreaNames.has(a.name));
+  return oldAreas;
 }
 
 function removeDiagnosticsAreas(tab: Section, removeAreaNames: Set<string>): Section {
@@ -506,7 +540,7 @@ const syncMaterialsWithForm = (materials: MaterialItem[], formValues: Record<str
 
 interface UseDiagnosticsManagerProps {
   diagnosticData:
-    | { jobId?: string; materials?: unknown[]; archivedMaterials?: unknown[] }
+  | { jobId?: string; materials?: unknown[]; archivedMaterials?: unknown[]; priceSummaryDetailed?: unknown }
     | undefined;
   currentActionType: string;
   currentJobType: string;
@@ -699,6 +733,7 @@ export const useDiagnosticsManager = ({
   //this is OK
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [archivedMaterials, setArchivedMaterials] = useState<MaterialItem[]>([]);
+  const [priceSummaryDetailed, setPriceSummaryDetailed] = useState<SummaryDetailAll | undefined>(undefined)
   const [apiMaterialsLoaded, setApiMaterialsLoaded] = useState(false);
   const [apiMaterialsEmpty, setApiMaterialsEmpty] = useState(false);
   const hasExistingDiagnostic = Boolean(diagnosticData?.jobId);
@@ -844,7 +879,7 @@ export const useDiagnosticsManager = ({
       items.forEach((item) => {
         item.isValidated = true;
       });
-    if (isResyncingRef) {
+      if (isResyncingRef) {
         isResyncingRef.current = true;
       }
     }
@@ -924,12 +959,7 @@ export const useDiagnosticsManager = ({
       const positionsToAdd = sortByPositionOrder(automatic.filter((pos) => allowedSet.has(pos)));
       const automaticItems = positionsToAdd.map((pos) => {
         const qty = getQuantityForPositionRef.current(pos, faultCode, faultCodeLabourQty) ?? 1;
-        const item = buildEmptyMaterial(
-          pos,
-          currentJobType,
-          qty,
-          tRef.current,
-        );
+        const item = buildEmptyMaterial(pos, currentJobType, qty, tRef.current);
         if (pos === "PN") {
           prAutofillAppliedRef.current = false;
           const salesData = bareSalesDataRef.current;
@@ -1237,7 +1267,112 @@ export const useDiagnosticsManager = ({
   }, [positionDropdownOptions, allFields, setAllFields, setTabs, formValuesRef, skipFormResetRef]);
 
   // ── Public callbacks ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (priceSummaryDetailed?.byJobType?.length === 0) return;
+    const byJobType = priceSummaryDetailed?.byJobType;
+    const currentTabs = tabsRef.current;
+    const currentFields = allFieldsRef.current ?? [];
 
+    const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
+    if (!diagnosticTab) return;
+
+    const diagnosticsSummaryDetailed = diagnosticTab.areas.filter(
+      (a) => a.isMultiple && a.name.includes("diagnosticsSummaryDetailed"),
+    );
+
+    const templateArea = diagnosticsSummaryDetailed[0];
+    if (!templateArea) return;
+    const currentCount = diagnosticsSummaryDetailed.length;
+    const targetCount = Number(byJobType?.length || 0);
+    const needed = targetCount - currentCount;
+
+     const newAreas: Area[] = [];
+     let removeAreaNames = new Set<string>();
+     let removeFieldNames = new Set<string>();
+
+     let updatedFields = [...currentFields];
+
+     if (needed > 0) {
+       const maxIndex = diagnosticsSummaryDetailed.reduce(
+         (max, a) => Math.max(max, a.index ?? 0),
+         0,
+       );
+
+       for (let i = 0; i < needed; i++) {
+         const cloned = structuredClone(templateArea);
+         cloned.label = "";
+         const area = setDuplicatedArea(cloned, maxIndex + 1 + i, diagnosticTab.name);
+         const areaFields = area.fields.map((f) => mapFieldToFieldMapping(f));
+         newAreas.push(area);
+         updatedFields = [...updatedFields, ...areaFields];
+       }
+     } else if (needed < 0) {
+       // Remove excess areas (from the end, beyond index 0)
+       const toRemove = diagnosticsSummaryDetailed.slice(targetCount);
+       removeAreaNames = new Set(toRemove.map((a) => a.name));
+       removeFieldNames = new Set(toRemove.flatMap((a) => a.fields.map((f) => f.name)));
+       updatedFields = currentFields.filter((f) => !removeFieldNames.has(f.name));
+     }
+
+     const finalSparePartsAreas = computeFinalSparePartsAreas(
+       needed,
+       diagnosticsSummaryDetailed,
+       newAreas,
+       removeAreaNames,
+     );
+
+     const rowValues = buildMaterialsRowValues({
+       materials,
+       areas: finalSparePartsAreas,
+       fields: updatedFields,
+       formValues: formValuesRef.current,
+       currentCount,
+       forceRebuild: forceRebuildRef.current,
+     });
+
+     if (needed !== 0 || forceRebuildRef.current) {
+       skipFormResetRef.current = true;
+
+      //  updatedFields = withSpecialMaterialSpOption({
+      //    fields: updatedFields,
+      //    rowValues,
+      //    allowedPositions: allowedPositionsRef.current,
+      //    addSpecialMaterialsAllowed: addSpecialMaterialsAllowedRef.current,
+      //  });
+
+       // Use functional updaters so this composes correctly with any concurrent
+       // functional setter from useClaimMaterialsManager (or any other hook)
+       // that shares the same setAllFields / setTabs.
+       if (needed > 0) {
+         const addedFields = updatedFields.slice(currentFields.length);
+         setAllFields((prev) => [...(prev ?? []), ...addedFields]);
+         setTabs((prev) =>
+           prev.map((tab) =>
+             tab.name === "diagnosticData" ? { ...tab, areas: [...tab.areas, ...newAreas] } : tab,
+           ),
+         );
+       } else if (needed < 0) {
+         setAllFields((prev) => (prev ?? []).filter((f) => !removeFieldNames.has(f.name)));
+         setTabs((prev) => prev.map((tab) => removeDiagnosticsAreas(tab, removeAreaNames)));
+       }
+     }
+
+     if (forceRebuildRef.current) {
+       setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
+     } else {
+       const currentFormWithoutRowFields = Object.fromEntries(
+         Object.entries(formValuesRef.current).filter(
+           ([k, v]) =>
+             !k.startsWith("diagnosticData_diagnosticsSummaryDetailed") &&
+             v !== "" &&
+             v !== null &&
+             v !== undefined,
+         ),
+       );
+       setInitialFormValues((prev) => ({ ...prev, ...currentFormWithoutRowFields, ...rowValues }));
+     }
+     forceRebuildRef.current = false;
+  }, []);
   const onAddRow = useCallback((formValues?: Record<string, unknown>) => {
     if (!formValues) return;
     const perms = userPermissionsRef.current;

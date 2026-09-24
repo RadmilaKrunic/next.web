@@ -311,6 +311,18 @@ export interface ValidateAndSaveResponse {
     totalAmount: number;
     discountAmount?: number;
   };
+  priceSummaryDetailed?: {
+    total?: {
+      discount: number;
+      grossAmount: number;
+      netAmount: number;
+      suggestedNetPrice: number;
+      taxAmount: number;
+      totalAmount: number;
+      discountAmount?: number;
+    };
+    byJobType:[]
+  };
 }
 
 export const postValidateAndSave = async (
