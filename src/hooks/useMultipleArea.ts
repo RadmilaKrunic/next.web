@@ -63,6 +63,14 @@ export const useMultipleArea = <T>({
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
   const templateRef = useRef<Area | null>(null);
+  // buildRowValues is a fresh closure on every render for every caller (none of
+  // them useCallback it, by design — that's exactly the ceremony this hook exists
+  // to remove). Reading it through a ref, updated on render rather than depended
+  // on by the effect, keeps the effect from re-running - and re-calling the state
+  // setters below - on every single render, which was looping consumers into
+  // "Maximum update depth exceeded".
+  const buildRowValuesRef = useRef(buildRowValues);
+  buildRowValuesRef.current = buildRowValues;
 
   useEffect(() => {
     const currentSection = tabsRef.current.find((t) => t.name === sectionName);
@@ -98,7 +106,7 @@ export const useMultipleArea = <T>({
       removedFieldNames = shrunk.removedFieldNames;
     }
 
-    const rowValues = buildRowValues({ list, rows: finalRows, previousCount: currentCount });
+    const rowValues = buildRowValuesRef.current({ list, rows: finalRows, previousCount: currentCount });
 
     if (needed !== 0) {
       skipFormResetRef.current = true;
@@ -122,6 +130,7 @@ export const useMultipleArea = <T>({
       );
       return { ...withoutStaleRowValues, ...rowValues };
     });
+    // buildRowValues is intentionally excluded — see buildRowValuesRef above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     list,
@@ -131,7 +140,6 @@ export const useMultipleArea = <T>({
     setTabs,
     setInitialFormValues,
     skipFormResetRef,
-    buildRowValues,
     minRows,
   ]);
 
