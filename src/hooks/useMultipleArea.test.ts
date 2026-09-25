@@ -212,9 +212,11 @@ describe("useMultipleArea", () => {
     expect(skipFormResetRef.current).toBe(false);
   });
 
-  it("still recomputes initial values when the list reference changes with the same length", () => {
+  it("recomputes and commits initial values when a list resync produces genuinely different content", () => {
     const setInitialFormValues = vi.fn();
-    const buildRowValues = vi.fn(() => ({ "tab_row#0_partNumber": "refreshed" }));
+    const buildRowValues = vi.fn(({ list }: { list: { partNumber: string }[] }) => ({
+      "tab_row#0_partNumber": list[0]?.partNumber,
+    }));
 
     const { rerender } = renderHook(
       ({ list }) =>
@@ -233,6 +235,7 @@ describe("useMultipleArea", () => {
     );
 
     expect(buildRowValues).toHaveBeenCalledTimes(1);
+    expect(setInitialFormValues).toHaveBeenCalledTimes(1);
 
     act(() => {
       rerender({ list: [{ partNumber: "A-resynced" }] });
@@ -240,6 +243,41 @@ describe("useMultipleArea", () => {
 
     expect(buildRowValues).toHaveBeenCalledTimes(2);
     expect(setInitialFormValues).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not recommit values a resync leaves unchanged — regression test for a Formik enableReinitialize loop", () => {
+    // <Formik enableReinitialize> re-derives its state whenever initialValues
+    // changes. If this hook committed a "new but equal" values object on every
+    // run (e.g. the list got a fresh array reference but the same content —
+    // exactly what a resync-from-API often does), Formik would reinitialize,
+    // which can itself cause a re-render, feeding back into another commit.
+    const setInitialFormValues = vi.fn();
+    const buildRowValues = vi.fn(() => ({ "tab_row#0_partNumber": "same" }));
+
+    const { rerender } = renderHook(
+      ({ list }) =>
+        useMultipleArea({
+          list,
+          areaName: "row",
+          sectionName: "tab",
+          tabs: makeTabs(1),
+          setTabs: vi.fn(),
+          setAllFields: vi.fn(),
+          setInitialFormValues,
+          skipFormResetRef: { current: false },
+          buildRowValues,
+        }),
+      { initialProps: { list: [{}] as unknown[] } },
+    );
+
+    expect(setInitialFormValues).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      rerender({ list: [{}] }); // new array reference, same resulting row values
+    });
+
+    expect(buildRowValues).toHaveBeenCalledTimes(2);
+    expect(setInitialFormValues).toHaveBeenCalledTimes(1);
   });
 
   it("by default never shrinks below one row, so the #0 template stays visible with an empty list", () => {

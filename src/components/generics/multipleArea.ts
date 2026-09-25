@@ -3,6 +3,16 @@ import Field from "./Field/GenericField.types";
 import Section from "./Section/GenericSection.types";
 import { setDuplicatedArea, mapFieldToFieldMapping } from "./utils";
 
+/** True when two flat, primitive-valued row-value maps have the same keys and values. */
+export const shallowEqualValues = (
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+): boolean => {
+  const aKeys = Object.keys(a);
+  if (aKeys.length !== Object.keys(b).length) return false;
+  return aKeys.every((key) => Object.is(a[key], b[key]));
+};
+
 /** All isMultiple rows for `areaName` currently present in `section`, in index order. */
 export const getMultipleAreaRows = (section: Section | undefined, areaName: string): Area[] =>
   (section?.areas ?? [])
