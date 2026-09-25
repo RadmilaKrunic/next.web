@@ -8,6 +8,7 @@ import {
   reindexFieldSet,
   growFieldSetRows,
   removeFieldSetRow,
+  shallowEqualValues,
 } from "./multipleArea";
 import Field from "./Field/GenericField.types";
 import Section from "./Section/GenericSection.types";
@@ -47,6 +48,28 @@ const makeSection = (areas: Area[], overrides: Partial<Section> = {}): Section =
   isAccordion: false,
   isTab: false,
   ...overrides,
+});
+
+describe("shallowEqualValues", () => {
+  it("is true for two objects with the same keys and primitive values", () => {
+    expect(shallowEqualValues({ a: 1, b: "x" }, { a: 1, b: "x" })).toBe(true);
+  });
+
+  it("is false when a value differs", () => {
+    expect(shallowEqualValues({ a: 1 }, { a: 2 })).toBe(false);
+  });
+
+  it("is false when the key sets differ, even with matching overlapping values", () => {
+    expect(shallowEqualValues({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+  });
+
+  it("distinguishes NaN correctly (Object.is, not ===)", () => {
+    expect(shallowEqualValues({ a: NaN }, { a: NaN })).toBe(true);
+  });
+
+  it("is true for two empty objects", () => {
+    expect(shallowEqualValues({}, {})).toBe(true);
+  });
 });
 
 describe("getMultipleAreaRows", () => {

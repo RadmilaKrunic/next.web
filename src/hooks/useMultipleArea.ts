@@ -8,6 +8,7 @@ import {
   growMultipleAreaRows,
   shrinkMultipleAreaRows,
   replaceMultipleAreaRows,
+  shallowEqualValues,
 } from "components/generics/multipleArea";
 
 export interface BuildRowValuesParams<T> {
@@ -71,6 +72,13 @@ export const useMultipleArea = <T>({
   // "Maximum update depth exceeded".
   const buildRowValuesRef = useRef(buildRowValues);
   buildRowValuesRef.current = buildRowValues;
+  // Caches the last row values this hook itself committed, so a run that
+  // produces the exact same content (e.g. the list got a new array reference
+  // but nothing in it actually changed) skips setInitialFormValues entirely.
+  // <Formik enableReinitialize> re-derives its state from initialValues on every
+  // change it's given, so committing "new but equal" values on every render
+  // was enough to loop it into "Maximum update depth exceeded".
+  const lastRowValuesRef = useRef<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     const currentSection = tabsRef.current.find((t) => t.name === sectionName);
@@ -124,12 +132,17 @@ export const useMultipleArea = <T>({
       );
     }
 
-    setInitialFormValues((prev) => {
-      const withoutStaleRowValues = Object.fromEntries(
-        Object.entries(prev).filter(([key]) => !key.includes(areaName) || key in rowValues),
-      );
-      return { ...withoutStaleRowValues, ...rowValues };
-    });
+    const valuesUnchanged =
+      needed === 0 && lastRowValuesRef.current !== null && shallowEqualValues(lastRowValuesRef.current, rowValues);
+    if (!valuesUnchanged) {
+      lastRowValuesRef.current = rowValues;
+      setInitialFormValues((prev) => {
+        const withoutStaleRowValues = Object.fromEntries(
+          Object.entries(prev).filter(([key]) => !key.includes(areaName) || key in rowValues),
+        );
+        return { ...withoutStaleRowValues, ...rowValues };
+      });
+    }
     // buildRowValues is intentionally excluded — see buildRowValuesRef above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
