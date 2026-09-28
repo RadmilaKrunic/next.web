@@ -815,7 +815,6 @@ export default function JobOverview() {
           ...validatedDiagnostic,
         });
       }
-      console.log("formValuesRef.current ", formValuesRef.current);
       if (data.errorMessages && data.errorMessages.length > 0) {
         const uniqueErrorKeys = [
           ...new Set(
@@ -890,6 +889,7 @@ export default function JobOverview() {
         //this should be removed
         resyncMaterialsFromAPI(false);
         setMessages((prev) => [...prev, { text: errorText, type: "error", duration: 5000 }]);
+        scrollToTop();
         return;
       }
 
@@ -910,6 +910,7 @@ export default function JobOverview() {
         },
       ]);
       setArePricesValidated(false);
+      scrollToTop();
     },
   });
   const [selectedTab, setSelectedTab] = useState<string>("");
@@ -935,9 +936,9 @@ export default function JobOverview() {
   const setFieldValueRef = useRef<((field: string, value: unknown) => void) | null>(null);
   const isDistributingRef = useRef(false);
   const isResyncingRef = useRef(false);
-  // const clearResyncRafRef = useRef<number | null>(null);
-  // const onResyncCompleteRef = useRef<(() => void) | null>(null);
-  // const resyncFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearResyncRafRef = useRef<number | null>(null);
+  const onResyncCompleteRef = useRef<(() => void) | null>(null);
+  const resyncFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preToggleHoldStateRef = useRef(false);
   const prevMergedJobDataRef = useRef<typeof mergedJobData>(undefined);
   const hashTabAppliedRef = useRef(false);
@@ -1516,8 +1517,10 @@ export default function JobOverview() {
 
   const onRecalculatePrices = useCallback(
     (fieldName: string, value: unknown) => {
+      // Guard against overlapping requests: a recalculation already in flight owns the
+      // next resync — firing another one here would race it and flicker the UI.
+      if (recalculatePricesMutation.isPending) return;
       if (!allFieldsRef.current) return;
-      console.log("allFieldsRef.current:", allFieldsRef.current);
       const field = allFieldsRef.current?.find((f) => f.name === fieldName);
       if (!field) return;
       const isJobType = field.fieldMapping?.originalName === "type";
@@ -1530,10 +1533,8 @@ export default function JobOverview() {
             f.fieldMapping?.nameStartsWith === field.fieldMapping?.nameStartsWith &&
             f.subtype === "diagnosticMaterialId",
         )?.name ?? "";
-      console.log("Material ID Field:", matrerialIdFieldName);
       const materialId = formValuesRef.current?.[matrerialIdFieldName];
       const payload = buildDiagnosticPayload(formValuesRef.current, allFieldsRef.current);
-      console.log("Price changed for field:", field.name, "New value:", value);
       payload.countryCode = jobData?.order?.countryCode;
       payload.changes = [];
       if (!isJobType) {
@@ -1541,23 +1542,16 @@ export default function JobOverview() {
           {
             type: field.fieldMapping?.originalName?.replace("Material", ""),
             lineId: materialId,
-            // value: isMaterial ? value : null,
-            // scope: isMaterial
-            //   ? {
-            //       positions: ["SP", "PN", "AC"],
-            //       jobTypes: ["CHARGEABLE"],
-            //     }
-            //   : null,
+            value: isMaterial ? value : null,
+            scope: isMaterial
+              ? {
+                  positions: ["SP", "PN", "AC"],
+                  jobTypes: ["CHARGEABLE"],
+                }
+              : null,
           },
         ];
       }
-      // payload.changes.forEach((change, index) => {
-      //   console.log(`Change key: ${index}, value:`, change);
-      //   if(change) {
-      //     Object.keys(change).forEach((key) => {
-      //   }
-      // });
-      console.log("Updated payload:", payload);
       recalculatePricesMutation.mutate(payload);
     },
     [buildDiagnosticPayload, jobData?.order?.countryCode, recalculatePricesMutation],
@@ -1809,26 +1803,29 @@ export default function JobOverview() {
     setFieldValueRef.current?.("discountBase", discountBase);
   }, [discountBase]);
 
-  // useEffect(() => {
-  //   if (!isResyncingRef.current && !skipFormResetRef.current) return;
-  //   if (clearResyncRafRef.current !== null) {
-  //     cancelAnimationFrame(clearResyncRafRef.current);
-  //   }
-  //   // Clear fallback timeout if RAF fires (normal path)
-  //   if (resyncFallbackTimeoutRef.current !== null) {
-  //     clearTimeout(resyncFallbackTimeoutRef.current);
-  //     resyncFallbackTimeoutRef.current = null;
-  //   }
-  //   clearResyncRafRef.current = requestAnimationFrame(() => {
-  //     clearResyncRafRef.current = requestAnimationFrame(() => {
-  //       clearResyncRafRef.current = null;
-  //       isResyncingRef.current = false;
-  //       skipFormResetRef.current = false;
-  //       onResyncCompleteRef.current?.();
-  //       onResyncCompleteRef.current = null;
-  //     });
-  //   });
-  // }, [initialFormValues, skipFormResetRef]);
+  // Releases the resync guard (isResyncingRef/skipFormResetRef) two frames after Formik
+  // applies fresh initial values, so dirty-marking and dependent effects don't stay
+  // permanently suppressed after a validate-and-save / recalculate-prices resync.
+  useEffect(() => {
+    if (!isResyncingRef.current && !skipFormResetRef.current) return;
+    if (clearResyncRafRef.current !== null) {
+      cancelAnimationFrame(clearResyncRafRef.current);
+    }
+    // Clear fallback timeout if RAF fires (normal path)
+    if (resyncFallbackTimeoutRef.current !== null) {
+      clearTimeout(resyncFallbackTimeoutRef.current);
+      resyncFallbackTimeoutRef.current = null;
+    }
+    clearResyncRafRef.current = requestAnimationFrame(() => {
+      clearResyncRafRef.current = requestAnimationFrame(() => {
+        clearResyncRafRef.current = null;
+        isResyncingRef.current = false;
+        skipFormResetRef.current = false;
+        onResyncCompleteRef.current?.();
+        onResyncCompleteRef.current = null;
+      });
+    });
+  }, [initialFormValues, skipFormResetRef]);
 
   const enableValidate = useCallback(() => {
     if (validateAndSaveMutation.isPending) return false;
@@ -2361,7 +2358,7 @@ export default function JobOverview() {
       jobStatus: currentStatus,
       discountBase,
       automaticRows,
-      isValidating: validateAndSaveMutation.isPending,
+      isValidating: validateAndSaveMutation.isPending || recalculatePricesMutation.isPending,
     }),
     [
       materials,
@@ -2395,6 +2392,7 @@ export default function JobOverview() {
       discountBase,
       automaticRows,
       validateAndSaveMutation.isPending,
+      recalculatePricesMutation.isPending,
     ],
   );
 
