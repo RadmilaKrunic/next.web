@@ -153,6 +153,15 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
   // shows for "totalSummary".
   if (isByJobTypeRow && jobTypeField && rowJobType !== currentSummaryType) return null;
   const isMaterialField = (field: Field) => field.subtype?.endsWith("Material") ?? false;
+  // GenericField hides a non-matching field in place via its own dependentFields check while
+  // staying mounted, which resets its Formik value to "" (useFieldVisibilityReset). That's fine
+  // for a discountBase variant (never toggles mid-session) but would wipe diagnosticsSummaryTotal's
+  // values every time summaryType switches away from "totalSummary". Gate the whole value-fields
+  // block here instead, so the fields unmount rather than hide-in-place and their values survive
+  // in Formik regardless of which view is showing. Only diagnosticsSummaryTotal itself needs this -
+  // every other area (byJobType rows included) shows its value fields whenever it renders at all.
+  const isTotalArea = area.name.includes("diagnosticsSummaryTotal");
+  const shouldShowValueFields = !isTotalArea || currentSummaryType === "totalSummary";
   const summaryRadioField = (field: Field): Field => ({
     ...field,
     isDisabled: false,
@@ -168,20 +177,22 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
             <GenericField field={summaryRadioField(field)} key={field.name} />
           ))}
       </div>
-      <div className="summary-row summary-fields-row">
-        {area.fields
-          .filter((field) => field.type !== "radiogroup" && !isMaterialField(field))
-          .toSorted((a, b) => (a.position ?? 0) - (b.position ?? 0))
-          .map((field) => {
-            return (
-              <GenericField
-                field={applyFieldPermissions(field, currentSummaryType)}
-                key={field.name}
-                className={`spare-parts-field ${field?.size === "2" ? "small" : ""}`}
-              />
-            );
-          })}
-      </div>
+      {shouldShowValueFields && (
+        <div className="summary-row summary-fields-row">
+          {area.fields
+            .filter((field) => field.type !== "radiogroup" && !isMaterialField(field))
+            .toSorted((a, b) => (a.position ?? 0) - (b.position ?? 0))
+            .map((field) => {
+              return (
+                <GenericField
+                  field={applyFieldPermissions(field, currentSummaryType)}
+                  key={field.name}
+                  className={`spare-parts-field ${field?.size === "2" ? "small" : ""}`}
+                />
+              );
+            })}
+        </div>
+      )}
       {types.has(currentSummaryType) && (
         <div className="summary-fields-row summary-material-row">
           <div className="summary-material-label">{t("SummaryOfMaterialItems")}</div>
