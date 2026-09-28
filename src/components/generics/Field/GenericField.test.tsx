@@ -644,6 +644,7 @@ describe("GenericField", () => {
 
       await waitFor(() => expect(input).toHaveValue("0.00"));
     });
+  });
 
   describe("Email and Tel Fields", () => {
     it("renders email field", () => {

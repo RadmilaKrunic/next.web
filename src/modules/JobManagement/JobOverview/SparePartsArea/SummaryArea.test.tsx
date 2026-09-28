@@ -133,7 +133,10 @@ const allFields = [
   },
 ];
 
-function renderSummary(values?: Record<string, unknown>) {
+function renderSummary(
+  values?: Record<string, unknown>,
+  options?: { area?: unknown; allFields?: unknown },
+) {
   const setFieldValue = vi.fn();
   const mergedValues = {
     summaryType: "chargeable",
@@ -159,14 +162,14 @@ function renderSummary(values?: Record<string, unknown>) {
       GenericFormContext.Provider,
       {
         value: {
-          allFields: allFields as never,
+          allFields: (options?.allFields ?? allFields) as never,
           setAllFields: vi.fn(),
           mandatoryFields: null,
           setMandatoryFields: vi.fn(),
           actionCallbacks: {},
         },
       },
-      React.createElement(SummaryArea, { area }),
+      React.createElement(SummaryArea, { area: (options?.area ?? area) as never }),
     ),
   );
 
@@ -246,5 +249,58 @@ describe("SummaryArea", () => {
 
     expect(setFieldValue).toHaveBeenCalledWith("summaryGrossAmountNet", 12);
     expect(setFieldValue).not.toHaveBeenCalledWith("summaryGrossAmountBase", 12);
+  });
+});
+
+describe("SummaryArea byJobType rows (diagnosticsSummaryDetailed)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    renderedFields.length = 0;
+    useHasPermissionMock.mockImplementation(() => true);
+  });
+
+  // diagnosticsSummaryDetailed is duplicated once per byJobType entry and never carries its
+  // own summaryType radiogroup - only diagnosticsSummaryTotal does - so the row must resolve
+  // the current selection via allFields instead.
+  const allFieldsWithSummaryType = [
+    ...allFields,
+    {
+      name: "summaryType",
+      subtype: "diagnosticSummaryType",
+      type: "radiogroup",
+      fieldMapping: { nameStartsWith: "" },
+    },
+  ];
+
+  const byJobTypeRowArea = {
+    name: "diagnosticData_diagnosticsSummaryDetailed#0",
+    fields: [
+      { name: "row0_jobType", type: "text", subtype: "summaryDetailedJobType", position: 1 },
+      {
+        name: "row0_totalAmount",
+        type: "price",
+        subtype: "diagnosticSummaryTotalAmount",
+        position: 2,
+      },
+    ],
+  };
+
+  it("renders the row when its jobType matches the globally selected summary type", () => {
+    renderSummary(
+      { summaryType: "chargeable", row0_jobType: "CHARGEABLE", row0_totalAmount: 100 },
+      { area: byJobTypeRowArea, allFields: allFieldsWithSummaryType },
+    );
+
+    expect(screen.getByTestId("summary-field-row0_totalAmount")).toBeInTheDocument();
+  });
+
+  it("renders nothing when the row's jobType does not match the selected summary type", () => {
+    renderSummary(
+      { summaryType: "warranty", row0_jobType: "CHARGEABLE", row0_totalAmount: 100 },
+      { area: byJobTypeRowArea, allFields: allFieldsWithSummaryType },
+    );
+
+    expect(screen.queryByTestId("summary-field-row0_totalAmount")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("summary-field-row0_jobType")).not.toBeInTheDocument();
   });
 });
