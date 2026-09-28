@@ -898,6 +898,161 @@ describe("useDiagnosticsManager hook behavior", () => {
     expect(result.current.materials[0].isValidated).toBe(true);
   });
 
+  it("applyRecalculatedMaterials replaces the materials list immediately from a mutation response", async () => {
+    const { props } = createHookProps({
+      diagnosticData: {
+        jobId: "J-2",
+        materials: [
+          {
+            id: "M-1",
+            position: "SP",
+            partNumber: "OLD-PART",
+            description: "Old description",
+            jobType: "CHARGEABLE",
+            quantity: 1,
+            status: "PENDING",
+            price: {
+              unitPrice: 10,
+              netAmount: 10,
+              tax: 10,
+              taxAmount: 1,
+              grossAmount: 11,
+              discount: 0,
+              discountAmount: 0,
+              totalAmount: 11,
+              suggestedNetPrice: 10,
+            },
+          },
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(1);
+      expect(result.current.materials[0].totalAmount).toBe(11);
+    });
+
+    act(() => {
+      result.current.applyRecalculatedMaterials([
+        {
+          id: "M-1",
+          position: "SP",
+          partNumber: "OLD-PART",
+          description: "Old description",
+          jobType: "CHARGEABLE",
+          quantity: 1,
+          status: "PENDING",
+          price: {
+            unitPrice: 20,
+            netAmount: 20,
+            tax: 10,
+            taxAmount: 2,
+            grossAmount: 22,
+            discount: 0,
+            discountAmount: 0,
+            totalAmount: 22,
+            suggestedNetPrice: 20,
+          },
+        },
+      ]);
+    });
+
+    expect(result.current.materials[0].totalAmount).toBe(22);
+    expect(result.current.materials[0].unitPrice).toBe(20);
+  });
+
+  it("applyRecalculatedMaterials is a no-op for an empty/undefined response", async () => {
+    const { props } = createHookProps({
+      diagnosticData: {
+        jobId: "J-3",
+        materials: [
+          {
+            id: "M-1",
+            position: "SP",
+            partNumber: "PART",
+            description: "Description",
+            jobType: "CHARGEABLE",
+            quantity: 1,
+            status: "PENDING",
+            price: {
+              unitPrice: 10,
+              netAmount: 10,
+              tax: 10,
+              taxAmount: 1,
+              grossAmount: 11,
+              discount: 0,
+              discountAmount: 0,
+              totalAmount: 11,
+              suggestedNetPrice: 10,
+            },
+          },
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    await waitFor(() => {
+      expect(result.current.materials).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.applyRecalculatedMaterials(undefined);
+      result.current.applyRecalculatedMaterials([]);
+    });
+
+    expect(result.current.materials).toHaveLength(1);
+    expect(result.current.materials[0].totalAmount).toBe(11);
+  });
+
+  it("applyRecalculatedSummary updates priceSummaryDetailedByJobType immediately, defaulting a missing total", async () => {
+    const { props } = createHookProps();
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    act(() => {
+      result.current.applyRecalculatedSummary({
+        byJobType: [
+          {
+            jobType: "CHARGEABLE",
+            total: {
+              discount: 5,
+              grossAmount: 100,
+              netAmount: 90,
+              suggestedNetPrice: 90,
+              taxAmount: 10,
+              totalAmount: 95,
+              discountAmount: 5,
+            },
+            materialRelated: {
+              discount: 0,
+              grossAmount: 0,
+              netAmount: 0,
+              suggestedNetPrice: 0,
+              taxAmount: 0,
+              totalAmount: 0,
+              discountAmount: 0,
+            },
+            serviceRelated: {
+              discount: 0,
+              grossAmount: 0,
+              netAmount: 0,
+              suggestedNetPrice: 0,
+              taxAmount: 0,
+              totalAmount: 0,
+              discountAmount: 0,
+            },
+          },
+        ],
+      });
+    });
+
+    expect(result.current.priceSummaryDetailedByJobType).toHaveLength(1);
+    expect(result.current.priceSummaryDetailedByJobType[0].jobType).toBe("CHARGEABLE");
+    expect(result.current.priceSummaryDetailedByJobType[0].total.totalAmount).toBe(95);
+  });
+
   it("derives a non-zero taxAmount from unitPrice+tax when the API returns only those as populated (validateAndSave contract)", async () => {
     const { props } = createHookProps({
       diagnosticData: {

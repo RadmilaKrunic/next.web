@@ -876,6 +876,12 @@ export default function JobOverview() {
         validatedDiagnostic as unknown as Record<string, unknown>,
         allFieldsRef.current || [],
       );
+      // Apply the recalculated materials/summary directly from the response now, rather
+      // than waiting on the React Query cache update to propagate back through
+      // diagnosticData (indirect, and gated behind one-shot sync refs) - this is the data
+      // the user just asked to recalculate, so it must land immediately.
+      applyRecalculatedMaterials(data.materials);
+      applyRecalculatedSummary(data.priceSummaryDetailed);
       if (data.errorMessages && data.errorMessages.length > 0) {
         const uniqueErrorKeys = [
           ...new Set(
@@ -1026,6 +1032,8 @@ export default function JobOverview() {
     canArchiveOnDelete,
     discountBase,
     automaticRows,
+    applyRecalculatedMaterials,
+    applyRecalculatedSummary,
   } = useDiagnosticsManager({
     diagnosticData: tabs.length > 0 ? diagnosticData : undefined,
     currentActionType,
