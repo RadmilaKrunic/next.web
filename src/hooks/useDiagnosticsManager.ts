@@ -343,6 +343,26 @@ export const getSummaryTotalRowValues = (
   areaFields: Field[],
   total: SummaryPrice | undefined,
 ): Record<string, unknown> => mapAreaFields(areaFields, mapSummaryPriceSubtypes(total ?? {}));
+
+/**
+ * True for a field belonging to a multi-row diagnostics area this hook populates directly by
+ * subtype (materials, archivedMaterials, the byJobType/total summary rows). Their
+ * attributeMapping (e.g. "materials#.position") is missing the "diagnostic." prefix every other
+ * diagnostic field has, so a generic attributeMapping-based sync run against the merged job data
+ * always misses and falls back to "" / defaultValue - callers should exclude these fields from
+ * any such sync rather than let it clobber what this hook already wrote correctly.
+ */
+export const isDiagnosticsManagerOwnedField = (fieldName: string): boolean => {
+  if (fieldName.includes("archivedSpareParts") && !fieldName.includes("claimArchivedSpareParts")) {
+    return true;
+  }
+  return (
+    fieldName.includes("diagnosticsSpareParts") ||
+    fieldName.includes("diagnosticsSummaryDetailed") ||
+    fieldName.includes("diagnosticsSummaryTotal")
+  );
+};
+
 /** Overlay status and type fields onto an existing values map from the current form state. */
 function applyStatusAndTypeOverrides(
   baseValues: Record<string, unknown>,

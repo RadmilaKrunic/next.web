@@ -94,6 +94,7 @@ import {
   useDiagnosticsManager,
   getChargeablePendingInfo,
   hasWarrantyOrProServiceItems,
+  isDiagnosticsManagerOwnedField,
 } from "hooks/useDiagnosticsManager";
 import { useFormInitialization } from "hooks/useFormInitialization";
 import {
@@ -2406,7 +2407,16 @@ export default function JobOverview() {
 
   const syncData = useCallback(
     (mergedJobData: Record<string, unknown>, allFields: Field[]) => {
-      const dataMapped = convertAPIDataToFormValues(mergedJobData, allFields);
+      // useDiagnosticsManager owns materials/archivedMaterials and the byJobType/total
+      // summary rows end-to-end, populating their fields directly by subtype. Their
+      // attributeMapping (materials#./archivedMaterials#.) is missing the "diagnostic."
+      // prefix every other diagnostic field has (compare diagnostic.technicianNote or
+      // diagnostic.priceSummaryDetailed.total.*), so resolving it against mergedJobData
+      // (which nests diagnostic data one level under .diagnostic) always misses and falls
+      // back to "" / defaultValue - clobbering whatever useDiagnosticsManager already
+      // wrote correctly. Keep this generic sync out of their way entirely.
+      const genericFields = allFields.filter((f) => !isDiagnosticsManagerOwnedField(f.name));
+      const dataMapped = convertAPIDataToFormValues(mergedJobData, genericFields);
       dataMapped.discountBase = discountBase;
       buildFaultCodeDropdowns(dataMapped);
       setInitialFormValues((prev) => ({
@@ -2421,8 +2431,6 @@ export default function JobOverview() {
     const mergedJobDataChanged = mergedJobData !== prevMergedJobDataRef.current;
 
     if (mergedJobDataChanged && mergedJobData && allFields && allFields.length > 0) {
-      console.log("mergedJobData changed:", mergedJobData);
-      console.log("prevMergedJobDataRef.current:", prevMergedJobDataRef.current);
       prevMergedJobDataRef.current = mergedJobData;
       syncData(mergedJobData, allFields);
     }
