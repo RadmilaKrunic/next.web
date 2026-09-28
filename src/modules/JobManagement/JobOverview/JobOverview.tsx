@@ -477,17 +477,19 @@ export default function JobOverview() {
 
   const getDiagnosticFromValidateResponse = useCallback(
     (data: ValidateAndSaveResponse): JobDiagnostic | null => {
-      if (data.diagnostic) return data.diagnostic;
+     // if (data.diagnostic) return { ...data.diagnostic, jobId } as JobDiagnostic;
 
       const hasTopLevelDiagnosticData =
         Array.isArray(data.materials) ||
         Array.isArray(data.archivedMaterials) ||
         !!data.priceSummary ||
+        !!data.priceSummaryDetailed ||
         typeof data.actionType === "string" ||
         typeof data.jobType === "string";
 
       if (!hasTopLevelDiagnosticData || !jobId) return null;
       const responce = { ...data, jobId } as JobDiagnostic;
+      console.log("responce get diagnostic ", responce);
       return responce;
     },
     [jobId],
@@ -501,6 +503,7 @@ export default function JobOverview() {
     };
   }, [jobData, diagnosticData]);
 
+  console.log("responce get diagnostic ", mergedJobData?.diagnostic);
   const isRepairAnswerLocked =
     isCustomerApprovalPendingStatus && mergedJobData?.diagnostic?.customerAnswer === "REPAIR";
 
@@ -934,9 +937,9 @@ export default function JobOverview() {
   const setFieldValueRef = useRef<((field: string, value: unknown) => void) | null>(null);
   const isDistributingRef = useRef(false);
   const isResyncingRef = useRef(false);
-  const clearResyncRafRef = useRef<number | null>(null);
-  const onResyncCompleteRef = useRef<(() => void) | null>(null);
-  const resyncFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // const clearResyncRafRef = useRef<number | null>(null);
+  // const onResyncCompleteRef = useRef<(() => void) | null>(null);
+  // const resyncFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preToggleHoldStateRef = useRef(false);
   const prevMergedJobDataRef = useRef<typeof mergedJobData>(undefined);
   const hashTabAppliedRef = useRef(false);
@@ -1001,10 +1004,12 @@ export default function JobOverview() {
 
   const {
     materials,
+    priceSummaryDetailedByJobType,   
     apiMaterialsLoaded,
     apiMaterialsEmpty,
     hasExistingDiagnostic,
     setMaterials,
+    setPriceSummaryDetailedByJobType,
     allowedPositions,
     addSpecialMaterialsAllowed,
     positionDropdownOptions,
@@ -1483,6 +1488,7 @@ export default function JobOverview() {
             (m as Record<string, unknown>)["price"] = null;
           });
           payload.priceSummary = null;
+          payload.priceSummaryDetailed = null;
         }
       }
 
@@ -2325,10 +2331,12 @@ export default function JobOverview() {
   const diagnosticsContextValue = useMemo(
     () => ({
       materials,
+      priceSummaryDetailedByJobType,
       apiMaterialsLoaded,
       apiMaterialsEmpty,
       hasExistingDiagnostic,
       setMaterials,
+      setPriceSummaryDetailedByJobType,
       onAddRow: onAddSparePart,
       onAddMaterials: addMaterialsToForm,
       onDeleteRow: onDeleteSparePart,
@@ -2359,6 +2367,7 @@ export default function JobOverview() {
     }),
     [
       materials,
+      priceSummaryDetailedByJobType,
       apiMaterialsLoaded,
       apiMaterialsEmpty,
       hasExistingDiagnostic,
@@ -2374,6 +2383,7 @@ export default function JobOverview() {
       getExistingMaterialsAsPositionItems,
       summaryTypeOptions,
       setSummaryTypeOptions,
+      priceSummaryDetailedByJobType,
       arePricesValidated,
       hasPricesPopulated,
       markAllValidated,

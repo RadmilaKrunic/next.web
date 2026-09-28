@@ -15504,10 +15504,6 @@
                     {
                       "fieldName": "discountBase",
                       "fieldValue": "NET_PRICE"
-                    },
-                    {
-                      "fieldName": "discountBase",
-                      "fieldValue": "NET_PRICE"
                     }
                   ],
                   "position": 1,
@@ -15757,7 +15753,7 @@
                   "name": "summaryJobType",
                   "label": "",
                   "type": "text",
-                  "subtype": "",
+                  "subtype": "summaryDetailedJobType",
                   "pattern": "",
                   "maxLength": 0,
                   "minLength": 0,
@@ -15785,8 +15781,7 @@
                   "allowedFormats": [],
                   "isMultiple": false,
                   "permissions": [],
-                  "multiSelect": false,
-                  "onBlur": "onRecalculatePrices"
+                  "multiSelect": false
                 },
                 {
                   "name": "summaryDiscountNetMaterial",

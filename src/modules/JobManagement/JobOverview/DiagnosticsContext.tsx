@@ -10,10 +10,12 @@ import type { MaterialItem, ImportedMaterial } from "hooks/useDiagnosticsManager
 export interface DiagnosticsContextValue {
   /** Source-of-truth list of spare-part rows */
   materials: MaterialItem[];
+  priceSummaryDetailedByJobType: unknown[];
   apiMaterialsLoaded: boolean;
   apiMaterialsEmpty: boolean;
   hasExistingDiagnostic: boolean;
   setMaterials: Dispatch<SetStateAction<MaterialItem[]>>;
+  setPriceSummaryDetailedByJobType: Dispatch<SetStateAction<unknown[]>>;
   /** Add a single empty row (triggered by "Add Row" button) */
   onAddRow: (formValues: Record<string, unknown>) => void;
   /** Add one or more rows from external material sources (explosion diagram / special materials) */
@@ -76,10 +78,12 @@ const createDefaultRef = (): RefObject<boolean> => ({ current: false });
 
 const defaultDiagnosticsContextValue: DiagnosticsContextValue = {
   materials: [],
+  priceSummaryDetailedByJobType: [],
   apiMaterialsLoaded: false,
   apiMaterialsEmpty: false,
   hasExistingDiagnostic: false,
   setMaterials: noop,
+  setPriceSummaryDetailedByJobType: noop,
   onAddRow: noop,
   onAddMaterials: noop,
   onDeleteRow: noop,

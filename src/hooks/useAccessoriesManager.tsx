@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import Field from "../components/generics/Field/GenericField.types";
 import { mapFieldToFieldMapping } from "../components/generics/utils";
-import { reindexFieldSet } from "../components/generics/multipleArea";
 
 export interface Accessory {
   assetIndex: string;
@@ -65,12 +64,23 @@ export const createAccessoryFieldSet = (
   accessoryIndex: number,
   isSingleJob = false,
 ): Accessory => {
-  let fields = reindexFieldSet(templateFields, "accessory#", 0, accessoryIndex);
+  const fields = templateFields.map((field) => {
+    const newField = { ...field };
 
-  // For multi-job scenarios, also replace the asset index: assetData#0_ -> assetData#N_
-  if (!isSingleJob && assetIndex !== "0") {
-    fields = reindexFieldSet(fields, "assetData#", 0, Number(assetIndex));
-  }
+    // Replace accessory index: accessory#0_ -> accessory#N_
+    newField.name = field.name.replace(ACCESSORY_TEMPLATE_PREFIX, `accessory#${accessoryIndex}_`);
+
+    // For multi-job scenarios, also replace asset index
+    if (!isSingleJob && assetIndex !== "0") {
+      // Replace asset index: assetData#0_ -> assetData#N_
+      newField.name = newField.name.replace(/assetData#0_/, `assetData#${assetIndex}_`);
+    }
+
+    delete newField.fieldMapping;
+
+    const mappedField = mapFieldToFieldMapping(newField);
+    return mappedField;
+  });
 
   return {
     assetIndex,

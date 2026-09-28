@@ -14,9 +14,7 @@ import {
   setDuplicatedArea,
   mapFieldToFieldMapping,
   syncFieldsToTabs,
-  convertAPIDataToFormValues,
 } from "components/generics/utils";
-import { useMultipleArea } from "hooks/useMultipleArea";
 // import { calculatePrices } from "utils/priceCalculator";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -25,7 +23,7 @@ import { PERMISSIONS } from "utils/Permissions";
 import type { HeaderUserData } from "api/services/header/action";
 import { MessagesContext } from "../contexts/messagescontext";
 import { scrollToTop } from "../utils/scrollToError";
-import { SummaryDetailAll } from "@/modules/JobManagement/JobList/JobList.types";
+import { SummaryDetail, SummaryDetailAll, SummaryPrice } from "@/modules/JobManagement/JobList/JobList.types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -288,7 +286,27 @@ export const buildRowValues = (
     {} as Record<string, unknown>,
   );
 };
-
+export const getSummaryDetailedRowValues = (
+  areaFields: Field[],
+  item: MaterialItem,
+): Record<string, unknown> => {
+  const mappingSubtype: Record<string, unknown> = {
+    diagnosticSummarySuggestedNetPrice: item.suggestedNetPrice,
+    diagnosticSummaryDiscountNet: item.discount,
+    diagnosticSummaryNetAmount: item.netAmount,
+    diagnosticSummaryTaxAmount: item.taxAmount,
+    diagnosticSummaryGrossAmount: item.grossAmount,
+    diagnosticSummaryDiscount: item.discount,
+    diagnosticSummaryTotalAmount: item.totalAmount,
+  };
+  return areaFields.reduce(
+    (acc, field) => {
+      acc[field.name] = mappingSubtype[field.subtype ?? ""] ?? field.defaultValue ?? "";
+      return acc;
+    },
+    {} as Record<string, unknown>,
+  );
+};
 /** Overlay status and type fields onto an existing values map from the current form state. */
 function applyStatusAndTypeOverrides(
   baseValues: Record<string, unknown>,
@@ -322,6 +340,32 @@ function shouldReuseExistingRowValues(params: {
   if (livePosition !== expectedPosition) return false;
   if (forceRebuild) return false;
   return !rowHasNoPrices;
+}
+
+export function buildSummaryDetailedRowValues(params: {
+  details?: SummaryDetail[] | undefined;
+  areas: Area[];
+  fields: Field[];
+  formValues: Record<string, unknown>;
+  // currentCount: number;
+  // forceRebuild: boolean;
+}): Record<string, unknown> {
+  const { details, areas, fields, formValues } = params;
+  let rowValues: Record<string, unknown> = {};
+  details?.forEach((item, idx) => {
+    const area = areas[idx];
+    if (!area) return;
+
+    const areaFieldNameSet = new Set(area.fields.map((af) => af.name));
+    const areaFields = fields.filter((f) => areaFieldNameSet.has(f.name));
+    const baseValues = Object.fromEntries(
+      areaFields.filter((f) => f.name in formValues).map((f) => [f.name, formValues[f.name]]),
+    );
+    rowValues = { ...rowValues, ...baseValues };
+    //  rowValues = { ...rowValues, ...getSummaryDetailedRowValues(areaFields, item) };
+  });
+
+  return rowValues;
 }
 
 export function buildMaterialsRowValues(params: {
@@ -431,6 +475,25 @@ function withSpecialMaterialSpOption(params: {
   });
 }
 
+function computeFinalSparePartsAreas(
+  needed: number,
+  oldAreas: Area[],
+  newAreas: Area[],
+  removeAreaNames: Set<string>,
+): Area[] {
+  if (needed > 0) return [...oldAreas, ...newAreas];
+  if (needed < 0) return oldAreas.filter((a) => !removeAreaNames.has(a.name));
+  return oldAreas;
+}
+
+function removeDiagnosticsAreas(tab: Section, removeAreaNames: Set<string>): Section {
+  if (tab.name !== "diagnosticData") return tab;
+  return {
+    ...tab,
+    areas: tab.areas.filter((area) => !removeAreaNames.has(area.name)),
+  };
+}
+
 function removeArchivedArea(tab: Section, areaName: string): Section {
   if (tab.name !== "diagnosticData") return tab;
   return {
@@ -523,7 +586,12 @@ const syncMaterialsWithForm = (materials: MaterialItem[], formValues: Record<str
 
 interface UseDiagnosticsManagerProps {
   diagnosticData:
-  | { jobId?: string; materials?: unknown[]; archivedMaterials?: unknown[]; priceSummaryDetailed?: unknown }
+    | {
+        jobId?: string;
+        materials?: unknown[];
+        archivedMaterials?: unknown[];
+        priceSummaryDetailed?: unknown;
+      }
     | undefined;
   currentActionType: string;
   currentJobType: string;
@@ -716,7 +784,8 @@ export const useDiagnosticsManager = ({
   //this is OK
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [archivedMaterials, setArchivedMaterials] = useState<MaterialItem[]>([]);
-  const [priceSummaryDetailed, setPriceSummaryDetailed] = useState<SummaryDetailAll | undefined>(undefined)
+  const [priceSummaryDetailed, setPriceSummaryDetailed] = useState<SummaryDetailAll>();
+
   const [apiMaterialsLoaded, setApiMaterialsLoaded] = useState(false);
   const [apiMaterialsEmpty, setApiMaterialsEmpty] = useState(false);
   const hasExistingDiagnostic = Boolean(diagnosticData?.jobId);
@@ -746,8 +815,8 @@ export const useDiagnosticsManager = ({
 
   const hasSyncedFromAPIRef = useRef(false);
   const hasSyncedArchivedRef = useRef(false);
-  const hasSyncedSummaryRef = useRef(false);
   const forceRebuildRef = useRef(false);
+  const archivedForceRebuildRef = useRef(false);
   const jobStatusRef = useRef(jobStatus);
   jobStatusRef.current = jobStatus;
   /** Counts rows archived by user deletion since the last validate call. */
@@ -759,6 +828,9 @@ export const useDiagnosticsManager = ({
   materialsRef.current = materials;
   const archivedMaterialsRef = useRef(archivedMaterials);
   archivedMaterialsRef.current = archivedMaterials;
+  const archivedTemplateRef = useRef<Area | null>(null);
+  const priceSummaryDetailedRef = useRef(priceSummaryDetailed);
+  priceSummaryDetailedRef.current = priceSummaryDetailed;
 
   const baretoolNumberField = allFields?.find((x) => x.subtype === "baretoolNumber");
   const baretoolNumber = baretoolNumberField
@@ -824,7 +896,6 @@ export const useDiagnosticsManager = ({
   useEffect(() => {
     hasSyncedFromAPIRef.current = false;
     hasSyncedArchivedRef.current = false;
-    hasSyncedSummaryRef.current = false;
     prevRuleKeyRef.current = "";
     prAutofillAppliedRef.current = false;
     setApiMaterialsLoaded(false);
@@ -885,7 +956,14 @@ export const useDiagnosticsManager = ({
     forceRebuildRef.current = true;
     setMaterials(sortMaterialsByOrder(mergedItems));
   }, [diagnosticData, isResyncingRef, setArePricesValidated]);
+  useEffect(() => {
+    const priceSummary = diagnosticData?.priceSummaryDetailed as SummaryDetailAll;
+    if (!priceSummary?.byJobType?.length || hasSyncedFromAPIRef.current) return;
 
+    hasSyncedFromAPIRef.current = true;
+    console.log("priceSummary", priceSummary);
+    setPriceSummaryDetailed(priceSummary);
+  }, [diagnosticData, isResyncingRef, setArePricesValidated]);
   // ── Effect 1b: API archived data → archivedMaterials list ─────────────────
   useEffect(() => {
     const apiArchived = diagnosticData?.archivedMaterials as
@@ -902,15 +980,8 @@ export const useDiagnosticsManager = ({
       return mapPrice(m, position, description, price);
     });
 
+    archivedForceRebuildRef.current = true;
     setArchivedMaterials(items);
-  }, [diagnosticData]);
-
-  // ── Effect 1c: API data → priceSummaryDetailed ─────────────────────────────
-  useEffect(() => {
-    const apiSummary = diagnosticData?.priceSummaryDetailed as SummaryDetailAll | undefined;
-    if (!apiSummary || hasSyncedSummaryRef.current) return;
-    hasSyncedSummaryRef.current = true;
-    setPriceSummaryDetailed(apiSummary);
   }, [diagnosticData]);
 
   // ── Effect 2: Rule change → rebuild materials list ────────────────────────
@@ -1020,84 +1091,208 @@ export const useDiagnosticsManager = ({
     });
   }, [bareSalesData]);
 
-  // ── Materials[] → diagnosticsSpareParts rows ───────────────────────────────
-  useMultipleArea({
-    list: materials,
-    areaName: "diagnosticsSpareParts",
-    sectionName: "diagnosticData",
-    tabs,
-    setTabs,
-    setAllFields,
-    setInitialFormValues,
-    skipFormResetRef,
-    buildRowValues: ({ list, rows, previousCount }) => {
-      const rowValues = buildMaterialsRowValues({
-        materials: list,
-        areas: rows,
-        fields: rows.flatMap((r) => r.fields),
-        formValues: formValuesRef.current,
-        currentCount: previousCount,
-        forceRebuild: forceRebuildRef.current,
-      });
-      forceRebuildRef.current = false;
+  // ── Effect 3: materials[] → areas + allFields + initialFormValues ─────────
+  useEffect(() => {
+    if (materials.length === 0) return;
 
-      // Keeps "SP" selectable on rows that already hold it even when SP isn't part of
-      // allowedPositions (special materials can add an SP row outside the country rule).
-      // Patched in place (not via setAllFields) so a brand-new row — not yet committed
-      // to allFields — picks up the option too, not just rows that already existed.
-      const familyFields = rows.flatMap((r) => r.fields);
-      withSpecialMaterialSpOption({
-        fields: familyFields,
+    const currentTabs = tabsRef.current;
+    const currentFields = allFieldsRef.current ?? [];
+
+    const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
+    if (!diagnosticTab) return;
+
+    const sparePartsAreas = diagnosticTab.areas.filter(
+      (a) => a.isMultiple && a.name.includes("diagnosticsSpareParts"),
+    );
+
+    const templateArea = sparePartsAreas[0];
+    if (!templateArea) return;
+    const currentCount = sparePartsAreas.length;
+    const targetCount = materials.length;
+    const needed = targetCount - currentCount;
+
+    // Hoisted so they're in scope for both the build phase and the functional setters below.
+    const newAreas: Area[] = [];
+    let removeAreaNames = new Set<string>();
+    let removeFieldNames = new Set<string>();
+
+    let updatedFields = [...currentFields];
+
+    if (needed > 0) {
+      const maxIndex = sparePartsAreas.reduce((max, a) => Math.max(max, a.index ?? 0), 0);
+
+      for (let i = 0; i < needed; i++) {
+        const cloned = structuredClone(templateArea);
+        cloned.label = "";
+        const area = setDuplicatedArea(cloned, maxIndex + 1 + i, diagnosticTab.name);
+        const areaFields = area.fields.map((f) => mapFieldToFieldMapping(f));
+        newAreas.push(area);
+        updatedFields = [...updatedFields, ...areaFields];
+      }
+    } else if (needed < 0) {
+      // Remove excess areas (from the end, beyond index 0)
+      const toRemove = sparePartsAreas.slice(targetCount);
+      removeAreaNames = new Set(toRemove.map((a) => a.name));
+      removeFieldNames = new Set(toRemove.flatMap((a) => a.fields.map((f) => f.name)));
+      updatedFields = currentFields.filter((f) => !removeFieldNames.has(f.name));
+    }
+
+    // Build form values from each MaterialItem mapped onto its area's fields.
+    // For the "needed > 0" case we need to know the final areas; build them inline
+    // from updatedFields (same data as before, just without the updatedTabs variable).
+    const finalSparePartsAreas = computeFinalSparePartsAreas(
+      needed,
+      sparePartsAreas,
+      newAreas,
+      removeAreaNames,
+    );
+
+    const rowValues = buildMaterialsRowValues({
+      materials,
+      areas: finalSparePartsAreas,
+      fields: updatedFields,
+      formValues: formValuesRef.current,
+      currentCount,
+      forceRebuild: forceRebuildRef.current,
+    });
+
+    if (needed !== 0 || forceRebuildRef.current) {
+      skipFormResetRef.current = true;
+
+      updatedFields = withSpecialMaterialSpOption({
+        fields: updatedFields,
         rowValues,
         allowedPositions: allowedPositionsRef.current,
         addSpecialMaterialsAllowed: addSpecialMaterialsAllowedRef.current,
-      }).forEach((patched, i) => {
-        familyFields[i].options = patched.options;
       });
 
-      return rowValues;
-    },
-  });
+      // Use functional updaters so this composes correctly with any concurrent
+      // functional setter from useClaimMaterialsManager (or any other hook)
+      // that shares the same setAllFields / setTabs.
+      if (needed > 0) {
+        const addedFields = updatedFields.slice(currentFields.length);
+        setAllFields((prev) => [...(prev ?? []), ...addedFields]);
+        setTabs((prev) =>
+          prev.map((tab) =>
+            tab.name === "diagnosticData" ? { ...tab, areas: [...tab.areas, ...newAreas] } : tab,
+          ),
+        );
+      } else if (needed < 0) {
+        setAllFields((prev) => (prev ?? []).filter((f) => !removeFieldNames.has(f.name)));
+        setTabs((prev) => prev.map((tab) => removeDiagnosticsAreas(tab, removeAreaNames)));
+      }
+    }
 
-  // ── ArchivedMaterials[] → archivedSpareParts rows ──────────────────────────
-  useMultipleArea({
-    list: archivedMaterials,
-    areaName: "archivedSpareParts",
-    sectionName: "diagnosticData",
-    tabs,
-    setTabs,
-    setAllFields,
-    setInitialFormValues,
-    skipFormResetRef,
-    buildRowValues: ({ list, rows }) =>
-      rows.reduce<Record<string, unknown>>((acc, row, idx) => {
-        const item = list[idx];
-        return item ? { ...acc, ...buildRowValues(row.fields, item) } : acc;
-      }, {}),
-  });
-
-  // Stamps the full position dropdown onto archived rows the first time they appear
-  // (they can be restored/re-archived into any position, unlike active rows).
+    if (forceRebuildRef.current) {
+      setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
+    } else {
+      const currentFormWithoutRowFields = Object.fromEntries(
+        Object.entries(formValuesRef.current).filter(
+          ([k, v]) =>
+            !k.startsWith("diagnosticData_diagnosticsSpareParts") &&
+            v !== "" &&
+            v !== null &&
+            v !== undefined,
+        ),
+      );
+      setInitialFormValues((prev) => ({ ...prev, ...currentFormWithoutRowFields, ...rowValues }));
+    }
+    forceRebuildRef.current = false;
+  }, [materials, setAllFields, setTabs, setInitialFormValues, formValuesRef, skipFormResetRef]);
+  // ── Effect 3b: archivedMaterials[] → areas + allFields + initialFormValues ───
   useEffect(() => {
-    const currentFields = allFieldsRef.current ?? [];
-    const needsOptions = currentFields.some(
-      (f) => f.subtype === "archivedPosition" && (f.options?.length ?? 0) === 0,
-    );
-    if (!needsOptions) return;
+    if (archivedMaterials.length === 0) return;
 
-    const allPositionOptions: GenericOptionProps[] = Object.keys(POSITION_ORDER).map((pos) => ({
+    const currentTabs = tabsRef.current;
+    const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
+    if (!diagnosticTab) return;
+
+    const archivedAreas = diagnosticTab.areas.filter(
+      (a) => a.isMultiple && a.name.includes("archivedSpareParts"),
+    );
+    // Cache the template area the first time we see it so we can recreate
+    // archived rows even after onRestoreRow removes the last area from tabs.
+    if (archivedAreas.length > 0) {
+      archivedTemplateRef.current ??= structuredClone(archivedAreas[0]);
+    }
+    const templateArea = archivedAreas[0] ?? archivedTemplateRef.current;
+    if (!templateArea) return;
+
+    const currentCount = archivedAreas.length;
+    const targetCount = archivedMaterials.length;
+    const needed = targetCount - currentCount;
+
+    const ALL_POSITION_OPTIONS: GenericOptionProps[] = Object.keys(POSITION_ORDER).map((pos) => ({
       value: pos,
       name: pos,
     }));
-    skipFormResetRef.current = true;
-    setAllFields((prev) =>
-      (prev ?? []).map((f) =>
-        f.subtype === "archivedPosition" && (f.options?.length ?? 0) === 0
-          ? { ...f, options: allPositionOptions }
-          : f,
-      ),
+
+    // Build new area templates if needed
+    const newAreasAndFields: { area: Area; fields: Field[] }[] = [];
+    if (needed > 0) {
+      const baseIndex =
+        archivedAreas.length === 0
+          ? -1
+          : archivedAreas.reduce((max, a) => Math.max(max, a.index ?? 0), 0);
+      for (let i = 0; i < needed; i++) {
+        const cloned = structuredClone(templateArea);
+        // Preserve the label only for the first area (#0) — ArchivedSparePartsArea
+        // uses area.label for the section title and only renders it for isFirstArea (#0).
+        if (baseIndex + 1 + i !== 0) cloned.label = "";
+        const area = setDuplicatedArea(cloned, baseIndex + 1 + i, diagnosticTab.name);
+        const areaFields = area.fields.map((f) => mapFieldToFieldMapping(f));
+        newAreasAndFields.push({ area, fields: areaFields });
+      }
+    }
+
+    const allArchivedAreas = [...archivedAreas, ...newAreasAndFields.map((x) => x.area)];
+    const newFieldsToAdd = newAreasAndFields.flatMap((x) => x.fields);
+
+    // Compute form values for all archived rows
+    const existingArchivedFields = (allFieldsRef.current ?? []).filter((f) =>
+      f.name.includes("archivedSpareParts"),
     );
-  }, [archivedMaterials, allFields, setAllFields, skipFormResetRef]);
+    const allArchivedFields = [...existingArchivedFields, ...newFieldsToAdd];
+    let rowValues: Record<string, unknown> = {};
+    archivedMaterials.forEach((item, idx) => {
+      const area = allArchivedAreas[idx];
+      if (!area) return;
+      const areaFieldNameSet = new Set(area.fields.map((af) => af.name));
+      const areaFields = allArchivedFields.filter((f) => areaFieldNameSet.has(f.name));
+      rowValues = { ...rowValues, ...buildRowValues(areaFields, item) };
+    });
+
+    if (needed !== 0 || archivedForceRebuildRef.current) {
+      skipFormResetRef.current = true;
+      // Use functional update so this composes correctly with Effect 3's setAllFields call
+      setAllFields((prev) => {
+        const fields = [...(prev ?? []), ...newFieldsToAdd];
+        return fields.map((f) => {
+          if (f.subtype !== "archivedPosition") return f;
+          if ((f.options?.length ?? 0) > 0) return f;
+          return { ...f, options: ALL_POSITION_OPTIONS };
+        });
+      });
+      if (needed !== 0) {
+        const newAreas = newAreasAndFields.map((x) => x.area);
+        setTabs((prev) =>
+          prev.map((tab) =>
+            tab.name === "diagnosticData" ? { ...tab, areas: [...tab.areas, ...newAreas] } : tab,
+          ),
+        );
+      }
+    }
+
+    setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
+    archivedForceRebuildRef.current = false;
+  }, [
+    archivedMaterials,
+    setAllFields,
+    setTabs,
+    setInitialFormValues,
+    formValuesRef,
+    skipFormResetRef,
+  ]);
   // ── Sync field options when positionDropdownOptions change ────────────────
   useEffect(() => {
     if (positionDropdownOptions.length === 0 || !allFields || allFields.length === 0) return;
@@ -1134,32 +1329,123 @@ export const useDiagnosticsManager = ({
   }, [positionDropdownOptions, allFields, setAllFields, setTabs, formValuesRef, skipFormResetRef]);
 
   // ── Public callbacks ──────────────────────────────────────────────────────
-  // priceSummaryDetailed.byJobType[] → diagnosticsSummaryDetailed rows. These fields
-  // carry no subtype (only attributeMapping, e.g. "diagnostic.priceSummaryDetailed.byJobType#.
-  // total.suggestedNetPrice"), so — unlike materials — row values come straight from the
-  // generic attributeMapping mapper instead of a bespoke subtype dictionary.
-  const byJobType = useMemo(() => priceSummaryDetailed?.byJobType ?? [], [priceSummaryDetailed]);
-  useMultipleArea({
-    list: byJobType,
-    areaName: "diagnosticsSummaryDetailed",
-    sectionName: "diagnosticData",
-    tabs,
-    setTabs,
+  useEffect(() => {
+    if (!priceSummaryDetailed) return;
+    if (!priceSummaryDetailed?.byJobType?.length) return;
+    const byJobType = priceSummaryDetailed?.byJobType;
+    const currentTabs = tabsRef.current;
+    const currentFields = allFieldsRef.current ?? [];
+
+    const diagnosticTab = currentTabs.find((t) => t.name === "diagnosticData");
+    if (!diagnosticTab) return;
+
+    const diagnosticsSummaryDetailed = diagnosticTab.areas.filter(
+      (a) => a.isMultiple && a.name.includes("diagnosticsSummaryDetailed"),
+    );
+
+    console.log("diagnosticsSummaryDetailed: ", diagnosticsSummaryDetailed);
+    const templateArea = diagnosticsSummaryDetailed[0];
+
+    if (!templateArea) return;
+    console.log("templateArea: ", templateArea);
+    const currentCount = diagnosticsSummaryDetailed.length;
+    const targetCount = Number(byJobType?.length || 0);
+    const needed = targetCount - currentCount;
+    console.log("currentCount: ", currentCount);
+    const newAreas: Area[] = [];
+    let removeAreaNames = new Set<string>();
+    let removeFieldNames = new Set<string>();
+
+    let updatedFields = [...currentFields];
+
+    if (needed > 0) {
+      const maxIndex = diagnosticsSummaryDetailed.reduce(
+        (max, a) => Math.max(max, a.index ?? 0),
+        0,
+      );
+
+      for (let i = 0; i < needed; i++) {
+        const cloned = structuredClone(templateArea);
+        cloned.label = "";
+        const area = setDuplicatedArea(cloned, maxIndex + 1 + i, diagnosticTab.name);
+        const areaFields = area.fields.map((f) => mapFieldToFieldMapping(f));
+        newAreas.push(area);
+        updatedFields = [...updatedFields, ...areaFields];
+      }
+    } else if (needed < 0) {
+      // Remove excess areas (from the end, beyond index 0)
+      const toRemove = diagnosticsSummaryDetailed.slice(targetCount);
+      removeAreaNames = new Set(toRemove.map((a) => a.name));
+      removeFieldNames = new Set(toRemove.flatMap((a) => a.fields.map((f) => f.name)));
+      updatedFields = currentFields.filter((f) => !removeFieldNames.has(f.name));
+    }
+
+    const finalSparePartsAreas = computeFinalSparePartsAreas(
+      needed,
+      diagnosticsSummaryDetailed,
+      newAreas,
+      removeAreaNames,
+    );
+
+    const rowValues = buildSummaryDetailedRowValues({
+      details: byJobType,
+      areas: finalSparePartsAreas,
+      fields: updatedFields,
+      formValues: formValuesRef.current,
+      // currentCount,
+      // forceRebuild: forceRebuildRef.current,
+    });
+
+    if (needed !== 0 || forceRebuildRef.current) {
+      skipFormResetRef.current = true;
+
+      //  updatedFields = withSpecialMaterialSpOption({
+      //    fields: updatedFields,
+      //    rowValues,
+      //    allowedPositions: allowedPositionsRef.current,
+      //    addSpecialMaterialsAllowed: addSpecialMaterialsAllowedRef.current,
+      //  });
+
+      // Use functional updaters so this composes correctly with any concurrent
+      // functional setter from useClaimMaterialsManager (or any other hook)
+      // that shares the same setAllFields / setTabs.
+      if (needed > 0) {
+        const addedFields = updatedFields.slice(currentFields.length);
+        setAllFields((prev) => [...(prev ?? []), ...addedFields]);
+        setTabs((prev) =>
+          prev.map((tab) =>
+            tab.name === "diagnosticData" ? { ...tab, areas: [...tab.areas, ...newAreas] } : tab,
+          ),
+        );
+      } else if (needed < 0) {
+        setAllFields((prev) => (prev ?? []).filter((f) => !removeFieldNames.has(f.name)));
+        setTabs((prev) => prev.map((tab) => removeDiagnosticsAreas(tab, removeAreaNames)));
+      }
+    }
+
+    if (forceRebuildRef.current) {
+      setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
+    } else {
+      const currentFormWithoutRowFields = Object.fromEntries(
+        Object.entries(formValuesRef.current).filter(
+          ([k, v]) =>
+            !k.startsWith("diagnosticData_diagnosticsSummaryDetailed") &&
+            v !== "" &&
+            v !== null &&
+            v !== undefined,
+        ),
+      );
+      setInitialFormValues((prev) => ({ ...prev, ...currentFormWithoutRowFields, ...rowValues }));
+    }
+    forceRebuildRef.current = false;
+  }, [
+    formValuesRef,
+    priceSummaryDetailed?.byJobType,
     setAllFields,
     setInitialFormValues,
+    setTabs,
     skipFormResetRef,
-    // Unlike the row families above, there's no "always show one entry row" UX
-    // here (it's hidden — see CustomAreasMapper), and an empty placeholder row
-    // would submit an empty priceSummaryDetailed.byJobType[0] on every save.
-    // Only materialize rows once the API actually returns some.
-    minRows: 0,
-    buildRowValues: ({ list, rows }) =>
-      convertAPIDataToFormValues(
-        { diagnostic: { priceSummaryDetailed: { byJobType: list } } },
-        rows.flatMap((r) => r.fields),
-      ),
-  });
-
+  ]);
   const onAddRow = useCallback((formValues?: Record<string, unknown>) => {
     if (!formValues) return;
     const perms = userPermissionsRef.current;
@@ -1243,6 +1529,7 @@ export const useDiagnosticsManager = ({
         const syncedMaterials = syncMaterialsWithForm(materialsRef.current, formValuesRef.current);
         const deletedMaterial = syncedMaterials[areaIndex];
         if (deletedMaterial) {
+          archivedForceRebuildRef.current = true;
           pendingArchivedDeletionsRef.current += 1;
           setArchivedMaterials((prev) => [...prev, deletedMaterial]);
         }
@@ -1450,8 +1737,8 @@ export const useDiagnosticsManager = ({
     (markValidated = false) => {
       hasSyncedFromAPIRef.current = false;
       hasSyncedArchivedRef.current = false;
-      hasSyncedSummaryRef.current = false;
       forceRebuildRef.current = true;
+      archivedForceRebuildRef.current = true;
       if (markValidated) shouldMarkValidatedRef.current = true;
       skipFormResetRef.current = true;
     },

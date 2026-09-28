@@ -93,8 +93,8 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
   );
 
   const currentSummaryType = summaryTypeField
-    ? (values[summaryTypeField.name] as string) || "chargeable"
-    : "chargeable";
+    ? (values[summaryTypeField.name] as string) || "totalSummary"
+    : "totalSummary";
 
   const summaryTypeOptions = useMemo(() => {
     const seen = new Map<string, { label: string; value: string }>();
@@ -128,7 +128,9 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
   }, [summaryTypeOptions, setSummaryTypeOptions]);
 
   if (hasPriceViewPermission && !hasPricesPopulated) return null;
-
+  console.log("Current summary type:", currentSummaryType);
+  console.log("Summary type options:", summaryTypeOptions);
+  console.log(JSON.stringify(values));
   const isMaterialField = (field: Field) => field.subtype?.endsWith("Material") ?? false;
   const summaryRadioField = (field: Field): Field => ({
     ...field,
