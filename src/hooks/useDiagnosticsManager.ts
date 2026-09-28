@@ -964,6 +964,47 @@ export const useDiagnosticsManager = ({
     setApiMaterialsEmpty(!apiMaterials || apiMaterials.length === 0);
   }, [diagnosticData]);
 
+  /** Maps raw API material records into MaterialItem[] (Bug 6 tax-preservation merge
+   *  included), sorted by order/position. Shared by Effect 1's diagnosticData-driven sync
+   *  and applyRecalculatedMaterials's direct, immediate apply from a mutation response. */
+  const buildMaterialsFromAPI = useCallback(
+    (apiMaterials: Array<Record<string, unknown>>): MaterialItem[] => {
+      const autofill = getPositionAutofill(tRef.current);
+      const items: MaterialItem[] = apiMaterials.map((m) => {
+        const position = (m.position as string) ?? "";
+        const price = (m.price as Record<string, unknown>) ?? {};
+        const description = autofill[position]?.description ?? (m.description as string) ?? "";
+        return mapPrice(m, position, description, price);
+      });
+      shouldMarkValidatedRef.current = false;
+
+      const allHaveIds = items.every((item) => !!item.materialId);
+      if (allHaveIds) {
+        items.forEach((item) => {
+          item.isValidated = true;
+        });
+        if (isResyncingRef) {
+          isResyncingRef.current = true;
+        }
+      }
+
+      // Bug 6 fix: preserve tax for in-progress rows not yet returned by the API
+      const mergedItems = items.map((item) => {
+        if (item.materialId) return item; // API-sourced, use API tax
+        const existing = materialsRef.current.find(
+          (m) => m.position === item.position && !m.materialId,
+        );
+        if (existing && existing.tax > 0 && item.tax === 0) {
+          return { ...item, tax: existing.tax };
+        }
+        return item;
+      });
+
+      return sortMaterialsByOrder(mergedItems);
+    },
+    [isResyncingRef],
+  );
+
   // ── Effect 1: API data → materials list ───────────────────────────────────
   useEffect(() => {
     const apiMaterials = diagnosticData?.materials as Array<Record<string, unknown>> | undefined;
@@ -971,42 +1012,27 @@ export const useDiagnosticsManager = ({
 
     hasSyncedFromAPIRef.current = true;
 
-    const autofill = getPositionAutofill(tRef.current);
-    const items: MaterialItem[] = apiMaterials.map((m) => {
-      const position = (m.position as string) ?? "";
-      const price = (m.price as Record<string, unknown>) ?? {};
-      const description = autofill[position]?.description ?? (m.description as string) ?? "";
-      return mapPrice(m, position, description, price);
-    });
-    shouldMarkValidatedRef.current = false;
-
-    const allHaveIds = items.every((item) => !!item.materialId);
-    if (allHaveIds) {
-      items.forEach((item) => {
-        item.isValidated = true;
-      });
-      if (isResyncingRef) {
-        isResyncingRef.current = true;
-      }
-    }
-
-    // Bug 6 fix: preserve tax for in-progress rows not yet returned by the API
-    const mergedItems = items.map((item) => {
-      if (item.materialId) return item; // API-sourced, use API tax
-      const existing = materialsRef.current.find(
-        (m) => m.position === item.position && !m.materialId,
-      );
-      if (existing && existing.tax > 0 && item.tax === 0) {
-        return { ...item, tax: existing.tax };
-      }
-      return item;
-    });
-
     // Signal Effect 3 to force a full rebuild so field components always
     // re-render with fresh API data, even when the row count hasn't changed.
     forceRebuildRef.current = true;
-    setMaterials(sortMaterialsByOrder(mergedItems));
-  }, [diagnosticData, isResyncingRef, setArePricesValidated]);
+    setMaterials(buildMaterialsFromAPI(apiMaterials));
+  }, [diagnosticData, buildMaterialsFromAPI, setArePricesValidated]);
+
+  /**
+   * Applies a materials array straight from a mutation response (e.g. recalculate-prices)
+   * to the materials list immediately, bypassing the diagnosticData-driven Effect 1 (and its
+   * hasSyncedFromAPIRef one-shot guard) entirely. Use this whenever the fresh data is already
+   * in hand and must land in the form right away, rather than waiting on the React Query
+   * cache update to propagate back through diagnosticData.
+   */
+  const applyRecalculatedMaterials = useCallback(
+    (rawMaterials: unknown[] | undefined) => {
+      if (!rawMaterials?.length) return;
+      forceRebuildRef.current = true;
+      setMaterials(buildMaterialsFromAPI(rawMaterials as Array<Record<string, unknown>>));
+    },
+    [buildMaterialsFromAPI],
+  );
   useEffect(() => {
     const priceSummary = diagnosticData?.priceSummaryDetailed as SummaryDetailAll;
     if (!priceSummary?.byJobType?.length || hasSyncedSummaryDetailedRef.current) return;
@@ -1014,6 +1040,24 @@ export const useDiagnosticsManager = ({
     hasSyncedSummaryDetailedRef.current = true;
     setPriceSummaryDetailed(priceSummary);
   }, [diagnosticData]);
+
+  /**
+   * Applies priceSummaryDetailed straight from a mutation response (e.g. recalculate-prices)
+   * immediately, bypassing the diagnosticData-driven sync effect above (and its
+   * hasSyncedSummaryDetailedRef one-shot guard) entirely - same rationale as
+   * applyRecalculatedMaterials.
+   */
+  const applyRecalculatedSummary = useCallback(
+    (summary: { total?: Partial<SummaryPrice>; byJobType: SummaryDetail[] } | undefined) => {
+      if (!summary) return;
+      setPriceSummaryDetailed({
+        total: { ...ZERO_SUMMARY_PRICE, ...summary.total },
+        byJobType: summary.byJobType,
+      });
+    },
+    [],
+  );
+
   // ── Effect 1b: API archived data → archivedMaterials list ─────────────────
   useEffect(() => {
     const apiArchived = diagnosticData?.archivedMaterials as
@@ -1878,5 +1922,7 @@ export const useDiagnosticsManager = ({
     resyncMaterialsFromAPI,
     setRevisedRejectedRowPending,
     canArchiveOnDelete: !STATUSES_WITH_PERMANENT_DELETE.includes(jobStatus),
+    applyRecalculatedMaterials,
+    applyRecalculatedSummary,
   };
 };
