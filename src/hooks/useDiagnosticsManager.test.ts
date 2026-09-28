@@ -32,6 +32,7 @@ import {
   getSummaryDetailedRowValues,
   buildSummaryDetailedRowValues,
   getSummaryTotalRowValues,
+  isDiagnosticsManagerOwnedField,
   useDiagnosticsManager,
   type MaterialItem,
 } from "./useDiagnosticsManager";
@@ -704,6 +705,27 @@ describe("getSummaryTotalRowValues", () => {
     const result = getSummaryTotalRowValues(areaFields, undefined);
 
     expect(result["totalAmount"]).toBe(0);
+  });
+});
+
+describe("isDiagnosticsManagerOwnedField", () => {
+  it.each([
+    "diagnosticData_diagnosticsSpareParts#0_position",
+    "diagnosticData_archivedSpareParts#1_partNumber",
+    "diagnosticData_diagnosticsSummaryDetailed#0_summaryJobType",
+    "diagnosticData_diagnosticsSummaryTotal_summaryType",
+  ])("claims ownership of %s", (fieldName) => {
+    expect(isDiagnosticsManagerOwnedField(fieldName)).toBe(true);
+  });
+
+  it.each([
+    "diagnosticData_technicianNote",
+    "diagnosticData_claimSpareParts#0_position",
+    "diagnosticData_claimArchivedSpareParts#0_position",
+    "diagnosticData_claimDiagnosticsSummary_summaryType",
+    "assetData_accessory#0_accessoryName",
+  ])("does not claim %s", (fieldName) => {
+    expect(isDiagnosticsManagerOwnedField(fieldName)).toBe(false);
   });
 });
 
