@@ -6,16 +6,18 @@ import type {
 } from "api/services/countryConfiguration/countryConfiguration";
 import type { GenericOptionProps } from "components/generics/Field/GenericField.types";
 import type { MaterialItem, ImportedMaterial } from "hooks/useDiagnosticsManager";
+import type { SummaryDetail } from "modules/JobManagement/JobList/JobList.types";
 
 export interface DiagnosticsContextValue {
   /** Source-of-truth list of spare-part rows */
   materials: MaterialItem[];
-  priceSummaryDetailedByJobType: unknown[];
+  /** Last synced price breakdown by job type (chargeable/warranty/...), same source as materials */
+  priceSummaryDetailedByJobType: SummaryDetail[];
   apiMaterialsLoaded: boolean;
   apiMaterialsEmpty: boolean;
   hasExistingDiagnostic: boolean;
   setMaterials: Dispatch<SetStateAction<MaterialItem[]>>;
-  setPriceSummaryDetailedByJobType: Dispatch<SetStateAction<unknown[]>>;
+  setPriceSummaryDetailedByJobType: Dispatch<SetStateAction<SummaryDetail[]>>;
   /** Add a single empty row (triggered by "Add Row" button) */
   onAddRow: (formValues: Record<string, unknown>) => void;
   /** Add one or more rows from external material sources (explosion diagram / special materials) */

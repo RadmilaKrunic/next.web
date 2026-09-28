@@ -9,7 +9,7 @@ import type { GenericOptionProps } from "components/generics/Field/GenericField.
 import Field from "components/generics/Field/GenericField.types";
 import Section from "components/generics/Section/GenericSection.types";
 import Area from "components/generics/Area/GenericArea.types";
-import type { RefObject } from "react";
+import type { RefObject, Dispatch, SetStateAction } from "react";
 import {
   setDuplicatedArea,
   mapFieldToFieldMapping,
@@ -53,6 +53,16 @@ export interface MaterialItem {
   isPriceSetManually?: boolean;
   reimbursementPaymentMethod?: string | null;
 }
+
+const ZERO_SUMMARY_PRICE: SummaryPrice = {
+  discount: 0,
+  grossAmount: 0,
+  netAmount: 0,
+  suggestedNetPrice: 0,
+  taxAmount: 0,
+  totalAmount: 0,
+  discountAmount: 0,
+};
 
 // ── Diagnostic field helpers ───────────────────────────────────────────────
 
@@ -288,16 +298,25 @@ export const buildRowValues = (
 };
 export const getSummaryDetailedRowValues = (
   areaFields: Field[],
-  item: MaterialItem,
+  item: SummaryDetail,
 ): Record<string, unknown> => {
+  const total = item.total ?? ({} as Partial<SummaryPrice>);
+  const materialRelated = item.materialRelated ?? ({} as Partial<SummaryPrice>);
   const mappingSubtype: Record<string, unknown> = {
-    diagnosticSummarySuggestedNetPrice: item.suggestedNetPrice,
-    diagnosticSummaryDiscountNet: item.discount,
-    diagnosticSummaryNetAmount: item.netAmount,
-    diagnosticSummaryTaxAmount: item.taxAmount,
-    diagnosticSummaryGrossAmount: item.grossAmount,
-    diagnosticSummaryDiscount: item.discount,
-    diagnosticSummaryTotalAmount: item.totalAmount,
+    diagnosticSummarySuggestedNetPrice: total.suggestedNetPrice,
+    diagnosticSummaryDiscountNet: total.discount,
+    diagnosticSummaryNetAmount: total.netAmount,
+    diagnosticSummaryTaxAmount: total.taxAmount,
+    diagnosticSummaryGrossAmount: total.grossAmount,
+    diagnosticSummaryDiscount: total.discount,
+    diagnosticSummaryTotalAmount: total.totalAmount,
+    summaryDetailedJobType: item.jobType,
+    diagnosticSummaryDiscountNetMaterial: materialRelated.discount,
+    diagnosticSummaryNetAmountMaterial: materialRelated.netAmount,
+    diagnosticSummaryTaxAmountMaterial: materialRelated.taxAmount,
+    diagnosticSummaryGrossAmountMaterial: materialRelated.grossAmount,
+    diagnosticSummaryDiscountMaterial: materialRelated.discount,
+    diagnosticSummaryTotalAmountMaterial: materialRelated.totalAmount,
   };
   return areaFields.reduce(
     (acc, field) => {
@@ -346,11 +365,8 @@ export function buildSummaryDetailedRowValues(params: {
   details?: SummaryDetail[] | undefined;
   areas: Area[];
   fields: Field[];
-  formValues: Record<string, unknown>;
-  // currentCount: number;
-  // forceRebuild: boolean;
 }): Record<string, unknown> {
-  const { details, areas, fields, formValues } = params;
+  const { details, areas, fields } = params;
   let rowValues: Record<string, unknown> = {};
   details?.forEach((item, idx) => {
     const area = areas[idx];
@@ -358,11 +374,7 @@ export function buildSummaryDetailedRowValues(params: {
 
     const areaFieldNameSet = new Set(area.fields.map((af) => af.name));
     const areaFields = fields.filter((f) => areaFieldNameSet.has(f.name));
-    const baseValues = Object.fromEntries(
-      areaFields.filter((f) => f.name in formValues).map((f) => [f.name, formValues[f.name]]),
-    );
-    rowValues = { ...rowValues, ...baseValues };
-    //  rowValues = { ...rowValues, ...getSummaryDetailedRowValues(areaFields, item) };
+    rowValues = { ...rowValues, ...getSummaryDetailedRowValues(areaFields, item) };
   });
 
   return rowValues;
@@ -815,6 +827,7 @@ export const useDiagnosticsManager = ({
 
   const hasSyncedFromAPIRef = useRef(false);
   const hasSyncedArchivedRef = useRef(false);
+  const hasSyncedSummaryDetailedRef = useRef(false);
   const forceRebuildRef = useRef(false);
   const archivedForceRebuildRef = useRef(false);
   const jobStatusRef = useRef(jobStatus);
@@ -896,6 +909,7 @@ export const useDiagnosticsManager = ({
   useEffect(() => {
     hasSyncedFromAPIRef.current = false;
     hasSyncedArchivedRef.current = false;
+    hasSyncedSummaryDetailedRef.current = false;
     prevRuleKeyRef.current = "";
     prAutofillAppliedRef.current = false;
     setApiMaterialsLoaded(false);
@@ -958,12 +972,11 @@ export const useDiagnosticsManager = ({
   }, [diagnosticData, isResyncingRef, setArePricesValidated]);
   useEffect(() => {
     const priceSummary = diagnosticData?.priceSummaryDetailed as SummaryDetailAll;
-    if (!priceSummary?.byJobType?.length || hasSyncedFromAPIRef.current) return;
+    if (!priceSummary?.byJobType?.length || hasSyncedSummaryDetailedRef.current) return;
 
-    hasSyncedFromAPIRef.current = true;
-    console.log("priceSummary", priceSummary);
+    hasSyncedSummaryDetailedRef.current = true;
     setPriceSummaryDetailed(priceSummary);
-  }, [diagnosticData, isResyncingRef, setArePricesValidated]);
+  }, [diagnosticData]);
   // ── Effect 1b: API archived data → archivedMaterials list ─────────────────
   useEffect(() => {
     const apiArchived = diagnosticData?.archivedMaterials as
@@ -1343,15 +1356,12 @@ export const useDiagnosticsManager = ({
       (a) => a.isMultiple && a.name.includes("diagnosticsSummaryDetailed"),
     );
 
-    console.log("diagnosticsSummaryDetailed: ", diagnosticsSummaryDetailed);
     const templateArea = diagnosticsSummaryDetailed[0];
 
     if (!templateArea) return;
-    console.log("templateArea: ", templateArea);
     const currentCount = diagnosticsSummaryDetailed.length;
     const targetCount = Number(byJobType?.length || 0);
     const needed = targetCount - currentCount;
-    console.log("currentCount: ", currentCount);
     const newAreas: Area[] = [];
     let removeAreaNames = new Set<string>();
     let removeFieldNames = new Set<string>();
@@ -1391,9 +1401,6 @@ export const useDiagnosticsManager = ({
       details: byJobType,
       areas: finalSparePartsAreas,
       fields: updatedFields,
-      formValues: formValuesRef.current,
-      // currentCount,
-      // forceRebuild: forceRebuildRef.current,
     });
 
     if (needed !== 0 || forceRebuildRef.current) {
@@ -1737,6 +1744,7 @@ export const useDiagnosticsManager = ({
     (markValidated = false) => {
       hasSyncedFromAPIRef.current = false;
       hasSyncedArchivedRef.current = false;
+      hasSyncedSummaryDetailedRef.current = false;
       forceRebuildRef.current = true;
       archivedForceRebuildRef.current = true;
       if (markValidated) shouldMarkValidatedRef.current = true;
@@ -1779,8 +1787,23 @@ export const useDiagnosticsManager = ({
     );
   }, []);
 
+  const setPriceSummaryDetailedByJobType = useCallback<Dispatch<SetStateAction<SummaryDetail[]>>>(
+    (update) => {
+      setPriceSummaryDetailed((prev) => ({
+        total: prev?.total ?? ZERO_SUMMARY_PRICE,
+        byJobType:
+          typeof update === "function"
+            ? (update as (prev: SummaryDetail[]) => SummaryDetail[])(prev?.byJobType ?? [])
+            : update,
+      }));
+    },
+    [],
+  );
+
   return {
     materials,
+    priceSummaryDetailedByJobType: priceSummaryDetailed?.byJobType ?? [],
+    setPriceSummaryDetailedByJobType,
     apiMaterialsLoaded,
     apiMaterialsEmpty,
     hasExistingDiagnostic,

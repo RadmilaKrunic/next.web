@@ -92,9 +92,26 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     [area.fields],
   );
 
-  const currentSummaryType = summaryTypeField
-    ? (values[summaryTypeField.name] as string) || "totalSummary"
+  // Duplicated diagnosticsSummaryDetailed rows (one per byJobType entry) don't carry their
+  // own copy of the summaryType radiogroup - it only lives on diagnosticsSummaryTotal. Fall
+  // back to a form-wide lookup so those rows still read the type the user actually selected.
+  const globalSummaryTypeField = useMemo(
+    () => allFields?.find((f) => f.subtype === "diagnosticSummaryType"),
+    [allFields],
+  );
+
+  const activeSummaryTypeField = summaryTypeField ?? globalSummaryTypeField;
+
+  const currentSummaryType = activeSummaryTypeField
+    ? (values[activeSummaryTypeField.name] as string) || "totalSummary"
     : "totalSummary";
+
+  const isByJobTypeRow = area.name.includes("diagnosticsSummaryDetailed");
+  const jobTypeField = useMemo(
+    () => area.fields.find((f) => f.subtype === "summaryDetailedJobType"),
+    [area.fields],
+  );
+  const rowJobType = jobTypeField ? toCamelCase(String(values[jobTypeField.name] ?? "")) : "";
 
   const summaryTypeOptions = useMemo(() => {
     const seen = new Map<string, { label: string; value: string }>();
@@ -124,13 +141,17 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
   }, [summaryTypeOptions]);
 
   useEffect(() => {
+    // Only the area that owns the summaryType radiogroup should publish the options -
+    // duplicated diagnosticsSummaryDetailed rows would otherwise push the same list N times.
+    if (!summaryTypeField) return;
     setSummaryTypeOptions(summaryTypeOptions);
-  }, [summaryTypeOptions, setSummaryTypeOptions]);
+  }, [summaryTypeField, summaryTypeOptions, setSummaryTypeOptions]);
 
   if (hasPriceViewPermission && !hasPricesPopulated) return null;
-  console.log("Current summary type:", currentSummaryType);
-  console.log("Summary type options:", summaryTypeOptions);
-  console.log(JSON.stringify(values));
+  // Each diagnosticsSummaryDetailed row represents one job type; only render the row
+  // matching the currently selected summary type, same as diagnosticsSummaryTotal only
+  // shows for "totalSummary".
+  if (isByJobTypeRow && jobTypeField && rowJobType !== currentSummaryType) return null;
   const isMaterialField = (field: Field) => field.subtype?.endsWith("Material") ?? false;
   const summaryRadioField = (field: Field): Field => ({
     ...field,

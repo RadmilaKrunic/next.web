@@ -5,6 +5,7 @@ import {
   JobList,
   JobOverviewItem,
   Message,
+  SummaryDetail,
 } from "modules/JobManagement/JobList/JobList.types";
 import { JobColumnConfiguration } from "modules/JobManagement/JobList/JobListTable/JobListColumns.config";
 import { AxiosResponse } from "axios";
@@ -321,7 +322,7 @@ export interface ValidateAndSaveResponse {
       totalAmount: number;
       discountAmount?: number;
     };
-    byJobType:[]
+    byJobType: SummaryDetail[];
   };
 }
 

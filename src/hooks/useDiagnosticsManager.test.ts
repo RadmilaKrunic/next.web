@@ -29,6 +29,8 @@ import {
   hasWarrantyOrProServiceItems,
   buildRowValues,
   buildMaterialsRowValues,
+  getSummaryDetailedRowValues,
+  buildSummaryDetailedRowValues,
   useDiagnosticsManager,
   type MaterialItem,
 } from "./useDiagnosticsManager";
@@ -40,6 +42,7 @@ import type {
   CountryConfig,
 } from "api/services/countryConfiguration/countryConfiguration";
 import type { HeaderUserData } from "api/services/header/action";
+import type { SummaryDetail } from "modules/JobManagement/JobList/JobList.types";
 
 const makeField = (name: string, subtype?: string, overrides: Partial<Field> = {}): Field => ({
   name,
@@ -63,6 +66,38 @@ const makeItem = (overrides: Partial<MaterialItem> = {}): MaterialItem => ({
   discount: 0,
   taxAmount: 19,
   totalAmount: 119,
+  ...overrides,
+});
+
+const makeSummaryDetail = (overrides: Partial<SummaryDetail> = {}): SummaryDetail => ({
+  jobType: "CHARGEABLE",
+  total: {
+    discount: 10,
+    grossAmount: 119,
+    netAmount: 100,
+    suggestedNetPrice: 100,
+    taxAmount: 19,
+    totalAmount: 109,
+    discountAmount: 10,
+  },
+  materialRelated: {
+    discount: 5,
+    grossAmount: 59.5,
+    netAmount: 50,
+    suggestedNetPrice: 50,
+    taxAmount: 9.5,
+    totalAmount: 54.5,
+    discountAmount: 5,
+  },
+  serviceRelated: {
+    discount: 0,
+    grossAmount: 0,
+    netAmount: 0,
+    suggestedNetPrice: 0,
+    taxAmount: 0,
+    totalAmount: 0,
+    discountAmount: 0,
+  },
   ...overrides,
 });
 
@@ -512,6 +547,127 @@ describe("buildRowValues", () => {
     const item = makeItem({ totalAmount: 0 });
     const result = buildRowValues(areaFields, item);
     expect(result["total"]).toBe(0);
+  });
+});
+
+describe("getSummaryDetailedRowValues", () => {
+  it("maps total.* fields and jobType by subtype", () => {
+    const areaFields: Field[] = [
+      makeField("row0_suggestedNetPrice", "diagnosticSummarySuggestedNetPrice"),
+      makeField("row0_netAmount", "diagnosticSummaryNetAmount"),
+      makeField("row0_taxAmount", "diagnosticSummaryTaxAmount"),
+      makeField("row0_grossAmount", "diagnosticSummaryGrossAmount"),
+      makeField("row0_totalAmount", "diagnosticSummaryTotalAmount"),
+      makeField("row0_jobType", "summaryDetailedJobType"),
+    ];
+    const item = makeSummaryDetail({ jobType: "WARRANTY" });
+    const result = getSummaryDetailedRowValues(areaFields, item);
+
+    expect(result["row0_suggestedNetPrice"]).toBe(item.total.suggestedNetPrice);
+    expect(result["row0_netAmount"]).toBe(item.total.netAmount);
+    expect(result["row0_taxAmount"]).toBe(item.total.taxAmount);
+    expect(result["row0_grossAmount"]).toBe(item.total.grossAmount);
+    expect(result["row0_totalAmount"]).toBe(item.total.totalAmount);
+    expect(result["row0_jobType"]).toBe("WARRANTY");
+  });
+
+  it("maps the NET and GROSS discount fields from total.discount", () => {
+    const areaFields: Field[] = [
+      makeField("row0_discountNet", "diagnosticSummaryDiscountNet"),
+      makeField("row0_discountGross", "diagnosticSummaryDiscount"),
+    ];
+    const item = makeSummaryDetail({ total: { ...makeSummaryDetail().total, discount: 42 } });
+    const result = getSummaryDetailedRowValues(areaFields, item);
+
+    expect(result["row0_discountNet"]).toBe(42);
+    expect(result["row0_discountGross"]).toBe(42);
+  });
+
+  it("maps materialRelated.* fields for the chargeable material breakdown", () => {
+    const areaFields: Field[] = [
+      makeField("row0_matDiscountNet", "diagnosticSummaryDiscountNetMaterial"),
+      makeField("row0_matNetAmount", "diagnosticSummaryNetAmountMaterial"),
+      makeField("row0_matTaxAmount", "diagnosticSummaryTaxAmountMaterial"),
+      makeField("row0_matGrossAmount", "diagnosticSummaryGrossAmountMaterial"),
+      makeField("row0_matDiscountGross", "diagnosticSummaryDiscountMaterial"),
+      makeField("row0_matTotalAmount", "diagnosticSummaryTotalAmountMaterial"),
+    ];
+    const item = makeSummaryDetail();
+    const result = getSummaryDetailedRowValues(areaFields, item);
+
+    expect(result["row0_matDiscountNet"]).toBe(item.materialRelated.discount);
+    expect(result["row0_matNetAmount"]).toBe(item.materialRelated.netAmount);
+    expect(result["row0_matTaxAmount"]).toBe(item.materialRelated.taxAmount);
+    expect(result["row0_matGrossAmount"]).toBe(item.materialRelated.grossAmount);
+    expect(result["row0_matDiscountGross"]).toBe(item.materialRelated.discount);
+    expect(result["row0_matTotalAmount"]).toBe(item.materialRelated.totalAmount);
+  });
+
+  it("falls back to the field defaultValue when total/materialRelated are missing", () => {
+    const areaFields: Field[] = [
+      makeField("row0_suggestedNetPrice", "diagnosticSummarySuggestedNetPrice", {
+        defaultValue: 0,
+      }),
+    ];
+    const item = { jobType: "CHARGEABLE" } as unknown as SummaryDetail;
+    const result = getSummaryDetailedRowValues(areaFields, item);
+
+    expect(result["row0_suggestedNetPrice"]).toBe(0);
+  });
+});
+
+describe("buildSummaryDetailedRowValues", () => {
+  it("zips details[] with areas[] by index and merges each row's field values", () => {
+    const chargeableFields: Field[] = [
+      makeField("diagnosticsSummaryDetailed#0_jobType", "summaryDetailedJobType"),
+      makeField("diagnosticsSummaryDetailed#0_totalAmount", "diagnosticSummaryTotalAmount"),
+    ];
+    const warrantyFields: Field[] = [
+      makeField("diagnosticsSummaryDetailed#1_jobType", "summaryDetailedJobType"),
+      makeField("diagnosticsSummaryDetailed#1_totalAmount", "diagnosticSummaryTotalAmount"),
+    ];
+    const areas = [
+      makeArea("diagnosticsSummaryDetailed#0", chargeableFields, 0),
+      makeArea("diagnosticsSummaryDetailed#1", warrantyFields, 1),
+    ];
+    const details = [
+      makeSummaryDetail({
+        jobType: "CHARGEABLE",
+        total: { ...makeSummaryDetail().total, totalAmount: 100 },
+      }),
+      makeSummaryDetail({
+        jobType: "WARRANTY",
+        total: { ...makeSummaryDetail().total, totalAmount: 50 },
+      }),
+    ];
+
+    const result = buildSummaryDetailedRowValues({
+      details,
+      areas,
+      fields: [...chargeableFields, ...warrantyFields],
+    });
+
+    expect(result["diagnosticsSummaryDetailed#0_jobType"]).toBe("CHARGEABLE");
+    expect(result["diagnosticsSummaryDetailed#0_totalAmount"]).toBe(100);
+    expect(result["diagnosticsSummaryDetailed#1_jobType"]).toBe("WARRANTY");
+    expect(result["diagnosticsSummaryDetailed#1_totalAmount"]).toBe(50);
+  });
+
+  it("skips a detail entry when there is no matching area at that index", () => {
+    const fields: Field[] = [makeField("row0_jobType", "summaryDetailedJobType")];
+    const areas = [makeArea("row0", fields, 0)];
+    const details = [makeSummaryDetail({ jobType: "CHARGEABLE" }), makeSummaryDetail({ jobType: "WARRANTY" })];
+
+    const result = buildSummaryDetailedRowValues({ details, areas, fields });
+
+    expect(result["row0_jobType"]).toBe("CHARGEABLE");
+    expect(Object.keys(result)).toHaveLength(1);
+  });
+
+  it("returns an empty object when details is undefined", () => {
+    expect(buildSummaryDetailedRowValues({ details: undefined, areas: [], fields: [] })).toEqual(
+      {},
+    );
   });
 });
 

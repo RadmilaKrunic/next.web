@@ -488,9 +488,7 @@ export default function JobOverview() {
         typeof data.jobType === "string";
 
       if (!hasTopLevelDiagnosticData || !jobId) return null;
-      const responce = { ...data, jobId } as JobDiagnostic;
-      console.log("responce get diagnostic ", responce);
-      return responce;
+      return { ...data, jobId } as JobDiagnostic;
     },
     [jobId],
   );
@@ -503,7 +501,6 @@ export default function JobOverview() {
     };
   }, [jobData, diagnosticData]);
 
-  console.log("responce get diagnostic ", mergedJobData?.diagnostic);
   const isRepairAnswerLocked =
     isCustomerApprovalPendingStatus && mergedJobData?.diagnostic?.customerAnswer === "REPAIR";
 
@@ -2372,6 +2369,7 @@ export default function JobOverview() {
       apiMaterialsEmpty,
       hasExistingDiagnostic,
       setMaterials,
+      setPriceSummaryDetailedByJobType,
       onAddSparePart,
       addMaterialsToForm,
       onDeleteSparePart,
@@ -2383,7 +2381,6 @@ export default function JobOverview() {
       getExistingMaterialsAsPositionItems,
       summaryTypeOptions,
       setSummaryTypeOptions,
-      priceSummaryDetailedByJobType,
       arePricesValidated,
       hasPricesPopulated,
       markAllValidated,
