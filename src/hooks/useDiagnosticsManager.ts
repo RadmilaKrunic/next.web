@@ -296,20 +296,38 @@ export const buildRowValues = (
     {} as Record<string, unknown>,
   );
 };
+/** subtype → value for the fields shared by diagnosticsSummaryTotal and each
+ *  diagnosticsSummaryDetailed row's own "total" breakdown. */
+const mapSummaryPriceSubtypes = (price: Partial<SummaryPrice>): Record<string, unknown> => ({
+  diagnosticSummarySuggestedNetPrice: price.suggestedNetPrice,
+  diagnosticSummaryDiscountNet: price.discount,
+  diagnosticSummaryNetAmount: price.netAmount,
+  diagnosticSummaryTaxAmount: price.taxAmount,
+  diagnosticSummaryGrossAmount: price.grossAmount,
+  diagnosticSummaryDiscount: price.discount,
+  diagnosticSummaryTotalAmount: price.totalAmount,
+});
+
+const mapAreaFields = (
+  areaFields: Field[],
+  mappingSubtype: Record<string, unknown>,
+): Record<string, unknown> =>
+  areaFields.reduce(
+    (acc, field) => {
+      acc[field.name] = mappingSubtype[field.subtype ?? ""] ?? field.defaultValue ?? "";
+      return acc;
+    },
+    {} as Record<string, unknown>,
+  );
+
 export const getSummaryDetailedRowValues = (
   areaFields: Field[],
   item: SummaryDetail,
 ): Record<string, unknown> => {
   const total = item.total ?? ({} as Partial<SummaryPrice>);
   const materialRelated = item.materialRelated ?? ({} as Partial<SummaryPrice>);
-  const mappingSubtype: Record<string, unknown> = {
-    diagnosticSummarySuggestedNetPrice: total.suggestedNetPrice,
-    diagnosticSummaryDiscountNet: total.discount,
-    diagnosticSummaryNetAmount: total.netAmount,
-    diagnosticSummaryTaxAmount: total.taxAmount,
-    diagnosticSummaryGrossAmount: total.grossAmount,
-    diagnosticSummaryDiscount: total.discount,
-    diagnosticSummaryTotalAmount: total.totalAmount,
+  return mapAreaFields(areaFields, {
+    ...mapSummaryPriceSubtypes(total),
     summaryDetailedJobType: item.jobType,
     diagnosticSummaryDiscountNetMaterial: materialRelated.discount,
     diagnosticSummaryNetAmountMaterial: materialRelated.netAmount,
@@ -317,15 +335,14 @@ export const getSummaryDetailedRowValues = (
     diagnosticSummaryGrossAmountMaterial: materialRelated.grossAmount,
     diagnosticSummaryDiscountMaterial: materialRelated.discount,
     diagnosticSummaryTotalAmountMaterial: materialRelated.totalAmount,
-  };
-  return areaFields.reduce(
-    (acc, field) => {
-      acc[field.name] = mappingSubtype[field.subtype ?? ""] ?? field.defaultValue ?? "";
-      return acc;
-    },
-    {} as Record<string, unknown>,
-  );
+  });
 };
+
+/** Maps priceSummaryDetailed.total onto the single, non-duplicated diagnosticsSummaryTotal area. */
+export const getSummaryTotalRowValues = (
+  areaFields: Field[],
+  total: SummaryPrice | undefined,
+): Record<string, unknown> => mapAreaFields(areaFields, mapSummaryPriceSubtypes(total ?? {}));
 /** Overlay status and type fields onto an existing values map from the current form state. */
 function applyStatusAndTypeOverrides(
   baseValues: Record<string, unknown>,
@@ -1453,6 +1470,21 @@ export const useDiagnosticsManager = ({
     setTabs,
     skipFormResetRef,
   ]);
+
+  // ── priceSummaryDetailed.total → diagnosticsSummaryTotal field values ──────
+  // Independent of byJobType: total must populate (and stay populated) whenever
+  // priceSummaryDetailed syncs, whether or not there's a byJobType breakdown.
+  useEffect(() => {
+    if (!priceSummaryDetailed) return;
+
+    const diagnosticTab = tabsRef.current.find((t) => t.name === "diagnosticData");
+    const totalArea = diagnosticTab?.areas.find((a) => a.name.includes("diagnosticsSummaryTotal"));
+    if (!totalArea) return;
+
+    const rowValues = getSummaryTotalRowValues(totalArea.fields, priceSummaryDetailed.total);
+    setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
+  }, [priceSummaryDetailed?.total, setInitialFormValues]);
+
   const onAddRow = useCallback((formValues?: Record<string, unknown>) => {
     if (!formValues) return;
     const perms = userPermissionsRef.current;

@@ -31,6 +31,7 @@ import {
   buildMaterialsRowValues,
   getSummaryDetailedRowValues,
   buildSummaryDetailedRowValues,
+  getSummaryTotalRowValues,
   useDiagnosticsManager,
   type MaterialItem,
 } from "./useDiagnosticsManager";
@@ -668,6 +669,41 @@ describe("buildSummaryDetailedRowValues", () => {
     expect(buildSummaryDetailedRowValues({ details: undefined, areas: [], fields: [] })).toEqual(
       {},
     );
+  });
+});
+
+describe("getSummaryTotalRowValues", () => {
+  it("maps priceSummaryDetailed.total onto diagnosticsSummaryTotal's fields by subtype", () => {
+    const areaFields: Field[] = [
+      makeField("totalSuggestedNetPrice", "diagnosticSummarySuggestedNetPrice"),
+      makeField("totalNetAmount", "diagnosticSummaryNetAmount"),
+      makeField("totalTaxAmount", "diagnosticSummaryTaxAmount"),
+      makeField("totalGrossAmount", "diagnosticSummaryGrossAmount"),
+      makeField("totalAmount", "diagnosticSummaryTotalAmount"),
+      makeField("totalDiscountNet", "diagnosticSummaryDiscountNet"),
+      makeField("totalDiscountGross", "diagnosticSummaryDiscount"),
+    ];
+    const total = makeSummaryDetail().total;
+
+    const result = getSummaryTotalRowValues(areaFields, total);
+
+    expect(result["totalSuggestedNetPrice"]).toBe(total.suggestedNetPrice);
+    expect(result["totalNetAmount"]).toBe(total.netAmount);
+    expect(result["totalTaxAmount"]).toBe(total.taxAmount);
+    expect(result["totalGrossAmount"]).toBe(total.grossAmount);
+    expect(result["totalAmount"]).toBe(total.totalAmount);
+    expect(result["totalDiscountNet"]).toBe(total.discount);
+    expect(result["totalDiscountGross"]).toBe(total.discount);
+  });
+
+  it("falls back to the field defaultValue when total is undefined", () => {
+    const areaFields: Field[] = [
+      makeField("totalAmount", "diagnosticSummaryTotalAmount", { defaultValue: 0 }),
+    ];
+
+    const result = getSummaryTotalRowValues(areaFields, undefined);
+
+    expect(result["totalAmount"]).toBe(0);
   });
 });
 

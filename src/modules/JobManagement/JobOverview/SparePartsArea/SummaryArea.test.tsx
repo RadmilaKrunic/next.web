@@ -304,3 +304,41 @@ describe("SummaryArea byJobType rows (diagnosticsSummaryDetailed)", () => {
     expect(screen.queryByTestId("summary-field-row0_jobType")).not.toBeInTheDocument();
   });
 });
+
+describe("SummaryArea diagnosticsSummaryTotal (value-field mount gating)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    renderedFields.length = 0;
+    useHasPermissionMock.mockImplementation(() => true);
+  });
+
+  const totalArea = {
+    name: "diagnosticData_diagnosticsSummaryTotal",
+    fields: [
+      { name: "summaryType", type: "radiogroup", subtype: "diagnosticSummaryType", position: 1 },
+      { name: "totalAmount", type: "price", subtype: "diagnosticSummaryTotalAmount", position: 2 },
+    ],
+  };
+
+  it("renders diagnosticsSummaryTotal's value fields when totalSummary is selected", () => {
+    renderSummary({ summaryType: "totalSummary", totalAmount: 250 }, { area: totalArea });
+
+    expect(screen.getByTestId("summary-field-totalAmount")).toBeInTheDocument();
+  });
+
+  // GenericField normally hides a non-matching field in place (still mounted), which resets its
+  // Formik value via useFieldVisibilityReset. diagnosticsSummaryTotal's value fields must instead
+  // be excluded from the DOM entirely when another type is selected, so they never mount-and-hide
+  // and their Formik values survive the switch.
+  it("excludes diagnosticsSummaryTotal's value fields from the DOM when a job type is selected", () => {
+    renderSummary({ summaryType: "chargeable", totalAmount: 250 }, { area: totalArea });
+
+    expect(screen.queryByTestId("summary-field-totalAmount")).not.toBeInTheDocument();
+  });
+
+  it("still renders the radiogroup itself when a job type is selected", () => {
+    renderSummary({ summaryType: "chargeable", totalAmount: 250 }, { area: totalArea });
+
+    expect(screen.getByTestId("summary-field-summaryType")).toBeInTheDocument();
+  });
+});
