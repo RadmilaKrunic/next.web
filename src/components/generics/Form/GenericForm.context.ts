@@ -16,7 +16,6 @@ export type ActionCallback =
       formValues?: Record<string, unknown>,
       helpers?: ActionCallbackHelpers,
     ) => void | boolean | Promise<void>)
-  | ((fieldName: string, value: unknown) => void | boolean | Promise<void>)
   | ((...args: unknown[]) => void | boolean | Promise<void>);
 export type RadioButtonOption = {
   label: string;

@@ -2252,7 +2252,7 @@ export default function JobOverview() {
         onFinishRepair,
         onToolDelivered,
         onCreateCostEstimate,
-        onRecalculatePrices,
+        onRecalculatePrices: onRecalculatePrices as (...args: unknown[]) => void,
       },
       radioSourceCallbacks: {
         getRadioButtonsForSummaryType: () => summaryTypeOptions,
