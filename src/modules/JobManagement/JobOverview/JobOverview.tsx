@@ -2569,7 +2569,7 @@ export default function JobOverview() {
                 )) {
                   dependencyActionCallbacks[key] = () => {
                     if (typeof callback === "function") {
-                      return callback(values);
+                      return (callback as (...args: unknown[]) => unknown)(values);
                     }
                     return undefined;
                   };
