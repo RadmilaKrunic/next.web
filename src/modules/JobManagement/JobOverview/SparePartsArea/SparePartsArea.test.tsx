@@ -87,7 +87,6 @@ const createDiagnosticsContextValue = (
   discountBase: "GROSS_PRICE",
   automaticRows: [],
   isValidating: false,
-  // resyncMaterialsFromAPI: vi.fn(),
   ...overrides,
 });
 

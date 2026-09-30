@@ -92,4 +92,6 @@ export interface ClaimItem {
   materials: Material[];
   archivedMaterials?: Material[];
   jobDiagnostic?: JobDiagnostic;
+  /** Claim-level totals; the summary area reads these (not priceSummaryDetailed). */
+  priceSummary?: Partial<Price>;
 }

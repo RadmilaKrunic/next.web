@@ -12,6 +12,8 @@ import { PERMISSIONS } from "utils/Permissions";
 import Field from "components/generics/Field/GenericField.types";
 import { useTranslation } from "react-i18next";
 
+const JOB_ROW_AREA_NAME = "diagnosticsSpareParts";
+
 const toCamelCase = (s: string) =>
   s.toLowerCase().replaceAll(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 
@@ -27,20 +29,15 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
   const isWaitingForApproval = jobStatus === "WAITING_FOR_APPROVAL";
   const types = new Set(["chargeable"]);
 
-  const rowAreaNameContains = useMemo(() => {
-    if (area.name.includes("claimDiagnosticsSummary")) return "claimSpareParts";
-    return "diagnosticsSpareParts";
-  }, [area.name]);
-
   const scopedFields = useMemo(() => {
     if (!allFields) return [];
     return allFields.filter((f) => {
       const ns = f.fieldMapping?.nameStartsWith ?? "";
       // Non-row fields (summary fields, discountBase, etc.) have no nameStartsWith — keep them.
       if (!ns) return true;
-      return ns.includes(rowAreaNameContains);
+      return ns.includes(JOB_ROW_AREA_NAME);
     });
-  }, [allFields, rowAreaNameContains]);
+  }, [allFields]);
 
   const { hasChargeablePending } = useMemo(
     () => getChargeablePendingInfo(scopedFields, values),
@@ -126,23 +123,6 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
       });
     return [{ value: "totalSummary", label: "totalSummary" }, ...seen.values()];
   }, [scopedFields, values]);
-
-  // useEffect(() => {
-  //   if (!summaryTypeField) return;
-  //  const current = values[summaryTypeField.name] as string;
-  
-  //   if (currentSummaryRef.current) {
-  // console.log("effect ref1: ", currentSummaryRef.current)
-  //  //   console.log("effect1: ", current)
-  //     if (currentSummaryRef.current !== current) {
-  //       void setFieldValue(summaryTypeField.name, current);
-  //     }
-  //   //   if (currentSummaryRef.current !== current) {
-  //   //    currentSummaryRef.current = current
-  //   //  }
-  
-  //   }
-  // }, [setFieldValue, summaryTypeField, summaryTypeOptions, values]);
 
   useEffect(() => {
     // Only the area that owns the summaryType radiogroup should publish the options -

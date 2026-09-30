@@ -39,7 +39,7 @@ vi.mock("../ClaimContext", () => ({
     markRowDirty: vi.fn(),
     allowedPositions: [],
     positionDropdownOptions: [],
-    // isResyncingRef: { current: false },
+    isResyncingRef: { current: false },
     discountBase: "GROSS_PRICE",
     canDeleteRows: true,
     automaticRows: [],
@@ -92,7 +92,7 @@ const baseClaimContext = {
   markRowDirty: vi.fn(),
   allowedPositions: [] as Array<{ position: string; maxCount: number }>,
   positionDropdownOptions: [] as Array<{ value: string; name: string }>,
-  // isResyncingRef: { current: false },
+  isResyncingRef: { current: false },
   discountBase: "GROSS_PRICE",
   canDeleteRows: true,
   automaticRows: [] as string[],
@@ -576,6 +576,21 @@ describe("ClaimSparePartsRow", () => {
   });
 
   describe("markRowDirty effect", () => {
+    function renderWithPositionSetter() {
+      return render(
+        React.createElement(
+          Formik,
+          { initialValues: { [positionFieldName]: "" }, onSubmit: vi.fn() },
+          React.createElement(
+            GenericFormContext.Provider,
+            { value: defaultFormContextValue as never },
+            React.createElement(PositionSetter, { value: "SP" }),
+            React.createElement(ClaimSparePartsRow, { fields: fields as never }),
+          ),
+        ),
+      );
+    }
+
     it("does not call markRowDirty on the initial render", () => {
       const markRowDirty = vi.fn();
       mockUseClaimContext.mockReturnValue({ ...baseClaimContext, markRowDirty } as never);
@@ -585,33 +600,34 @@ describe("ClaimSparePartsRow", () => {
       expect(markRowDirty).not.toHaveBeenCalled();
     });
 
-    it("calls markRowDirty when the row's non-price input key changes after mount", () => {
+    it("calls markRowDirty with the row index when a non-price input changes after validation", async () => {
       const markRowDirty = vi.fn();
       mockUseClaimContext.mockReturnValue({ ...baseClaimContext, markRowDirty } as never);
 
-      const { rerender } = render(buildElement());
+      renderWithPositionSetter();
       expect(markRowDirty).not.toHaveBeenCalled();
 
-      rerender(buildElement());
+      fireEvent.click(screen.getByTestId("set-position"));
 
-      expect(markRowDirty).toHaveBeenCalled();
+      await vi.waitFor(() => expect(markRowDirty).toHaveBeenCalledWith(0));
     });
 
-    it("does not call markRowDirty while resyncing, even if the row's key changes", () => {
+    it("does not call markRowDirty while resyncing, even if the row's key changes", async () => {
       const markRowDirty = vi.fn();
       mockUseClaimContext.mockReturnValue({
         ...baseClaimContext,
         markRowDirty,
-        //  isResyncingRef: { current: true },
+        isResyncingRef: { current: true },
       } as never);
 
-      const { rerender } = render(buildElement());
-      rerender(buildElement());
+      renderWithPositionSetter();
+      fireEvent.click(screen.getByTestId("set-position"));
 
+      await screen.findByTestId("main-fields");
       expect(markRowDirty).not.toHaveBeenCalled();
     });
 
-    it("does not call markRowDirty when prices have not been validated", () => {
+    it("does not call markRowDirty when prices have not been validated", async () => {
       const markRowDirty = vi.fn();
       mockUseClaimContext.mockReturnValue({
         ...baseClaimContext,
@@ -619,10 +635,10 @@ describe("ClaimSparePartsRow", () => {
         arePricesValidated: false,
       } as never);
 
-      const { rerender } = render(buildElement());
+      renderWithPositionSetter();
+      fireEvent.click(screen.getByTestId("set-position"));
 
-      rerender(buildElement());
-
+      await screen.findByTestId("main-fields");
       expect(markRowDirty).not.toHaveBeenCalled();
     });
   });

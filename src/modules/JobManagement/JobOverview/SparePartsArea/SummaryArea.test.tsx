@@ -20,20 +20,6 @@ vi.mock("hooks/useDiagnosticsManager", () => ({
   getChargeablePendingInfo: vi.fn(() => ({ hasChargeablePending: true })),
 }));
 
-vi.mock("utils/priceCalculator", () => ({
-  aggregateRowPrices: vi.fn(() => ({
-    suggestedNetPrice: 10,
-    netAmount: 8,
-    grossAmount: 12,
-    totalAmount: 11,
-    discount: 1,
-    taxAmount: 2,
-    discountAmount: 1,
-  })),
-  DISTRIBUTABLE_POSITIONS: new Set(["SP", "PN", "AC"]),
-  SUMMARY_TYPE_FILTER: { totalSummary: () => true, chargeable: () => true },
-}));
-
 const renderedFields: Array<Record<string, unknown>> = [];
 
 vi.mock("components/generics/Field/GenericField", () => ({
@@ -45,7 +31,6 @@ vi.mock("components/generics/Field/GenericField", () => ({
 
 vi.mock("../DiagnosticsContext", () => ({
   useDiagnosticsContext: vi.fn(() => ({
-   // isDistributingRef: { current: false },
     hasPricesPopulated: true,
     setSummaryTypeOptions: vi.fn(),
     discountBase: "GROSS_PRICE",
@@ -180,6 +165,11 @@ describe("SummaryArea", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     renderedFields.length = 0;
+    vi.mocked(useDiagnosticsContext).mockReturnValue({
+      hasPricesPopulated: true,
+      setSummaryTypeOptions: vi.fn(),
+      discountBase: "GROSS_PRICE",
+    } as never);
     useHasPermissionMock.mockImplementation((permissions: string[] | undefined) => {
       if (
         permissions?.includes(PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_DISCOUNT) ||
@@ -192,15 +182,97 @@ describe("SummaryArea", () => {
     });
   });
 
-  it("renders summary fields", () => {
+  it("renders summary value fields and leaves the radiogroup to diagnosticsSummaryTotal", () => {
     renderSummary();
-    expect(screen.getByTestId("summary-field-summaryType")).toBeInTheDocument();
+    expect(screen.queryByTestId("summary-field-summaryType")).not.toBeInTheDocument();
     expect(screen.getByTestId("summary-field-summaryTotal")).toBeInTheDocument();
+  });
+
+  it("publishes summary type options from job spare-part rows only when it owns the radiogroup", () => {
+    const setSummaryTypeOptions = vi.fn();
+    vi.mocked(useDiagnosticsContext).mockReturnValue({
+      hasPricesPopulated: true,
+      setSummaryTypeOptions,
+      discountBase: "GROSS_PRICE",
+    } as never);
+
+    renderSummary();
+    expect(setSummaryTypeOptions).not.toHaveBeenCalled();
+
+    const areaWithRadio = { ...(area as object), name: "diagnosticData_diagnosticsSummaryTotal" };
+    renderSummary({}, { area: areaWithRadio });
+    expect(setSummaryTypeOptions).toHaveBeenLastCalledWith([
+      { value: "totalSummary", label: "totalSummary" },
+      { value: "chargeable", label: "Chargeable" },
+    ]);
+  });
+
+  it("ignores claim spare-part rows when building the summary type options", () => {
+    const setSummaryTypeOptions = vi.fn();
+    vi.mocked(useDiagnosticsContext).mockReturnValue({
+      hasPricesPopulated: true,
+      setSummaryTypeOptions,
+      discountBase: "GROSS_PRICE",
+    } as never);
+    const claimTypeField = {
+      name: "claims_claimSpareParts#0_type",
+      subtype: "diagnosticType",
+      options: [{ value: "WARRANTY", name: "Warranty" }],
+      fieldMapping: { nameStartsWith: "claims_claimSpareParts#0_", map: "type" },
+    };
+
+    renderSummary(
+      { "claims_claimSpareParts#0_type": "WARRANTY" },
+      {
+        area: { ...(area as object), name: "diagnosticData_diagnosticsSummaryTotal" },
+        allFields: [...allFields, claimTypeField],
+      },
+    );
+
+    expect(setSummaryTypeOptions).toHaveBeenLastCalledWith([
+      { value: "totalSummary", label: "totalSummary" },
+      { value: "chargeable", label: "Chargeable" },
+    ]);
+  });
+
+  it("falls back to the global summary type field when the area has no radiogroup", () => {
+    const noRadioArea = {
+      ...(area as { fields: Array<{ type: string }> }),
+      fields: (area as { fields: Array<{ type: string }> }).fields.filter(
+        (f) => f.type !== "radiogroup",
+      ),
+    };
+    const globalRadio = {
+      name: "summaryType",
+      subtype: "diagnosticSummaryType",
+      type: "radiogroup",
+      fieldMapping: { nameStartsWith: "" },
+    };
+    vi.mocked(useDiagnosticsContext).mockReturnValue({
+      hasPricesPopulated: true,
+      setSummaryTypeOptions: vi.fn(),
+      discountBase: "GROSS_PRICE",
+    } as never);
+
+    renderSummary(
+      { summaryType: "warranty" },
+      { area: noRadioArea, allFields: [...allFields, globalRadio] },
+    );
+
+    expect(screen.queryByText("SummaryOfMaterialItems")).not.toBeInTheDocument();
+  });
+
+  it("shows the material block for chargeable and hides it for other summary types", () => {
+    const { unmount } = renderSummary({ summaryType: "chargeable" });
+    expect(screen.getByText("SummaryOfMaterialItems")).toBeInTheDocument();
+    unmount();
+
+    renderSummary({ summaryType: "warranty" });
+    expect(screen.queryByText("SummaryOfMaterialItems")).not.toBeInTheDocument();
   });
 
   it("returns null when price permission gate is active and prices not populated", () => {
     vi.mocked(useDiagnosticsContext).mockReturnValue({
-    //  isDistributingRef: { current: false },
       hasPricesPopulated: false,
       setSummaryTypeOptions: vi.fn(),
       discountBase: "GROSS_PRICE",
@@ -212,7 +284,6 @@ describe("SummaryArea", () => {
 
   it("disables material fields from discountBase, status, and permission rules", () => {
     vi.mocked(useDiagnosticsContext).mockReturnValue({
-     // isDistributingRef: { current: false },
       hasPricesPopulated: true,
       setSummaryTypeOptions: vi.fn(),
       discountBase: "NET_PRICE",
@@ -233,22 +304,6 @@ describe("SummaryArea", () => {
     expect(netAmountField).toMatchObject({ isDisabled: false });
     expect(discountField).toMatchObject({ isDisabled: false });
     expect(totalAmountField).toMatchObject({ isDisabled: true });
-  });
-
-  it("uses matching summary field name for current discountBase when mappings collide", () => {
-    vi.mocked(useDiagnosticsContext).mockReturnValue({
-     // isDistributingRef: { current: false },
-      hasPricesPopulated: true,
-      setSummaryTypeOptions: vi.fn(),
-      discountBase: "NET_PRICE",
-      isValidating: false,
-      jobStatus: "WAITING_FOR_APPROVAL",
-    } as never);
-
-    const { setFieldValue } = renderSummary();
-
-    expect(setFieldValue).toHaveBeenCalledWith("summaryGrossAmountNet", 12);
-    expect(setFieldValue).not.toHaveBeenCalledWith("summaryGrossAmountBase", 12);
   });
 });
 
