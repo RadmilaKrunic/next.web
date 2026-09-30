@@ -1,6 +1,7 @@
 import Area from "./Area/GenericArea.types";
 import Field from "./Field/GenericField.types";
 import Section from "./Section/GenericSection.types";
+import type { MultipleAreaConfig } from "./Form/GenericForm.context";
 import { setDuplicatedArea, mapFieldToFieldMapping } from "./utils";
 
 /** True when two flat, primitive-valued row-value maps have the same keys and values. */
@@ -12,6 +13,26 @@ export const shallowEqualValues = (
   if (aKeys.length !== Object.keys(b).length) return false;
   return aKeys.every((key) => Object.is(a[key], b[key]));
 };
+
+/**
+ * The list an isMultiple area renders, read from its fields' attributeMapping:
+ * the first path segment ending in "#" (e.g. "archivedMaterials#" for
+ * "archivedMaterials#.price.unitPrice"). Undefined when no field maps into a list.
+ */
+export const getListPath = (area: Area): string | undefined => {
+  for (const field of area.fields) {
+    const segment = field.attributeMapping?.split(".").find((s) => s.endsWith("#"));
+    if (segment) return segment;
+  }
+  return undefined;
+};
+
+/** Name prefix shared by every row's area and fields, e.g. "claims_claimArchivedSpareParts#". */
+export const getMultipleAreaPrefix = (area: Area): string => area.name.replace(/#\d+/, "#");
+
+/** Widens a typed config to the context's untyped map (row callbacks are contravariant in T). */
+export const defineMultipleArea = <T>(config: MultipleAreaConfig<T>): MultipleAreaConfig =>
+  config as unknown as MultipleAreaConfig;
 
 /** All isMultiple rows for `areaName` currently present in `section`, in index order. */
 export const getMultipleAreaRows = (section: Section | undefined, areaName: string): Area[] =>

@@ -5,7 +5,14 @@ import "../../JobManagement/JobOverview/JobOverview.scss";
 import GenericSection from "components/generics/Section/GenericSection";
 import GenericAction from "components/generics/Action/GenericAction";
 import { convertAPIDataToFormValues, setSectionDisabledState } from "components/generics/utils";
-import { GenericFormContext } from "components/generics/Form/GenericForm.context";
+import {
+  GenericFormContext,
+  type MultipleAreaRowsChange,
+} from "components/generics/Form/GenericForm.context";
+import { defineMultipleArea } from "components/generics/multipleArea";
+import ClaimArchivedSparePartsArea, {
+  ClaimArchivedSparePartsRowItem,
+} from "./ClaimArchivedSparePartsArea/ClaimArchivedSparePartsArea";
 import Section from "components/generics/Section/GenericSection.types";
 import Field from "components/generics/Field/GenericField.types";
 import { Formik, Form, useFormikContext } from "formik";
@@ -193,6 +200,7 @@ export default function ClaimOverview() {
     onDeleteRow,
     onDeleteArchivedRow,
     onRestoreRow,
+    toArchivedRowValues,
     onAddMaterials: addMaterialsToForm,
     getExistingPartNumbers,
     forceRebuildRef: claimForceRebuildRef,
@@ -713,6 +721,38 @@ export default function ClaimOverview() {
 
   const { canChangeClaimDecision } = useClaimDecisionPermissions(currentStatus);
 
+  // Row fields/values for list-driven isMultiple areas. skipFormResetRef is only raised when
+  // the field set changes, since only an allFields change lets the reset effect below consume it.
+  const syncMultipleAreaRows = useCallback(
+    ({ addedFields, removedFieldNames, values }: MultipleAreaRowsChange) => {
+      if (addedFields.length > 0 || removedFieldNames.size > 0) {
+        skipFormResetRef.current = true;
+        setAllFields((prev) => {
+          const kept = (prev ?? []).filter((f) => !removedFieldNames.has(f.name));
+          const keptNames = new Set(kept.map((f) => f.name));
+          return [...kept, ...addedFields.filter((f) => !keptNames.has(f.name))];
+        });
+      }
+      setInitialFormValues((prev) => ({
+        ...Object.fromEntries(Object.entries(prev).filter(([k]) => !removedFieldNames.has(k))),
+        ...values,
+      }));
+    },
+    [setAllFields, setInitialFormValues],
+  );
+
+  const multipleAreas = useMemo(
+    () => ({
+      "archivedMaterials#": defineMultipleArea({
+        items: archivedMaterials,
+        toRowValues: toArchivedRowValues,
+        rowComponent: ClaimArchivedSparePartsRowItem,
+        wrapper: ClaimArchivedSparePartsArea,
+      }),
+    }),
+    [archivedMaterials, toArchivedRowValues],
+  );
+
   const genericFormContextValue = useMemo(
     () => ({
       allFields: allFields || [],
@@ -758,6 +798,8 @@ export default function ClaimOverview() {
       radioSourceCallbacks: {
         getRadioButtonsForSummaryType: () => summaryTypeOptions,
       },
+      multipleAreas,
+      syncMultipleAreaRows,
       sparePartNotBelongsToTool: sparePartNotBelongsToToolRef,
       onDeleteStart: () => setIsDeletingFile(true),
       onDeleteEnd: () => setIsDeletingFile(false),
@@ -780,6 +822,8 @@ export default function ClaimOverview() {
       enableAddingSpecialMaterials,
       enableProductDetails,
       summaryTypeOptions,
+      multipleAreas,
+      syncMultipleAreaRows,
     ],
   );
 

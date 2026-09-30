@@ -2,12 +2,15 @@ import { useCallback, useContext, useState } from "react";
 import { Icon, Divider } from "@bosch/react-frok";
 import { useTranslation } from "react-i18next";
 import { useFormikContext } from "formik";
-import Area from "components/generics/Area/GenericArea.types";
 import Field from "components/generics/Field/GenericField.types";
 import GenericField from "components/generics/Field/GenericField";
 import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
-import { GenericFormContext } from "components/generics/Form/GenericForm.context";
+import {
+  GenericFormContext,
+  type MultipleAreaRowProps,
+  type MultipleAreaWrapperProps,
+} from "components/generics/Form/GenericForm.context";
 import { useClaimContext } from "../ClaimContext";
 import "modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.scss";
 import "modules/JobManagement/JobOverview/ArchivedSparePartsArea/ArchivedSparePartsArea.scss";
@@ -100,14 +103,9 @@ function ClaimArchivedSparePartsRow({
   );
 }
 
-function ClaimArchivedSparePartsArea({ area }: Readonly<{ area: Area }>) {
-  const { t } = useTranslation("translation", { keyPrefix: "app" });
-  const { isArchivedExpanded, setIsArchivedExpanded, onDeleteArchivedRow, onRestoreRow } =
-    useClaimContext();
+export function ClaimArchivedSparePartsRowItem({ area }: Readonly<MultipleAreaRowProps>) {
+  const { onRestoreRow } = useClaimContext();
   const { allFields } = useContext(GenericFormContext);
-  const title = area.label.trim();
-  const nameOfFirstField = area.fields[0]?.name || "";
-  const isFirstArea = nameOfFirstField.includes("#0");
 
   // Enrich area.fields with options from GenericFormContext (needed for position dropdown).
   const enrichedFields = area.fields.map((f) => {
@@ -117,50 +115,46 @@ function ClaimArchivedSparePartsArea({ area }: Readonly<{ area: Area }>) {
     return { ...f, options: contextField.options };
   });
 
-  const handleDeleteRow = useCallback(() => {
-    onDeleteArchivedRow(area.name);
-  }, [onDeleteArchivedRow, area.name]);
-
   const handleRestoreRow = useCallback(() => {
     onRestoreRow(area.name);
   }, [onRestoreRow, area.name]);
 
+  return <ClaimArchivedSparePartsRow fields={enrichedFields} onRestoreRow={handleRestoreRow} />;
+}
+
+function ClaimArchivedSparePartsArea({ area, children }: Readonly<MultipleAreaWrapperProps>) {
+  const { t } = useTranslation("translation", { keyPrefix: "app" });
+  const { isArchivedExpanded, setIsArchivedExpanded, onDeleteArchivedRow } = useClaimContext();
+  const title = area.label.trim();
+
   return (
     <>
-      {isFirstArea && (
-        <div className="archived-parts-title">
-          <button
-            type="button"
-            className="archived-parts-header"
-            onClick={() => setIsArchivedExpanded((prev) => !prev)}
-          >
-            <div className="archived-parts-header-left">
-              <Icon
-                iconName="delete"
-                title={t("delete")}
-                className="archived-parts-delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteRow();
-                }}
-              />
-              {title && <div className="area-title">{t(title)}</div>}
-            </div>
+      <div className="archived-parts-title">
+        <button
+          type="button"
+          className="archived-parts-header"
+          onClick={() => setIsArchivedExpanded((prev) => !prev)}
+        >
+          <div className="archived-parts-header-left">
             <Icon
-              iconName={isArchivedExpanded ? "up" : "down"}
-              className="archived-parts-arrow"
-              aria-hidden="true"
+              iconName="delete"
+              title={t("delete")}
+              className="archived-parts-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteArchivedRow(area.name);
+              }}
             />
-          </button>
-        </div>
-      )}
-      {isArchivedExpanded && (
-        <ClaimArchivedSparePartsRow
-          key={nameOfFirstField}
-          fields={enrichedFields}
-          onRestoreRow={handleRestoreRow}
-        />
-      )}
+            {title && <div className="area-title">{t(title)}</div>}
+          </div>
+          <Icon
+            iconName={isArchivedExpanded ? "up" : "down"}
+            className="archived-parts-arrow"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+      {isArchivedExpanded && children}
     </>
   );
 }

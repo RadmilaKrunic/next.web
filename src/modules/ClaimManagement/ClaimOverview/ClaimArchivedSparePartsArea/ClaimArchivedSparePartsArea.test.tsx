@@ -23,7 +23,7 @@ vi.mock("../ClaimContext", () => ({
 }));
 
 import { useHasPermission } from "hooks/useHasPermission";
-import ClaimArchivedSparePartsArea from "./ClaimArchivedSparePartsArea";
+import ClaimArchivedSparePartsArea, { ClaimArchivedSparePartsRowItem } from "./ClaimArchivedSparePartsArea";
 
 const mockUseHasPermission = vi.mocked(useHasPermission);
 
@@ -78,7 +78,9 @@ function renderComponent(
           actionCallbacks: {},
         }}
       >
-        <ClaimArchivedSparePartsArea area={area} />
+        <ClaimArchivedSparePartsArea area={area} count={1}>
+          <ClaimArchivedSparePartsRowItem area={area} index={0} item={undefined} />
+        </ClaimArchivedSparePartsArea>
       </GenericFormContext.Provider>
     </Formik>,
   );
@@ -90,19 +92,10 @@ describe("ClaimArchivedSparePartsArea", () => {
     mockUseHasPermission.mockReturnValue(true);
   });
 
-  it("renders the header and row for the first archived area", () => {
+  it("renders the header and the row", () => {
     renderComponent(buildArea());
     expect(screen.getByText("archivedSpareParts")).toBeInTheDocument();
     expect(screen.getByTestId("field-assetData#0_position")).toBeInTheDocument();
-  });
-
-  it("does not render header for non-first areas", () => {
-    const area = buildArea({
-      name: "assetData#1_archivedSpareParts",
-      fields: [buildField({ name: "assetData#1_position", type: "text" })],
-    });
-    renderComponent(area);
-    expect(screen.queryByText("archivedSpareParts")).not.toBeInTheDocument();
   });
 
   it("does not render the row when isArchivedExpanded is false", () => {

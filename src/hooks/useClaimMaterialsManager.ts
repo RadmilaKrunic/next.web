@@ -20,10 +20,6 @@ import type { Material } from "modules/ClaimManagement/ClaimOverview/Claims.type
 import { PERMISSIONS } from "utils/Permissions";
 import type { HeaderUserData } from "api/services/header/action";
 
-type AreaFields = {
-  area: Area;
-  fields: Field[];
-};
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function computeClaimsUpdatedFields(
@@ -47,6 +43,12 @@ function computeClaimsFinalAreas(
   if (needed < 0) return sparePartsAreas.filter((a) => !removeNames.has(a.name));
   return sparePartsAreas;
 }
+
+/** Row index encoded in an isMultiple row area name, e.g. "claims_claimArchivedSpareParts#3" -> 3. */
+const getRowIndexFromAreaName = (areaName: string): number => {
+  const match = /#(\d+)/.exec(areaName);
+  return match ? Number(match[1]) : -1;
+};
 
 const claimMaterialToMaterialItem = (m: Material): MaterialItem => {
   const price = m.price ?? ({} as Material["price"]);
@@ -172,6 +174,8 @@ export interface UseClaimMaterialsManagerReturn {
   onAddRow: (formValues: Record<string, unknown>) => void;
   onDeleteRow: (areaName: string) => void;
   onDeleteArchivedRow: (areaName: string) => void;
+  /** Projects an archived material onto its row's fields (see MultipleAreaConfig.toRowValues). */
+  toArchivedRowValues: (material: Material, rowFields: Field[]) => Record<string, unknown>;
   onRestoreRow: (areaName: string) => void;
   onAddMaterials: (
     items: ImportedMaterial[],
@@ -257,11 +261,9 @@ export const useClaimMaterialsManager = ({
   materialsRef.current = materials;
   const archivedMaterialsRef = useRef(archivedMaterials);
   archivedMaterialsRef.current = archivedMaterials;
-  const archivedTemplateRef = useRef<Area | null>(null);
   const discountBaseValueRef = useRef(discountBaseValue);
   discountBaseValueRef.current = discountBaseValue;
   const forceRebuildRef = useRef(false);
-  const archivedForceRebuildRef = useRef(false);
   // Tracks the last claimMaterials reference we synced into `materials` state.
   // Prevents Effect 1 from double-running when Effect 2 causes a re-render
   // (same claimMaterials reference → skip) while still allowing re-runs when
@@ -280,14 +282,12 @@ export const useClaimMaterialsManager = ({
     setMaterials([]);
     setArchivedMaterials([]);
     forceRebuildRef.current = false;
-    archivedForceRebuildRef.current = false;
   }, [claimId]);
 
   // ── Sync archived materials from API response ──────────────────────────
   useEffect(() => {
     if (!claimArchivedMaterials || lastSyncedArchivedRef.current === claimArchivedMaterials) return;
     lastSyncedArchivedRef.current = claimArchivedMaterials;
-    archivedForceRebuildRef.current = true;
     setArchivedMaterials(claimArchivedMaterials);
   }, [claimArchivedMaterials]);
 
@@ -444,119 +444,6 @@ export const useClaimMaterialsManager = ({
   //  isResyncingRef,
   ]);
 
-  const populateNeeded = (
-    needed: number,
-    templateArea: Area,
-    baseIndex: number,
-    tabName: string,
-  ): AreaFields[] => {
-    const temp: AreaFields[] = [];
-    for (let i = 0; i < needed; i++) {
-      const cloned = structuredClone(templateArea);
-      if (baseIndex + 1 + i !== 0) cloned.label = "";
-      const area = setDuplicatedArea(cloned, baseIndex + 1 + i, tabName);
-      const areaFields = area.fields.map((f) => mapFieldToFieldMapping(f));
-      temp.push({ area, fields: areaFields });
-    }
-    return temp;
-  };
-  const reorderAreas = (tabs: Section[], newAreas: Area[]): Section[] => {
-    return tabs.map((tab: Section) => {
-      if (tab.name !== "claims") return tab;
-      const insertAt =
-        tab.areas.reduce(
-          (last, a, i) => (a.name.includes("claimArchivedSpareParts") ? i : last),
-          -1,
-        ) + 1;
-      const updated = [...tab.areas.slice(0, insertAt), ...newAreas, ...tab.areas.slice(insertAt)];
-      return { ...tab, areas: updated };
-    });
-  };
-  const removeArchivedAreaNames = (tabs: Section[], removeArchivedNames: Set<string>) => {
-    return tabs.map((tab) =>
-      tab.name === "claims"
-        ? { ...tab, areas: tab.areas.filter((a) => !removeArchivedNames.has(a.name)) }
-        : tab,
-    );
-  };
-
-  // ── Effect 3b: archivedMaterials[] → claimArchivedSpareParts areas ─────
-  useEffect(() => {
-    const currentTabs = tabsRef.current;
-    const currentFields = allFieldsRef.current ?? [];
-
-    const claimsTab = currentTabs.find((t) => t.name === "claims");
-    if (!claimsTab) return;
-
-    const archivedAreas = claimsTab.areas.filter(
-      (a) => a.isMultiple && a.name.includes("claimArchivedSpareParts"),
-    );
-    // Cache template before any guard so we can recreate areas after
-    // the last archived row is restored and removes the template from tabs.
-    if (archivedAreas.length > 0) {
-      archivedTemplateRef.current ??= structuredClone(archivedAreas[0]);
-    }
-    const templateArea = archivedAreas[0] ?? archivedTemplateRef.current;
-    if (!templateArea) return;
-
-    const targetCount = archivedMaterials.length;
-    const currentCount = archivedAreas.length;
-    const needed = targetCount - currentCount;
-    if (needed === 0 && !archivedForceRebuildRef.current) return;
-
-    let newAreasAndFields: AreaFields[] = [];
-    let removeArchivedNames = new Set<string>();
-    let removeArchivedFieldNames = new Set<string>();
-
-    if (needed > 0) {
-      const baseIndex =
-        archivedAreas.length === 0
-          ? -1
-          : archivedAreas.reduce((max, a) => Math.max(max, a.index ?? 0), 0);
-      newAreasAndFields = populateNeeded(needed, templateArea, baseIndex, claimsTab.name);
-    } else if (needed < 0) {
-      const toRemove = archivedAreas.slice(targetCount);
-      removeArchivedNames = new Set(toRemove.map((a) => a.name));
-      removeArchivedFieldNames = new Set(toRemove.flatMap((a) => a.fields.map((f) => f.name)));
-    }
-
-    const visibleArchivedAreas =
-      needed >= 0
-        ? [...archivedAreas, ...newAreasAndFields.map((x) => x.area)]
-        : archivedAreas.filter((a) => !removeArchivedNames.has(a.name));
-    const newFieldsToAdd = newAreasAndFields.flatMap((x) => x.fields);
-
-    const existingArchivedFields = currentFields.filter(
-      (f) => f.name.includes("claimArchivedSpareParts") && !removeArchivedFieldNames.has(f.name),
-    );
-    const allArchivedFields = [...existingArchivedFields, ...newFieldsToAdd];
-
-    let rowValues: Record<string, unknown> = {};
-    archivedMaterials.forEach((material, idx) => {
-      const item = claimMaterialToMaterialItem(material);
-      const area = visibleArchivedAreas[idx];
-      if (!area) return;
-      const areaFieldNameSet = new Set(area.fields.map((af) => af.name));
-      const areaFields = allArchivedFields.filter((f) => areaFieldNameSet.has(f.name));
-      rowValues = { ...rowValues, ...buildRowValues(areaFields, item) };
-    });
-
-    if (needed !== 0 || archivedForceRebuildRef.current) {
-      skipFormResetRef.current = true;
-      if (needed > 0) {
-        setAllFields((prev) => [...(prev ?? []), ...newFieldsToAdd]);
-        const newAreas = newAreasAndFields.map((x) => x.area);
-        setTabs((prev) => reorderAreas(prev, newAreas));
-      } else if (needed < 0) {
-        setAllFields((prev) => (prev ?? []).filter((f) => !removeArchivedFieldNames.has(f.name)));
-        setTabs((prev) => removeArchivedAreaNames(prev, removeArchivedNames));
-      }
-    }
-
-    setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
-    archivedForceRebuildRef.current = false;
-  }, [archivedMaterials, setAllFields, setTabs, setInitialFormValues, skipFormResetRef]);
-
   // ── onAddRow ───────────────────────────────────────────────────────────
   const onAddRow = useCallback(
     (formValues: Record<string, unknown>) => {
@@ -636,7 +523,6 @@ export const useClaimMaterialsManager = ({
       // ── Archive the deleted material ───────────────────────────────────
       const materialItem = materialsRef.current[areaIndex];
       if (materialItem) {
-        archivedForceRebuildRef.current = true;
         setArchivedMaterials((prev) => [...prev, materialItemToMaterial(materialItem)]);
       }
 
@@ -736,23 +622,13 @@ export const useClaimMaterialsManager = ({
   // ── onRestoreRow ───────────────────────────────────────────────────────
   const onRestoreRow = useCallback(
     (areaName: string) => {
-      const currentTabs = tabsRef.current;
-      const claimsTab = currentTabs.find((t) => t.name === "claims");
-      if (!claimsTab) return;
-
-      const archivedAreas = claimsTab.areas.filter(
-        (a) => a.isMultiple && a.name.includes("claimArchivedSpareParts"),
-      );
-      const areaIndex = archivedAreas.findIndex((a) => a.name === areaName);
-      if (areaIndex === -1) return;
-
+      const areaIndex = getRowIndexFromAreaName(areaName);
       const materialToRestore = archivedMaterialsRef.current[areaIndex];
       if (!materialToRestore) return;
 
       const restoredItem = claimMaterialToMaterialItem(materialToRestore);
       forceRebuildRef.current = true;
       setMaterials((prev) => [...prev, restoredItem]);
-      archivedForceRebuildRef.current = true;
       setArchivedMaterials((prev) => prev.filter((_, i) => i !== areaIndex));
       setArePricesValidated(false);
     },
@@ -761,19 +637,15 @@ export const useClaimMaterialsManager = ({
 
   // ── onDeleteArchivedRow ────────────────────────────────────────────────
   const onDeleteArchivedRow = useCallback((areaName: string) => {
-    const currentTabs = tabsRef.current;
-    const claimsTab = currentTabs.find((t) => t.name === "claims");
-    if (!claimsTab) return;
-
-    const archivedAreas = claimsTab.areas.filter(
-      (a) => a.isMultiple && a.name.includes("claimArchivedSpareParts"),
-    );
-    const areaIndex = archivedAreas.findIndex((a) => a.name === areaName);
-    if (areaIndex === -1) return;
-
-    archivedForceRebuildRef.current = true;
+    const areaIndex = getRowIndexFromAreaName(areaName);
     setArchivedMaterials((prev) => prev.filter((_, i) => i !== areaIndex));
   }, []);
+
+  const toArchivedRowValues = useCallback(
+    (material: Material, rowFields: Field[]) =>
+      buildRowValues(rowFields, claimMaterialToMaterialItem(material)),
+    [],
+  );
 
   return {
     materials,
@@ -788,6 +660,7 @@ export const useClaimMaterialsManager = ({
     onDeleteRow,
     onDeleteArchivedRow,
     onRestoreRow,
+    toArchivedRowValues,
     onAddMaterials,
     getExistingPartNumbers,
     markAllValidated,

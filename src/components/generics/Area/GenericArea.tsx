@@ -8,6 +8,8 @@ import { isDependedAndVisible } from "../utils";
 import { getCustomArea } from "./CustomAreasMapper";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { GenericFormContext } from "../Form/GenericForm.context";
+import GenericMultipleArea from "./GenericMultipleArea";
+import { getListPath } from "../multipleArea";
 import { useHasPermission } from "hooks/useHasPermission";
 
 function GenericArea({
@@ -32,7 +34,8 @@ function GenericArea({
     setErrors,
     setTouched,
   } = useFormikContext<Record<string, unknown>>();
-  const { allFields, actionCallbacks, onAreaValueChange } = useContext(GenericFormContext);
+  const { allFields, actionCallbacks, onAreaValueChange, multipleAreas } =
+    useContext(GenericFormContext);
   const [isEditing, setIsEditing] = useState(false);
   const hasPermission = useHasPermission(area.permissions);
 
@@ -85,6 +88,10 @@ function GenericArea({
   }
 
   if (!hasPermission) return null;
+
+  const listPath = area.isMultiple ? getListPath(area) : undefined;
+  const multipleAreaConfig = listPath ? multipleAreas?.[listPath] : undefined;
+  if (multipleAreaConfig) return <GenericMultipleArea area={area} config={multipleAreaConfig} />;
 
   const customArea = getCustomArea(area);
   if (customArea) return customArea;

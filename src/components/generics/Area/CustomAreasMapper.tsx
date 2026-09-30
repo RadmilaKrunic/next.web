@@ -7,7 +7,6 @@ import SummaryArea from "modules/JobManagement/JobOverview/SparePartsArea/Summar
 import ArchivedSparePartsArea from "modules/JobManagement/JobOverview/ArchivedSparePartsArea/ArchivedSparePartsArea";
 import ClaimSparePartsArea from "modules/ClaimManagement/ClaimOverview/ClaimSparePartsArea/ClaimSparePartsArea";
 import ClaimSummaryArea from "modules/ClaimManagement/ClaimOverview/ClaimSummaryArea/ClaimSummaryArea";
-import ClaimArchivedSparePartsArea from "modules/ClaimManagement/ClaimOverview/ClaimArchivedSparePartsArea/ClaimArchivedSparePartsArea";
 import AscReimbursementArea from "../../../modules/AccountManagement/ASC/AscReimbursementArea/AscReimbursementArea";
 
 export const getCustomArea = (area: Area) => {
@@ -30,10 +29,6 @@ export const getCustomArea = (area: Area) => {
 
   if (area.name.includes("notesList")) {
     return <NotesList />;
-  }
-
-  if (area.name.includes("claimArchivedSpareParts")) {
-    return <ClaimArchivedSparePartsArea area={area} />;
   }
 
   if (area.name.includes("claimSpareParts")) {
