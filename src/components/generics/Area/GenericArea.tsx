@@ -61,7 +61,8 @@ function GenericArea({
 
         const result = callback(formValues, {
           setFieldValue: wrappedSetFieldValue,
-          setErrors,
+          setErrors: (errors: Record<string, unknown>) =>
+            setErrors(errors as Record<string, string>),
           setTouched: wrappedSetTouched,
         });
         if (result instanceof Promise) {
