@@ -6,7 +6,7 @@ import ClaimSummaryArea from "./ClaimSummaryArea";
 import { DiagnosticsContext } from "modules/JobManagement/JobOverview/DiagnosticsContext";
 
 const claimContextMock = {
-  isDistributingRef: { current: false },
+  //isDistributingRef: { current: false },
   hasPricesPopulated: true,
   setSummaryTypeOptions: vi.fn(),
   discountBase: "NET_PRICE" as const,

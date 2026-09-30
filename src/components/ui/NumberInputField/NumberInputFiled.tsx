@@ -24,7 +24,7 @@ export default function NumberInputFiled({
   disabled?: boolean;
   minValue?: number;
   prefix?: string;
-  onBlur: (e: React.FocusEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
 }>) {
   const stepValue = step || 1;
   const min = minValue ?? 0;
@@ -92,14 +92,14 @@ export default function NumberInputFiled({
 
     if (val === "") {
       setInputValue("");
-      onBlur(e);
+      onBlur?.(e);
       return;
     }
 
     const numValue = Number(val);
     if (!Number.isNaN(numValue) && numValue >= min) {
       setInputValue(val);
-      onBlur(e);
+      onBlur?.(e);
     }
   };
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

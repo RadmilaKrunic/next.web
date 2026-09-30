@@ -34,9 +34,9 @@ export interface ClaimContextValue {
   /** Returns the set of part numbers already in the form */
   getExistingPartNumbers: (formValues: Record<string, unknown>) => Set<string>;
   /** Ref flag: true while a summary distribution is in progress */
-  isDistributingRef: RefObject<boolean>;
+  //isDistributingRef: RefObject<boolean>;
   /** Ref flag: true while an API-driven resync is in progress */
-  isResyncingRef: RefObject<boolean>;
+  //isResyncingRef: RefObject<boolean>;
   /** True after prices have been validated */
   arePricesValidated: boolean;
   setArePricesValidated: Dispatch<SetStateAction<boolean>>;
@@ -82,8 +82,8 @@ const defaultClaimContextValue: ClaimContextValue = {
   positionDropdownOptions: [],
   allowedPositions: [],
   getExistingPartNumbers: () => new Set(),
-  isDistributingRef: createDefaultRef(),
-  isResyncingRef: createDefaultRef(),
+  //isDistributingRef: createDefaultRef(),
+  //isResyncingRef: createDefaultRef(),
   arePricesValidated: false,
   setArePricesValidated: noop,
   hasPricesPopulated: false,

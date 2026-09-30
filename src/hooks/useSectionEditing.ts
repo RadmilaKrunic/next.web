@@ -11,7 +11,7 @@ interface UseSectionEditingProps {
   setAllFields: Dispatch<SetStateAction<Field[] | null>>;
   assetsAccessories: Accessory[];
   setAssetsAccessories: Dispatch<SetStateAction<Accessory[]>>;
-  mergedJobData: unknown;
+  jobFullData: unknown;
   setInitialFormValues: Dispatch<SetStateAction<Record<string, unknown>>>;
 }
 
@@ -21,7 +21,7 @@ export const useSectionEditing = ({
   setAllFields,
   assetsAccessories,
   setAssetsAccessories,
-  mergedJobData,
+  jobFullData,
   setInitialFormValues,
 }: UseSectionEditingProps) => {
   const [editingSections, setEditingSections] = useState<Set<string>>(new Set());
@@ -71,8 +71,8 @@ export const useSectionEditing = ({
         return updated;
       });
 
-      if (reloadData && mergedJobData && allFields) {
-        const dataMapped = convertAPIDataToFormValues(mergedJobData, allFields);
+      if (reloadData && jobFullData && allFields) {
+        const dataMapped = convertAPIDataToFormValues(jobFullData, allFields);
         setInitialFormValues(dataMapped);
       }
     },
@@ -82,7 +82,7 @@ export const useSectionEditing = ({
       setAllFields,
       assetsAccessories,
       setAssetsAccessories,
-      mergedJobData,
+      jobFullData,
       setInitialFormValues,
     ],
   );

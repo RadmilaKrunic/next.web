@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { RefObject, Dispatch, SetStateAction } from "react";
+import type { /*RefObject, */ Dispatch, SetStateAction } from "react";
 import type {
   AllowedPosition,
   discountBase,
@@ -37,10 +37,7 @@ export interface DiagnosticsContextValue {
   allowedPositions: AllowedPosition[];
   /** Returns the set of part numbers already present in the form */
   getExistingPartNumbers: (formValues: Record<string, unknown>) => Set<string>;
-
-  isDistributingRef: RefObject<boolean>;
-
-  isResyncingRef: RefObject<boolean>;
+ // isResyncingRef: RefObject<boolean>;
   /** Set to true after the onValidate action callback completes successfully */
   arePricesValidated: boolean;
   setArePricesValidated: Dispatch<SetStateAction<boolean>>;
@@ -61,7 +58,7 @@ export interface DiagnosticsContextValue {
   /** True when deleting a row moves it to archived instead of permanently removing it. */
   canArchiveOnDelete: boolean;
   /** Resets the API-sync flag so the next diagnosticData update re-applies to the form */
-  resyncMaterialsFromAPI: () => void;
+  // resyncMaterialsFromAPI: () => void;
   /** Current job status (e.g., "IN_DIAGNOSTICS", "REPAIR_DONE", etc.) */
   jobStatus?: string;
   /** Country-level price calculation mode: GROSS (discount on gross) or NET (discount on total net). */
@@ -75,8 +72,6 @@ export interface DiagnosticsContextValue {
 const DEFAULT_SUMMARY_TYPE_OPTIONS = [{ value: "totalSummary", label: "totalSummary" }];
 
 const noop = () => {};
-
-const createDefaultRef = (): RefObject<boolean> => ({ current: false });
 
 const defaultDiagnosticsContextValue: DiagnosticsContextValue = {
   materials: [],
@@ -94,8 +89,8 @@ const defaultDiagnosticsContextValue: DiagnosticsContextValue = {
   positionDropdownOptions: [],
   allowedPositions: [],
   getExistingPartNumbers: () => new Set(),
-  isDistributingRef: createDefaultRef(),
-  isResyncingRef: createDefaultRef(),
+  //isDistributingRef: createDefaultRef(),
+ // isResyncingRef: createDefaultRef(),
   arePricesValidated: false,
   setArePricesValidated: noop,
   hasPricesPopulated: false,
@@ -107,7 +102,7 @@ const defaultDiagnosticsContextValue: DiagnosticsContextValue = {
   isArchivedExpanded: false,
   setIsArchivedExpanded: noop,
   canArchiveOnDelete: false,
-  resyncMaterialsFromAPI: noop,
+  // resyncMaterialsFromAPI: noop,
   jobStatus: "",
   discountBase: "GROSS_PRICE",
   automaticRows: [],

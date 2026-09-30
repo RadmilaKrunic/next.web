@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Formik } from "formik";
 import GenericField from "./GenericField";
@@ -879,7 +879,7 @@ describe("GenericField", () => {
         isRequired: false,
         options: [
           { value: "WARRANTY", label: "Warranty", name: "Warranty" },
-          { value: "CHARGABLE", label: "Chargeable", name: "Chargeable" },
+          { value: "CHARGEABLE", label: "Chargeable", name: "Chargeable" },
         ],
         fieldMapping: { originalName: "jobType" },
       };
@@ -905,7 +905,7 @@ describe("GenericField", () => {
         isRequired: false,
         options: [
           { value: "WARRANTY", label: "Warranty", name: "Warranty" },
-          { value: "CHARGABLE", label: "Chargeable", name: "Chargeable" },
+          { value: "CHARGEABLE", label: "Chargeable", name: "Chargeable" },
         ],
         fieldMapping: { originalName: "jobType" },
       };

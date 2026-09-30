@@ -5,10 +5,6 @@ import { useFormikContext } from "formik";
 import { useHasPermission } from "hooks/useHasPermission";
 import Field from "components/generics/Field/GenericField.types";
 import { getPositionAutofill } from "hooks/useDiagnosticsManager";
-// import {
-//   resolveDiscountFieldNames,
-//   useSparePartsRowCommon,
-// } from "modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.shared";
 import {
   SparePartsMainFields,
   SparePartsCollapsedSection,
@@ -37,7 +33,7 @@ function ClaimSparePartsRow({
     markRowDirty,
     allowedPositions,
     positionDropdownOptions,
-    isResyncingRef,
+ //   isResyncingRef,
   //  discountBase,
     canDeleteRows,
     automaticRows,
@@ -103,36 +99,15 @@ function ClaimSparePartsRow({
     return { ...field, isDisabled: true };
   };
 
-  // const {
-  //   discountHiddenFieldName,
-  //   discountAmountHiddenFieldName,
-  //   activeDiscountFieldName,
-  //   discountSiblingFieldName,
-  // } = resolveDiscountFieldNames(fields, discountBase);
-
-  // const nonPriceInputKey = useSparePartsRowCommon({
-  //   fields,
-  //   activeDiscountFieldName,
-  //   discountSiblingFieldName,
-  //   discountHiddenFieldName,
-  //   discountAmountHiddenFieldName,
-  //   areaNamePrefix,
-  //   isResyncingRef,
-  //   discountBase,
-  //   values,
-  //   markRowDirty,
-  //   areaIndex,
-  // });
-
   const isFirstRowRender = useRef(true);
   useEffect(() => {
     if (isFirstRowRender.current) {
       isFirstRowRender.current = false;
       return;
     }
-    if (isResyncingRef.current || !arePricesValidated) return;
+    if (!arePricesValidated) return;
     markRowDirty(areaIndex);
-  }, [/* nonPriceInputKey, */ markRowDirty, areaIndex, isResyncingRef, arePricesValidated]);
+  }, [markRowDirty, areaIndex, arePricesValidated]);
 
   const mainFields = fields.filter(
     (field) => !collapsableFieldNames.has(field.fieldMapping?.originalName || ""),

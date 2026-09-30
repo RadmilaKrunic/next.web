@@ -146,7 +146,7 @@ export interface SummaryDetailAll {
 }
 
 export interface JobOverviewItem {
-  order: {
+  order?: {
     orderId: string;
     ascId: string;
     pickupType: string;
@@ -156,7 +156,7 @@ export interface JobOverviewItem {
     customerId: string;
     customer: Customer;
   };
-  job: {
+  job?: {
     jobId: string;
     orderId: string;
     assigneeID: string;
@@ -256,6 +256,6 @@ export interface JobDiagnostic {
       totalAmount: number;
     };
   }[];
-  priceSummary: SummaryPrice;
-  priceSummaryDetailed: SummaryDetailAll;
+  priceSummary?: SummaryPrice;
+  priceSummaryDetailed?: SummaryDetailAll;
 }

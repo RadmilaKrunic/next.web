@@ -20,7 +20,7 @@ function makeParams(overrides = {}) {
     setAllFields: vi.fn(),
     assetsAccessories: [],
     setAssetsAccessories: vi.fn(),
-    mergedJobData: { id: "j1" },
+    jobFullData: { id: "j1" },
     setInitialFormValues: vi.fn(),
     ...overrides,
   };

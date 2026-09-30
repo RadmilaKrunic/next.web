@@ -564,6 +564,7 @@ const convertDateToFullISO = (value: unknown, field: Field): unknown => {
 export const mapValuesFromAPI = (
   apiData: Record<string, unknown>,
   fields: Field[],
+  values?: Record<string, unknown>,
 ): Record<string, unknown> => {
   const formValues: Record<string, unknown> = {};
 
@@ -576,7 +577,9 @@ export const mapValuesFromAPI = (
     };
 
     const value = getValue(apiData, config);
-    const finalValue = value ?? field.defaultValue ?? "";
+    let oldValue = field.defaultValue || "";
+    if (values?.[field.name]) oldValue = (values?.[field.name] as string) || "";
+    const finalValue = value ?? oldValue;
     formValues[field.name || ""] = convertDateToFullISO(finalValue, field);
   }
 
@@ -586,9 +589,10 @@ export const mapValuesFromAPI = (
 export const convertAPIDataToFormValues = (
   data: unknown,
   fields: Field[],
+  values?: Record<string, unknown>,
 ): Record<string, unknown> => {
   const dataAsRecord: Record<string, unknown> = data as Record<string, unknown>;
-  return mapValuesFromAPI(dataAsRecord, fields);
+  return mapValuesFromAPI(dataAsRecord, fields, values);
 };
 
 export const updatePositionDropdownOptions = (

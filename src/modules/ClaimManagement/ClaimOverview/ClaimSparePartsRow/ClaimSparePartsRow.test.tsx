@@ -4,7 +4,6 @@ import React from "react";
 import { Formik, useFormikContext } from "formik";
 import { useHasPermission } from "hooks/useHasPermission";
 import { useClaimContext } from "../ClaimContext";
-import { useSparePartsRowCommon } from "modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.shared";
 import { GenericFormContext } from "components/generics/Form/GenericForm.context";
 
 vi.mock("react-i18next", () => ({
@@ -40,7 +39,7 @@ vi.mock("../ClaimContext", () => ({
     markRowDirty: vi.fn(),
     allowedPositions: [],
     positionDropdownOptions: [],
-    isResyncingRef: { current: false },
+    // isResyncingRef: { current: false },
     discountBase: "GROSS_PRICE",
     canDeleteRows: true,
     automaticRows: [],
@@ -55,17 +54,14 @@ vi.mock("components/generics/Form/GenericForm.context", () => ({
     sparePartNotBelongsToTool: { current: {} },
   }),
 }));
-
-vi.mock("modules/JobManagement/JobOverview/SparePartsRow/SparePartsRow.shared", () => ({
-  resolveDiscountFieldNames: vi.fn(() => ({
-    discountHiddenFieldName: "discountHidden",
-    discountAmountHiddenFieldName: "discountAmountHidden",
-    activeDiscountFieldName: "discount",
-    discountSiblingFieldName: "total",
-  })),
-  useSparePartsRowCommon: vi.fn(() => "non-price-key"),
-}));
-
+function PositionSetter({ value }: { value: string }) {
+  const { setFieldValue } = useFormikContext<Record<string, unknown>>();
+  return React.createElement(
+    "button",
+    { "data-testid": "set-position", onClick: () => setFieldValue(positionFieldName, value) },
+    "set",
+  );
+}
 // Captured from the (mocked) SparePartsMainFields so we can exercise the
 // internal `applyFieldPermissions` callback and inspect the fully-computed
 // `positionFieldsWithDisabledOptions` without needing to render real fields.
@@ -90,14 +86,13 @@ import ClaimSparePartsRow from "./ClaimSparePartsRow";
 
 const mockUseHasPermission = vi.mocked(useHasPermission);
 const mockUseClaimContext = vi.mocked(useClaimContext);
-const mockUseSparePartsRowCommon = vi.mocked(useSparePartsRowCommon);
 
 const baseClaimContext = {
   arePricesValidated: true,
   markRowDirty: vi.fn(),
   allowedPositions: [] as Array<{ position: string; maxCount: number }>,
   positionDropdownOptions: [] as Array<{ value: string; name: string }>,
-  isResyncingRef: { current: false },
+  // isResyncingRef: { current: false },
   discountBase: "GROSS_PRICE",
   canDeleteRows: true,
   automaticRows: [] as string[],
@@ -194,7 +189,6 @@ describe("ClaimSparePartsRow", () => {
     vi.clearAllMocks();
     mockUseHasPermission.mockReturnValue(true);
     mockUseClaimContext.mockReturnValue(baseClaimContext as never);
-    mockUseSparePartsRowCommon.mockReturnValue("non-price-key");
     capturedApplyFieldPermissions = undefined;
     capturedPositionFields = [];
   });
@@ -523,15 +517,6 @@ describe("ClaimSparePartsRow", () => {
       );
     }
 
-    function PositionSetter({ value }: { value: string }) {
-      const { setFieldValue } = useFormikContext<Record<string, unknown>>();
-      return React.createElement(
-        "button",
-        { "data-testid": "set-position", onClick: () => setFieldValue(positionFieldName, value) },
-        "set",
-      );
-    }
-
     function renderAutofillRow(initialValues: Record<string, unknown>, positionToSet: string) {
       return render(
         React.createElement(
@@ -603,12 +588,10 @@ describe("ClaimSparePartsRow", () => {
     it("calls markRowDirty when the row's non-price input key changes after mount", () => {
       const markRowDirty = vi.fn();
       mockUseClaimContext.mockReturnValue({ ...baseClaimContext, markRowDirty } as never);
-      mockUseSparePartsRowCommon.mockReturnValue("key-1");
 
       const { rerender } = render(buildElement());
       expect(markRowDirty).not.toHaveBeenCalled();
 
-      mockUseSparePartsRowCommon.mockReturnValue("key-2");
       rerender(buildElement());
 
       expect(markRowDirty).toHaveBeenCalled();
@@ -619,13 +602,10 @@ describe("ClaimSparePartsRow", () => {
       mockUseClaimContext.mockReturnValue({
         ...baseClaimContext,
         markRowDirty,
-        isResyncingRef: { current: true },
+        //  isResyncingRef: { current: true },
       } as never);
-      mockUseSparePartsRowCommon.mockReturnValue("key-1");
 
       const { rerender } = render(buildElement());
-
-      mockUseSparePartsRowCommon.mockReturnValue("key-2");
       rerender(buildElement());
 
       expect(markRowDirty).not.toHaveBeenCalled();
@@ -638,11 +618,9 @@ describe("ClaimSparePartsRow", () => {
         markRowDirty,
         arePricesValidated: false,
       } as never);
-      mockUseSparePartsRowCommon.mockReturnValue("key-1");
 
       const { rerender } = render(buildElement());
 
-      mockUseSparePartsRowCommon.mockReturnValue("key-2");
       rerender(buildElement());
 
       expect(markRowDirty).not.toHaveBeenCalled();

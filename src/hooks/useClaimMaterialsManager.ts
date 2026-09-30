@@ -17,7 +17,6 @@ import {
   buildRowValues,
 } from "hooks/useDiagnosticsManager";
 import type { Material } from "modules/ClaimManagement/ClaimOverview/Claims.types";
-//import { calculatePrices } from "utils/priceCalculator";
 import { PERMISSIONS } from "utils/Permissions";
 import type { HeaderUserData } from "api/services/header/action";
 
@@ -61,23 +60,6 @@ const claimMaterialToMaterialItem = (m: Material): MaterialItem => {
   const discountAmount = price?.discountAmount ?? 0;
   const totalAmount = price?.totalAmount ?? 0;
   const taxAmount = price?.taxAmount ?? 0;
-
-  // const calculated = calculatePrices(
-  //   {
-  //     quantity,
-  //     unitPrice,
-  //     taxPercent,
-  //     discountPercent,
-  //     suggestedNetPrice: price?.suggestedNetPrice ?? 0,
-  //     netAmount: price?.netAmount ?? 0,
-  //     grossAmount: price?.grossAmount ?? 0,
-  //     totalAmount: price?.totalAmount ?? 0,
-  //     taxAmount: price?.taxAmount ?? 0,
-  //   },
-  //   "unitPrice",
-  //   unitPrice,
-  //   mode,
-  // );
 
   return {
     position: m.position ?? "",
@@ -175,7 +157,7 @@ export interface UseClaimMaterialsManagerProps {
   arePricesValidated: boolean;
   setArePricesValidated: Dispatch<SetStateAction<boolean>>;
   readOnly?: boolean;
-  isResyncingRef: RefObject<boolean>;
+ // isResyncingRef: RefObject<boolean>;
 }
 
 export interface UseClaimMaterialsManagerReturn {
@@ -223,7 +205,7 @@ export const useClaimMaterialsManager = ({
   formValuesRef,
   setArePricesValidated,
   readOnly = false,
-  isResyncingRef,
+ // isResyncingRef,
 }: UseClaimMaterialsManagerProps): UseClaimMaterialsManagerReturn => {
   const queryClient = useQueryClient();
 
@@ -433,7 +415,7 @@ export const useClaimMaterialsManager = ({
     // server-returned values into the form. Without this guard the hooks fire
     // immediately on the Formik reinitialize and overwrite the BE values with
     // locally-computed prices (visible as "prices show correctly only on 2nd validate").
-    isResyncingRef.current = true;
+  //  isResyncingRef.current = true;
     if (forceRebuildRef.current) {
       setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
     } else {
@@ -449,9 +431,9 @@ export const useClaimMaterialsManager = ({
     forceRebuildRef.current = false;
     // Release the resyncing guard after React has flushed all effects that
     // react to the new initialFormValues (price-calculation useEffects).
-    setTimeout(() => {
-      isResyncingRef.current = false;
-    }, 50);
+    // setTimeout(() => {
+    //   isResyncingRef.current = false;
+    // }, 50);
   }, [
     materials,
     setAllFields,
@@ -459,7 +441,7 @@ export const useClaimMaterialsManager = ({
     setInitialFormValues,
     formValuesRef,
     skipFormResetRef,
-    isResyncingRef,
+  //  isResyncingRef,
   ]);
 
   const populateNeeded = (

@@ -291,7 +291,7 @@ export const postToggleJobHold = async (jobId: string): Promise<void> => {
 
 export interface ValidateAndSaveResponse {
   errorMessages: Record<string, string>[];
-  diagnostic?: Record<string, string>[];
+  diagnostic?: JobDiagnostic;
   materials?: JobDiagnostic["materials"];
   archivedMaterials?: JobDiagnostic["archivedMaterials"];
   actionType?: string;

@@ -29,6 +29,7 @@ const EMPTY_DIAGNOSTIC_DATA: JobDiagnostic = {
     totalAmount: 0,
     discountAmount: 0,
   },
+  priceSummaryDetailed: undefined,
 };
 
 export const useDiagnosticData = ({ jobId, jobData, tabs }: UseDiagnosticDataProps) => {

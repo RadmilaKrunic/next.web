@@ -15,7 +15,6 @@ import {
   mapFieldToFieldMapping,
   syncFieldsToTabs,
 } from "components/generics/utils";
-// import { calculatePrices } from "utils/priceCalculator";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useBareSalesRelation } from "api/services/bareSalesRelation/hooks";
@@ -23,7 +22,11 @@ import { PERMISSIONS } from "utils/Permissions";
 import type { HeaderUserData } from "api/services/header/action";
 import { MessagesContext } from "../contexts/messagescontext";
 import { scrollToTop } from "../utils/scrollToError";
-import { SummaryDetail, SummaryDetailAll, SummaryPrice } from "@/modules/JobManagement/JobList/JobList.types";
+import {
+  SummaryDetail,
+  SummaryDetailAll,
+  SummaryPrice,
+} from "@/modules/JobManagement/JobList/JobList.types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -186,40 +189,6 @@ enum QuantitySource {
   FAULT_CODES = "FAULT_CODES",
   USER = "USER",
 }
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-// const computePricesForItem = (item: MaterialItem, mode?: discountBase): MaterialItem => {
-//   if (item.unitPrice <= 0) return item;
-//   const result = calculatePrices(
-//     {
-//       quantity: item.quantity,
-//       unitPrice: item.unitPrice,
-//       taxPercent: item.tax,
-//       discountPercent: item.discount,
-//       grossAmount: 0,
-//       netAmount: 0,
-//       suggestedNetPrice: 0,
-//       totalAmount: 0,
-//       taxAmount: 0,
-//     },
-//     "unitPrice",
-//     item.unitPrice,
-//     mode,
-//   );
-//   return {
-//     ...item,
-//     netAmount: result.netAmount,
-//     suggestedNetPrice: result.suggestedNetPrice,
-//     tax: result.taxPercent,
-//     taxAmount: result.taxAmount,
-//     grossAmount: result.grossAmount,
-//     discount: result.discountPercent,
-//     discountAmount: result.discountAmount,
-//     totalAmount: result.totalAmount,
-//   };
-// };
-
 const buildEmptyMaterial = (
   position: string,
   jobType: string,
@@ -341,27 +310,8 @@ export const getSummaryDetailedRowValues = (
 /** Maps priceSummaryDetailed.total onto the single, non-duplicated diagnosticsSummaryTotal area. */
 export const getSummaryTotalRowValues = (
   areaFields: Field[],
-  total: SummaryPrice | undefined,
+  total?: SummaryPrice,
 ): Record<string, unknown> => mapAreaFields(areaFields, mapSummaryPriceSubtypes(total ?? {}));
-
-/**
- * True for a field belonging to a multi-row diagnostics area this hook populates directly by
- * subtype (materials, archivedMaterials, the byJobType/total summary rows). Their
- * attributeMapping (e.g. "materials#.position") is missing the "diagnostic." prefix every other
- * diagnostic field has, so a generic attributeMapping-based sync run against the merged job data
- * always misses and falls back to "" / defaultValue - callers should exclude these fields from
- * any such sync rather than let it clobber what this hook already wrote correctly.
- */
-export const isDiagnosticsManagerOwnedField = (fieldName: string): boolean => {
-  if (fieldName.includes("archivedSpareParts") && !fieldName.includes("claimArchivedSpareParts")) {
-    return true;
-  }
-  return (
-    fieldName.includes("diagnosticsSpareParts") ||
-    fieldName.includes("diagnosticsSummaryDetailed") ||
-    fieldName.includes("diagnosticsSummaryTotal")
-  );
-};
 
 /** Overlay status and type fields onto an existing values map from the current form state. */
 function applyStatusAndTypeOverrides(
@@ -399,7 +349,7 @@ function shouldReuseExistingRowValues(params: {
 }
 
 export function buildSummaryDetailedRowValues(params: {
-  details?: SummaryDetail[] | undefined;
+  details?: SummaryDetail[];
   areas: Area[];
   fields: Field[];
 }): Record<string, unknown> {
@@ -601,6 +551,7 @@ const reindexSparePartsValues = (
 };
 
 const syncMaterialsWithForm = (materials: MaterialItem[], formValues: Record<string, unknown>) => {
+  console.log(formValues);
   const syncedMaterials = materials.map((materialItem, index) => {
     return {
       ...materialItem,
@@ -654,7 +605,7 @@ interface UseDiagnosticsManagerProps {
   arePricesValidated: boolean;
   setArePricesValidated: React.Dispatch<React.SetStateAction<boolean>>;
   /** When set, will be flipped to true during initial load when all materials have IDs (prices from DB). */
-  isResyncingRef?: RefObject<boolean>;
+  // isResyncingRef?: RefObject<boolean>;
   /** When true, Effect 2 (rule-change rebuild) is skipped so API-loaded materials are preserved. */
   readOnly?: boolean;
   jobStatus?: string;
@@ -662,6 +613,8 @@ interface UseDiagnosticsManagerProps {
 
 export interface UseDiagnosticsManagerReturn {
   materials: MaterialItem[];
+  priceSummaryDetailedByJobType: SummaryDetail[];
+  setPriceSummaryDetailedByJobType: React.Dispatch<React.SetStateAction<SummaryDetail[]>>;
   apiMaterialsLoaded: boolean;
   apiMaterialsEmpty: boolean;
   hasExistingDiagnostic: boolean;
@@ -688,7 +641,7 @@ export interface UseDiagnosticsManagerReturn {
   markAllValidated: () => void;
   markRowDirty: (areaIndex: number) => void;
   enableValidate: () => boolean;
-  resyncMaterialsFromAPI: (markValidated?: boolean) => void;
+  // resyncMaterialsFromAPI: (markValidated?: boolean) => void;
   setRevisedRejectedRowPending: (areaName: string) => void;
   canArchiveOnDelete: boolean;
 }
@@ -719,7 +672,7 @@ export const useDiagnosticsManager = ({
   formValuesRef,
   arePricesValidated,
   setArePricesValidated,
-  isResyncingRef,
+  // isResyncingRef,
   readOnly = false,
   jobStatus = "",
 }: UseDiagnosticsManagerProps): UseDiagnosticsManagerReturn => {
@@ -983,9 +936,6 @@ export const useDiagnosticsManager = ({
         items.forEach((item) => {
           item.isValidated = true;
         });
-        if (isResyncingRef) {
-          isResyncingRef.current = true;
-        }
       }
 
       // Bug 6 fix: preserve tax for in-progress rows not yet returned by the API
@@ -1000,9 +950,12 @@ export const useDiagnosticsManager = ({
         return item;
       });
 
-      return sortMaterialsByOrder(mergedItems);
+      const sorted = sortMaterialsByOrder(mergedItems);
+
+      return sorted;
     },
-    [isResyncingRef],
+    // [isResyncingRef],
+    [],
   );
 
   // ── Effect 1: API data → materials list ───────────────────────────────────
@@ -1014,25 +967,10 @@ export const useDiagnosticsManager = ({
 
     // Signal Effect 3 to force a full rebuild so field components always
     // re-render with fresh API data, even when the row count hasn't changed.
-    forceRebuildRef.current = true;
+    forceRebuildRef.current = false;
     setMaterials(buildMaterialsFromAPI(apiMaterials));
   }, [diagnosticData, buildMaterialsFromAPI, setArePricesValidated]);
 
-  /**
-   * Applies a materials array straight from a mutation response (e.g. recalculate-prices)
-   * to the materials list immediately, bypassing the diagnosticData-driven Effect 1 (and its
-   * hasSyncedFromAPIRef one-shot guard) entirely. Use this whenever the fresh data is already
-   * in hand and must land in the form right away, rather than waiting on the React Query
-   * cache update to propagate back through diagnosticData.
-   */
-  const applyRecalculatedMaterials = useCallback(
-    (rawMaterials: unknown[] | undefined) => {
-      if (!rawMaterials?.length) return;
-      forceRebuildRef.current = true;
-      setMaterials(buildMaterialsFromAPI(rawMaterials as Array<Record<string, unknown>>));
-    },
-    [buildMaterialsFromAPI],
-  );
   useEffect(() => {
     const priceSummary = diagnosticData?.priceSummaryDetailed as SummaryDetailAll;
     if (!priceSummary?.byJobType?.length || hasSyncedSummaryDetailedRef.current) return;
@@ -1047,16 +985,16 @@ export const useDiagnosticsManager = ({
    * hasSyncedSummaryDetailedRef one-shot guard) entirely - same rationale as
    * applyRecalculatedMaterials.
    */
-  const applyRecalculatedSummary = useCallback(
-    (summary: { total?: Partial<SummaryPrice>; byJobType: SummaryDetail[] } | undefined) => {
-      if (!summary) return;
-      setPriceSummaryDetailed({
-        total: { ...ZERO_SUMMARY_PRICE, ...summary.total },
-        byJobType: summary.byJobType,
-      });
-    },
-    [],
-  );
+  // const applyRecalculatedSummary = useCallback(
+  //   (summary: { total?: Partial<SummaryPrice>; byJobType: SummaryDetail[] } | undefined) => {
+  //     if (!summary) return;
+  //     setPriceSummaryDetailed({
+  //       total: { ...ZERO_SUMMARY_PRICE, ...summary.total },
+  //       byJobType: summary.byJobType,
+  //     });
+  //   },
+  //   [],
+  // );
 
   // ── Effect 1b: API archived data → archivedMaterials list ─────────────────
   useEffect(() => {
@@ -1528,6 +1466,7 @@ export const useDiagnosticsManager = ({
     forceRebuildRef.current = false;
   }, [
     formValuesRef,
+    priceSummaryDetailed,
     priceSummaryDetailed?.byJobType,
     setAllFields,
     setInitialFormValues,
@@ -1547,19 +1486,33 @@ export const useDiagnosticsManager = ({
 
     const rowValues = getSummaryTotalRowValues(totalArea.fields, priceSummaryDetailed.total);
     setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
-  }, [priceSummaryDetailed?.total, setInitialFormValues]);
+  }, [priceSummaryDetailed, setInitialFormValues]);
 
-  const onAddRow = useCallback((formValues?: Record<string, unknown>) => {
-    if (!formValues) return;
-    const perms = userPermissionsRef.current;
-    const hasPositionPermission = (position: string): boolean => {
-      const required =
-        POSITION_INSERT_PERMISSIONS[position as keyof typeof POSITION_INSERT_PERMISSIONS];
-      if (!required) return true;
-      return perms.includes(required);
-    };
-    const allowed = allowedPositionsRef.current.filter((p) => hasPositionPermission(p.position));
-    if (allowed.length > 0) {
+  const onAddRow = useCallback(
+    (formValues?: Record<string, unknown>) => {
+      if (!formValues) return;
+      const perms = userPermissionsRef.current;
+      const hasPositionPermission = (position: string): boolean => {
+        const required =
+          POSITION_INSERT_PERMISSIONS[position as keyof typeof POSITION_INSERT_PERMISSIONS];
+        if (!required) return true;
+        return perms.includes(required);
+      };
+      const allowed = allowedPositionsRef.current.filter((p) => hasPositionPermission(p.position));
+      if (allowed.length > 0) {
+        const current = allFieldsRef.current ?? [];
+        const positionCounts: Record<string, number> = {};
+        current
+          .filter((f) => f.subtype === "diagnosticPosition")
+          .forEach((f) => {
+            const val = formValues[f.name] as string;
+            if (val) positionCounts[val] = (positionCounts[val] ?? 0) + 1;
+          });
+        const totalRows = Object.values(positionCounts).reduce((s, c) => s + c, 0);
+        const maxTotal = allowed.reduce((s, p) => s + p.maxCount, 0);
+        if (totalRows >= maxTotal) return;
+      }
+
       const current = allFieldsRef.current ?? [];
       const positionCounts: Record<string, number> = {};
       current
@@ -1568,49 +1521,34 @@ export const useDiagnosticsManager = ({
           const val = formValues[f.name] as string;
           if (val) positionCounts[val] = (positionCounts[val] ?? 0) + 1;
         });
-      const totalRows = Object.values(positionCounts).reduce((s, c) => s + c, 0);
-      const maxTotal = allowed.reduce((s, p) => s + p.maxCount, 0);
-      if (totalRows >= maxTotal) return;
-    }
 
-    const current = allFieldsRef.current ?? [];
-    const positionCounts: Record<string, number> = {};
-    current
-      .filter((f) => f.subtype === "diagnosticPosition")
-      .forEach((f) => {
-        const val = formValues[f.name] as string;
-        if (val) positionCounts[val] = (positionCounts[val] ?? 0) + 1;
+      const nextPosition =
+        [...allowed]
+          .sort(
+            (a, b) =>
+              (POSITION_ORDER[a.position] ?? Number.MAX_SAFE_INTEGER) -
+              (POSITION_ORDER[b.position] ?? Number.MAX_SAFE_INTEGER),
+          )
+          .find((p) => (positionCounts[p.position] ?? 0) < p.maxCount)?.position ?? "";
+
+      const qty = nextPosition
+        ? (getQuantityForPositionRef.current(
+            nextPosition,
+            (formValues.faultCode as string) ?? "",
+            Number(formValues.faultCodeLabourQuantity) || 0,
+          ) ?? 1)
+        : 1;
+      const newItem = {
+        ...buildEmptyMaterial(nextPosition, "", qty, tRef.current),
+      };
+      setMaterials((prev) => {
+        const syncedMaterials = syncMaterialsWithForm(prev, formValues);
+        return normalizeMaterialOrders([...syncedMaterials, newItem]);
       });
-
-    const nextPosition =
-      [...allowed]
-        .sort(
-          (a, b) =>
-            (POSITION_ORDER[a.position] ?? Number.MAX_SAFE_INTEGER) -
-            (POSITION_ORDER[b.position] ?? Number.MAX_SAFE_INTEGER),
-        )
-        .find((p) => (positionCounts[p.position] ?? 0) < p.maxCount)?.position ?? "";
-
-    const qty = nextPosition
-      ? (getQuantityForPositionRef.current(
-          nextPosition,
-          (formValues.faultCode as string) ?? "",
-          Number(formValues.faultCodeLabourQuantity) || 0,
-        ) ?? 1)
-      : 1;
-
-    // Bug 6 fix: use tax from existing validated rows as default for new rows
-    const defaultTax = materialsRef.current.find((m) => m.tax > 0)?.tax ?? 0;
-    const newItem = {
-      ...buildEmptyMaterial(nextPosition, "", qty, tRef.current),
-      tax: defaultTax,
-    };
-
-    setMaterials((prev) => {
-      const syncedMaterials = syncMaterialsWithForm(prev, formValues);
-      return normalizeMaterialOrders([...syncedMaterials, newItem]);
-    });
-  }, []);
+      setArePricesValidated(false);
+    },
+    [setArePricesValidated],
+  );
 
   const onDeleteRow = useCallback(
     (areaName: string) => {
@@ -1739,8 +1677,9 @@ export const useDiagnosticsManager = ({
           ...toAdd,
         ]);
       });
+      setArePricesValidated(false);
     },
-    [formValuesRef],
+    [formValuesRef, setArePricesValidated],
   );
 
   const onRestoreRow = useCallback(
@@ -1816,9 +1755,11 @@ export const useDiagnosticsManager = ({
   );
 
   const markAllValidated = useCallback(() => {
+    setArePricesValidated(true);
     setMaterials((prev) => prev.map((m) => ({ ...m, isValidated: true })));
+
     pendingArchivedDeletionsRef.current = 0;
-  }, []);
+  }, [setArePricesValidated]);
 
   const markRowDirty = useCallback(
     (areaIndex: number) => {
@@ -1836,18 +1777,18 @@ export const useDiagnosticsManager = ({
     return !arePricesValidated;
   }, [arePricesValidated]);
 
-  const resyncMaterialsFromAPI = useCallback(
-    (markValidated = false) => {
-      hasSyncedFromAPIRef.current = false;
-      hasSyncedArchivedRef.current = false;
-      hasSyncedSummaryDetailedRef.current = false;
-      forceRebuildRef.current = true;
-      archivedForceRebuildRef.current = true;
-      if (markValidated) shouldMarkValidatedRef.current = true;
-      skipFormResetRef.current = true;
-    },
-    [skipFormResetRef],
-  );
+  // const resyncMaterialsFromAPI = useCallback(
+  //   (markValidated = false) => {
+  //     hasSyncedFromAPIRef.current = false;
+  //     hasSyncedArchivedRef.current = false;
+  //     hasSyncedSummaryDetailedRef.current = false;
+  //     forceRebuildRef.current = true;
+  //     archivedForceRebuildRef.current = true;
+  //     if (markValidated) shouldMarkValidatedRef.current = true;
+  //     skipFormResetRef.current = true;
+  //   },
+  //   [skipFormResetRef],
+  // );
 
   /** Returns the positional index of an area inside the sparePartsAreas array. */
   const getAreaPositionalIndex = useCallback((areaName: string): number => {
@@ -1919,10 +1860,8 @@ export const useDiagnosticsManager = ({
     markAllValidated,
     markRowDirty,
     enableValidate,
-    resyncMaterialsFromAPI,
+    //   resyncMaterialsFromAPI,
     setRevisedRejectedRowPending,
     canArchiveOnDelete: !STATUSES_WITH_PERMANENT_DELETE.includes(jobStatus),
-    applyRecalculatedMaterials,
-    applyRecalculatedSummary,
   };
 };

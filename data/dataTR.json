@@ -4962,11 +4962,11 @@
                     },
                     {
                       "label": "comercialGoodwill",
-                      "value": "comercialGoodwill"
+                      "value": "comercial_goodwill"
                     },
                     {
                       "label": "serviceOffering",
-                      "value": "serviceOffering"
+                      "value": "service_offering"
                     }
                   ],
                   "radioButtonsSource": "getRadioButtonsForSummaryType",
@@ -14476,7 +14476,8 @@
                   "allowedFormats": [],
                   "isMultiple": false,
                   "permissions": [],
-                  "multiSelect": false
+                  "multiSelect": false,
+                  "onValueChange": "onNonPriceFieldChange"
                 },
                 {
                   "name": "sparePartNumber",
@@ -14510,7 +14511,8 @@
                   "allowedFormats": [],
                   "isMultiple": false,
                   "permissions": [],
-                  "multiSelect": false
+                  "multiSelect": false,
+                  "onValueChange": "onNonPriceFieldChange"
                 },
                 {
                   "name": "description",
@@ -14596,7 +14598,7 @@
                   "isMultiple": false,
                   "permissions": [],
                   "multiSelect": false,
-                  "onValueChange": "onRecalculatePrices"
+                  "onValueChange": "onNonPriceFieldChange"
                 },
                 {
                   "name": "quantity",
@@ -15423,11 +15425,11 @@
                     },
                     {
                       "label": "comercialGoodwill",
-                      "value": "comercialGoodwill"
+                      "value": "comercial_goodwill"
                     },
                     {
                       "label": "serviceOffering",
-                      "value": "serviceOffering"
+                      "value": "service_offering"
                     }
                   ],
                   "radioButtonsSource": "getRadioButtonsForSummaryType",
@@ -15439,7 +15441,7 @@
                   "patternText": "",
                   "autoFillFields": [],
                   "attributeMapping": "",
-                  "defaultValue": "0",
+                  "defaultValue": "totalSummary",
                   "allowedFormats": [],
                   "isMultiple": false,
                   "permissions": [],
@@ -15760,7 +15762,7 @@
                   "minValue": 0,
                   "maxValue": 0,
                   "isDisabled": true,
-                  "isHidden": false,
+                  "isHidden": true,
                   "isRequired": false,
                   "disabledForStatuses": [],
                   "alwaysDisabled": false,

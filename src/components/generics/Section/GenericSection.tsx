@@ -65,7 +65,8 @@ function GenericSection({
 
         const result = callback(formValues, {
           setFieldValue,
-          setErrors,
+          setErrors: (errors: Record<string, unknown>) =>
+            setErrors(errors as Record<string, string>),
           setTouched: wrappedSetTouched,
         });
         if (result instanceof Promise) {

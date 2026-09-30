@@ -45,7 +45,7 @@ vi.mock("components/generics/Field/GenericField", () => ({
 
 vi.mock("../DiagnosticsContext", () => ({
   useDiagnosticsContext: vi.fn(() => ({
-    isDistributingRef: { current: false },
+   // isDistributingRef: { current: false },
     hasPricesPopulated: true,
     setSummaryTypeOptions: vi.fn(),
     discountBase: "GROSS_PRICE",
@@ -173,18 +173,18 @@ function renderSummary(
     ),
   );
 
-  return { setFieldValue, values: mergedValues,  ...view };
+  return { setFieldValue, values: mergedValues, ...view };
 }
 
 describe("SummaryArea", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     renderedFields.length = 0;
-    useHasPermissionMock.mockImplementation((permissions: string[]) => {
+    useHasPermissionMock.mockImplementation((permissions: string[] | undefined) => {
       if (
-        permissions.includes(PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_DISCOUNT) ||
-        permissions.includes(PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_AMOUNT) ||
-        permissions.includes(PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES)
+        permissions?.includes(PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_DISCOUNT) ||
+        permissions?.includes(PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_AMOUNT) ||
+        permissions?.includes(PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES)
       ) {
         return true;
       }
@@ -200,7 +200,7 @@ describe("SummaryArea", () => {
 
   it("returns null when price permission gate is active and prices not populated", () => {
     vi.mocked(useDiagnosticsContext).mockReturnValue({
-      isDistributingRef: { current: false },
+    //  isDistributingRef: { current: false },
       hasPricesPopulated: false,
       setSummaryTypeOptions: vi.fn(),
       discountBase: "GROSS_PRICE",
@@ -212,7 +212,7 @@ describe("SummaryArea", () => {
 
   it("disables material fields from discountBase, status, and permission rules", () => {
     vi.mocked(useDiagnosticsContext).mockReturnValue({
-      isDistributingRef: { current: false },
+     // isDistributingRef: { current: false },
       hasPricesPopulated: true,
       setSummaryTypeOptions: vi.fn(),
       discountBase: "NET_PRICE",
@@ -237,7 +237,7 @@ describe("SummaryArea", () => {
 
   it("uses matching summary field name for current discountBase when mappings collide", () => {
     vi.mocked(useDiagnosticsContext).mockReturnValue({
-      isDistributingRef: { current: false },
+     // isDistributingRef: { current: false },
       hasPricesPopulated: true,
       setSummaryTypeOptions: vi.fn(),
       discountBase: "NET_PRICE",

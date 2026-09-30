@@ -125,7 +125,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: false,
-          isResyncingRef: { current: false },
+      //    isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -174,7 +174,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-          isResyncingRef: { current: false },
+       //   isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -208,7 +208,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: true,
-          isResyncingRef: { current: false },
+      //    isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -247,7 +247,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-          isResyncingRef: { current: false },
+        //  isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -284,7 +284,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-          isResyncingRef: { current: false },
+       //   isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -320,7 +320,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: false,
-          isResyncingRef: { current: false },
+    //      isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -376,7 +376,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: false,
-          isResyncingRef: { current: false },
+       //   isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -418,7 +418,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-          isResyncingRef: { current: false },
+    //      isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );

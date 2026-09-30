@@ -18,7 +18,7 @@ const toCamelCase = (s: string) =>
 function SummaryArea({ area }: Readonly<{ area: Area }>) {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const { allFields } = useContext(GenericFormContext);
-  const { values, setFieldValue } = useFormikContext<Record<string, unknown>>();
+  const { values } = useFormikContext<Record<string, unknown>>();
   const { hasPricesPopulated, setSummaryTypeOptions, discountBase, isValidating, jobStatus } =
     useDiagnosticsContext();
   const hasPriceViewPermission = useHasPermission([PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES]);
@@ -91,27 +91,23 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     () => area.fields.find((f) => f.type === "radiogroup"),
     [area.fields],
   );
-
-  // Duplicated diagnosticsSummaryDetailed rows (one per byJobType entry) don't carry their
-  // own copy of the summaryType radiogroup - it only lives on diagnosticsSummaryTotal. Fall
-  // back to a form-wide lookup so those rows still read the type the user actually selected.
   const globalSummaryTypeField = useMemo(
     () => allFields?.find((f) => f.subtype === "diagnosticSummaryType"),
-    [allFields],
-  );
-
+  [allFields],
+);
   const activeSummaryTypeField = summaryTypeField ?? globalSummaryTypeField;
+  const currentSummaryType = activeSummaryTypeField ? (values[activeSummaryTypeField.name] as string) || "totalSummary"
+   : "totalSummary";
 
-  const currentSummaryType = activeSummaryTypeField
-    ? (values[activeSummaryTypeField.name] as string) || "totalSummary"
-    : "totalSummary";
+
 
   const isByJobTypeRow = area.name.includes("diagnosticsSummaryDetailed");
   const jobTypeField = useMemo(
     () => area.fields.find((f) => f.subtype === "summaryDetailedJobType"),
     [area.fields],
   );
-  const rowJobType = jobTypeField ? toCamelCase(String(values[jobTypeField.name] ?? "")) : "";
+  const jobTypeFieldValue = jobTypeField ? (values[jobTypeField.name] as string) : "";
+  const rowJobType = jobTypeField ? toCamelCase(String(jobTypeFieldValue)) : "";
 
   const summaryTypeOptions = useMemo(() => {
     const seen = new Map<string, { label: string; value: string }>();
@@ -131,14 +127,22 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     return [{ value: "totalSummary", label: "totalSummary" }, ...seen.values()];
   }, [scopedFields, values]);
 
-  useEffect(() => {
-    if (!summaryTypeField) return;
-    const current = values[summaryTypeField.name] as string;
-    if (!summaryTypeOptions.some((o) => o.value === current)) {
-      void setFieldValue(summaryTypeField.name, "totalSummary");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [summaryTypeOptions]);
+  // useEffect(() => {
+  //   if (!summaryTypeField) return;
+  //  const current = values[summaryTypeField.name] as string;
+  
+  //   if (currentSummaryRef.current) {
+  // console.log("effect ref1: ", currentSummaryRef.current)
+  //  //   console.log("effect1: ", current)
+  //     if (currentSummaryRef.current !== current) {
+  //       void setFieldValue(summaryTypeField.name, current);
+  //     }
+  //   //   if (currentSummaryRef.current !== current) {
+  //   //    currentSummaryRef.current = current
+  //   //  }
+  
+  //   }
+  // }, [setFieldValue, summaryTypeField, summaryTypeOptions, values]);
 
   useEffect(() => {
     // Only the area that owns the summaryType radiogroup should publish the options -
@@ -170,13 +174,15 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
 
   return (
     <>
-      <div className="summary-row summary-radio-row">
-        {area.fields
-          .filter((field) => field.type === "radiogroup")
-          .map((field) => (
-            <GenericField field={summaryRadioField(field)} key={field.name} />
-          ))}
-      </div>
+      {isTotalArea && (
+        <div className="summary-row summary-radio-row">
+          {area.fields
+            .filter((field) => field.type === "radiogroup")
+            .map((field) => (
+              <GenericField field={summaryRadioField(field)} key={field.name} />
+            ))}
+        </div>
+      )}
       {shouldShowValueFields && (
         <div className="summary-row summary-fields-row">
           {area.fields
@@ -193,7 +199,7 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
             })}
         </div>
       )}
-      {types.has(currentSummaryType) && (
+      {shouldShowValueFields && types.has(currentSummaryType) && (
         <div className="summary-fields-row summary-material-row">
           <div className="summary-material-label">{t("SummaryOfMaterialItems")}</div>
           <div className="summary-material-fields">

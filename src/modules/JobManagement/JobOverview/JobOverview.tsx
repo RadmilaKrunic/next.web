@@ -94,7 +94,6 @@ import {
   useDiagnosticsManager,
   getChargeablePendingInfo,
   hasWarrantyOrProServiceItems,
-  isDiagnosticsManagerOwnedField,
 } from "hooks/useDiagnosticsManager";
 import { useFormInitialization } from "hooks/useFormInitialization";
 import {
@@ -104,15 +103,6 @@ import {
 import { usePositionDropdownSync } from "hooks/usePositionDropdownSync";
 import { useSectionEditing } from "hooks/useSectionEditing";
 import { DiagnosticsContext } from "./DiagnosticsContext";
-// import {
-//   SUMMARY_TYPE_FILTER,
-//   aggregateRowPrices,
-//   distributeGrossToRows,
-//   distributeNetToRows,
-//   calculateSummaryTotalAmountDistribution,
-//   calculateSummaryNetAmountDistribution,
-//   roundToTwo,
-// } from "utils/priceCalculator";
 import { MessagesContext } from "../../../contexts/messagescontext";
 import { useHasPermission } from "hooks/useHasPermission";
 import { PERMISSIONS } from "utils/Permissions";
@@ -227,6 +217,10 @@ export default function JobOverview() {
   const [isDeletingFile, setIsDeletingFile] = useState(false);
   const { setMessages } = useContext(MessagesContext);
   const [arePricesValidated, setArePricesValidated] = useState(false);
+  const [jobFullData, setJobFullData] = useState<JobOverviewItem | undefined>(undefined);
+  const [recalculatedPricesChanges, setRecalculatedPricesChanges] = useState<
+    Record<string, unknown>[]
+  >([]);
   const [summaryTypeOptions, setSummaryTypeOptions] = useState<{ label: string; value: string }[]>([
     { value: "totalSummary", label: "totalSummary" },
   ]);
@@ -477,8 +471,8 @@ export default function JobOverview() {
     currentStatus === "CUSTOMER_APPROVAL_PENDING" || currentStatus === "MULTIPLE_APPROVAL_PENDING";
 
   const getDiagnosticFromValidateResponse = useCallback(
-    (data: ValidateAndSaveResponse): JobDiagnostic | null => {
-     // if (data.diagnostic) return { ...data.diagnostic, jobId } as JobDiagnostic;
+    (data: ValidateAndSaveResponse): JobDiagnostic | undefined => {
+      if (data.diagnostic) return data.diagnostic;
 
       const hasTopLevelDiagnosticData =
         Array.isArray(data.materials) ||
@@ -488,22 +482,24 @@ export default function JobOverview() {
         typeof data.actionType === "string" ||
         typeof data.jobType === "string";
 
-      if (!hasTopLevelDiagnosticData || !jobId) return null;
-      return { ...data, jobId } as JobDiagnostic;
+      if (!hasTopLevelDiagnosticData || !jobId) return undefined;
+      const responce = { ...data, jobId } as JobDiagnostic;
+      return responce;
     },
     [jobId],
   );
-
-  const mergedJobData = useMemo(() => {
-    if (!jobData) return jobData;
-    return {
-      ...jobData,
-      diagnostic: diagnosticData,
+  useEffect(() => {
+    const jobFullDataMemo = () => {
+      if (!jobData) return jobData;
+      return {
+        ...jobData,
+        diagnostic: diagnosticData,
+      };
     };
-  }, [jobData, diagnosticData]);
-
+    setJobFullData(jobFullDataMemo());
+  }, [jobData, diagnosticData, isCustomerApprovalPendingStatus]);
   const isRepairAnswerLocked =
-    isCustomerApprovalPendingStatus && mergedJobData?.diagnostic?.customerAnswer === "REPAIR";
+    isCustomerApprovalPendingStatus && jobFullData?.diagnostic?.customerAnswer === "REPAIR";
 
   const patchJobMutation = usePatchJobById({
     onSuccess: () => {
@@ -577,7 +573,7 @@ export default function JobOverview() {
 
   const startRepairMutation = usePostStartRepair({
     onSuccess: async () => {
-      resyncMaterialsFromAPI();
+      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -600,7 +596,7 @@ export default function JobOverview() {
 
   const finishRepairMutation = usePostFinishRepair({
     onSuccess: async () => {
-      resyncMaterialsFromAPI();
+      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -623,7 +619,7 @@ export default function JobOverview() {
 
   const toolDeliveredMutation = usePostToolDelivered({
     onSuccess: async () => {
-      resyncMaterialsFromAPI();
+      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -652,7 +648,7 @@ export default function JobOverview() {
         ...prev,
         { text: `${t("successfulJobPreApprovalDecision")}`, type: "success", duration: 3000 },
       ]);
-      resyncMaterialsFromAPI();
+      // resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -676,7 +672,7 @@ export default function JobOverview() {
 
   const startReviewMutation = usePostStartReview({
     onSuccess: async () => {
-      resyncMaterialsFromAPI();
+      //    resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -699,7 +695,7 @@ export default function JobOverview() {
 
   const repairApprovalMutation = usePostRepairApproval({
     onSuccess: async () => {
-      resyncMaterialsFromAPI();
+      // resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -722,7 +718,7 @@ export default function JobOverview() {
 
   const internalApprovalRequestMutation = usePostInternalApprovalRequest({
     onSuccess: async () => {
-      resyncMaterialsFromAPI();
+      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -751,7 +747,7 @@ export default function JobOverview() {
   const customerAnswerMutation = usePostCustomerAnswer({
     onSuccess: async () => {
       setArePricesValidated(false);
-      resyncMaterialsFromAPI();
+      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -773,7 +769,7 @@ export default function JobOverview() {
 
   const createCostEstimateMutation = usePostCreateCostEstimate({
     onSuccess: async () => {
-      resyncMaterialsFromAPI();
+      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -807,13 +803,16 @@ export default function JobOverview() {
 
   const validateAndSaveMutation = usePostValidateAndSave({
     onSuccess: async (data) => {
-      isResyncingRef.current = true;
-
       const validatedDiagnostic = getDiagnosticFromValidateResponse(data);
       if (validatedDiagnostic && jobId) {
         queryClient.setQueryData(["diagnostic", jobId], {
           ...validatedDiagnostic,
         });
+        const updated: JobOverviewItem = {
+          ...jobFullData,
+          diagnostic: validatedDiagnostic,
+        };
+        syncData(updated, allFieldsRef.current ?? []);
       }
       if (data.errorMessages && data.errorMessages.length > 0) {
         const uniqueErrorKeys = [
@@ -825,19 +824,11 @@ export default function JobOverview() {
           uniqueErrorKeys.length > 0
             ? `${t("priceNotAvailable")}: ${uniqueErrorKeys.join(", ")}`
             : t("orderSimulationFailed");
-        //this should be removed
-        resyncMaterialsFromAPI(false);
         setMessages((prev) => [...prev, { text: errorText, type: "error", duration: 5000 }]);
         scrollToTop();
         return;
       }
-
       markAllValidated();
-      //this should be removed
-      resyncMaterialsFromAPI(true);
-
-      await queryClient.refetchQueries({ queryKey: ["job", jobId] });
-
       setMessages((prev) => [
         ...prev,
         {
@@ -846,6 +837,8 @@ export default function JobOverview() {
           duration: 3000,
         },
       ]);
+      setRecalculatedPricesChanges([]);
+      await queryClient.refetchQueries({ queryKey: ["job", jobId] });
       emitJobFlowEvent((payload) => analytics.trackDiagnosticValidated(payload));
     },
     onError: (error) => {
@@ -863,25 +856,20 @@ export default function JobOverview() {
   });
 
   const recalculatePricesMutation = usePostRecalculatePrices({
-    onSuccess: async (data) => {
-      isResyncingRef.current = true;
-
+    onSuccess: (data) => {
       const validatedDiagnostic = getDiagnosticFromValidateResponse(data);
+      console.log("validatedDiagnostic", validatedDiagnostic);
       if (validatedDiagnostic && jobId) {
         queryClient.setQueryData(["diagnostic", jobId], {
           ...validatedDiagnostic,
         });
       }
-      syncData(
-        validatedDiagnostic as unknown as Record<string, unknown>,
-        allFieldsRef.current || [],
-      );
-      // Apply the recalculated materials/summary directly from the response now, rather
-      // than waiting on the React Query cache update to propagate back through
-      // diagnosticData (indirect, and gated behind one-shot sync refs) - this is the data
-      // the user just asked to recalculate, so it must land immediately.
-      applyRecalculatedMaterials(data.materials);
-      applyRecalculatedSummary(data.priceSummaryDetailed);
+      const updated: JobOverviewItem = {
+        ...jobFullData,
+        diagnostic: validatedDiagnostic,
+      };
+      syncData(updated, allFieldsRef.current ?? []);
+
       if (data.errorMessages && data.errorMessages.length > 0) {
         const uniqueErrorKeys = [
           ...new Set(
@@ -892,18 +880,10 @@ export default function JobOverview() {
           uniqueErrorKeys.length > 0
             ? `${t("priceNotAvailable")}: ${uniqueErrorKeys.join(", ")}`
             : t("orderSimulationFailed");
-        //this should be removed
-        resyncMaterialsFromAPI(false);
         setMessages((prev) => [...prev, { text: errorText, type: "error", duration: 5000 }]);
         scrollToTop();
         return;
       }
-
-      //    markAllValidated();
-      //this should be removed
-      resyncMaterialsFromAPI(true);
-
-      await queryClient.refetchQueries({ queryKey: ["job", jobId] });
       emitJobFlowEvent((payload) => analytics.trackDiagnosticValidated(payload));
     },
     onError: (error) => {
@@ -940,13 +920,9 @@ export default function JobOverview() {
     (f) => !f.name.includes("archivedSpareParts"),
   );
   const setFieldValueRef = useRef<((field: string, value: unknown) => void) | null>(null);
-  const isDistributingRef = useRef(false);
-  const isResyncingRef = useRef(false);
-  const clearResyncRafRef = useRef<number | null>(null);
-  const onResyncCompleteRef = useRef<(() => void) | null>(null);
-  const resyncFallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const preToggleHoldStateRef = useRef(false);
-  const prevMergedJobDataRef = useRef<typeof mergedJobData>(undefined);
+  const prevjobFullDataRef = useRef<typeof jobFullData>(undefined);
   const hashTabAppliedRef = useRef(false);
   const autocompleteValidationRef = useRef<Record<string, boolean>>({});
   const sparePartNotBelongsToToolRef = useRef<Record<string, boolean>>({});
@@ -989,9 +965,6 @@ export default function JobOverview() {
     (initialFormValues?.jobType as string) || "",
   );
 
-  // Emits a job-workflow analytics event with the job type + the *fresh*
-  // post-transition status read from the refetched cache. Fires only when both
-  // resolve to valid contract values, so a malformed value is skipped, never sent.
   const emitJobFlowEvent = useCallback(
     (emit: (payload: JobEventPayload) => void): void => {
       const jobType = toJobType(currentJobType);
@@ -1009,7 +982,7 @@ export default function JobOverview() {
 
   const {
     materials,
-    priceSummaryDetailedByJobType,   
+    priceSummaryDetailedByJobType,
     apiMaterialsLoaded,
     apiMaterialsEmpty,
     hasExistingDiagnostic,
@@ -1027,13 +1000,10 @@ export default function JobOverview() {
     markAllValidated,
     markRowDirty,
     enableValidate: managerEnableValidate,
-    resyncMaterialsFromAPI,
     setRevisedRejectedRowPending,
     canArchiveOnDelete,
     discountBase,
     automaticRows,
-    applyRecalculatedMaterials,
-    applyRecalculatedSummary,
   } = useDiagnosticsManager({
     diagnosticData: tabs.length > 0 ? diagnosticData : undefined,
     currentActionType,
@@ -1047,7 +1017,6 @@ export default function JobOverview() {
     formValuesRef,
     arePricesValidated,
     setArePricesValidated,
-    isResyncingRef,
     jobStatus: currentStatus,
   });
 
@@ -1060,7 +1029,7 @@ export default function JobOverview() {
       ? [{ accessories: jobData.job.asset.accessories }] // Single job: jobIndex is undefined
       : [],
     convertAPIDataToFormValues,
-    apiData: mergedJobData,
+    apiData: jobFullData,
   });
 
   const { editingSections, setEditingSections, enableSectionEditing, disableSectionEditing } =
@@ -1070,7 +1039,7 @@ export default function JobOverview() {
       setAllFields,
       assetsAccessories,
       setAssetsAccessories,
-      mergedJobData,
+      jobFullData,
       setInitialFormValues,
     });
 
@@ -1525,52 +1494,52 @@ export default function JobOverview() {
 
   const onRecalculatePrices = useCallback(
     (fieldName: string, value: unknown) => {
-      // Guard against overlapping requests: a recalculation already in flight owns the
-      // next resync — firing another one here would race it and flicker the UI.
       if (recalculatePricesMutation.isPending) return;
       if (!allFieldsRef.current) return;
       const field = allFieldsRef.current?.find((f) => f.name === fieldName);
       if (!field) return;
-      const isJobType = field.fieldMapping?.originalName === "type";
       const isMaterial = field.fieldMapping?.originalName?.endsWith("Material");
 
       if (isMaterial && !value) return;
+      setArePricesValidated(false);
       const matrerialIdFieldName =
         allFieldsRef.current?.find(
           (f) =>
             f.fieldMapping?.nameStartsWith === field.fieldMapping?.nameStartsWith &&
             f.subtype === "diagnosticMaterialId",
         )?.name ?? "";
+
       const materialId = formValuesRef.current?.[matrerialIdFieldName];
       const payload = buildDiagnosticPayload(formValuesRef.current, allFieldsRef.current);
       payload.countryCode = jobData?.order?.countryCode;
-      payload.changes = [];
-      if (!isJobType) {
-        payload.changes = [
-          {
-            type: field.fieldMapping?.originalName?.replace("Material", ""),
-            lineId: materialId,
-            value: isMaterial ? value : null,
-            scope: isMaterial
-              ? {
-                  positions: ["SP", "PN", "AC"],
-                  jobTypes: ["CHARGEABLE"],
-                }
-              : null,
-          },
-        ];
-      }
+      const changes: Record<string, unknown>[] = [];
+      changes.push({
+        type: field.fieldMapping?.originalName?.replace("Material", ""),
+        lineId: materialId,
+        value,
+        scope: isMaterial
+          ? {
+              positions: ["SP", "PN", "AC"],
+              jobTypes: ["CHARGEABLE"],
+            }
+          : null,
+      });
+      setRecalculatedPricesChanges((prev) => [...prev, ...changes]);
+      payload.changes = changes;
       recalculatePricesMutation.mutate(payload);
     },
-    [buildDiagnosticPayload, jobData?.order?.countryCode, recalculatePricesMutation],
+    [
+      buildDiagnosticPayload,
+      jobData?.order?.countryCode,
+      recalculatePricesMutation,
+      setRecalculatedPricesChanges,
+    ],
   );
 
   const onValidate = useCallback(
     async (formValues?: Record<string, unknown>, helpers?: ActionHelpers) => {
       const currentAllFields = allFieldsRef.current;
       if (!jobId || !currentAllFields || !formValues) return;
-
-      // Trigger blur on active element to commit field changes before validation
       const activeElement = document.activeElement as HTMLElement;
       if (activeElement && typeof activeElement.blur === "function") {
         activeElement.blur();
@@ -1579,6 +1548,7 @@ export default function JobOverview() {
       }
 
       const payload = buildDiagnosticPayload(formValues, currentAllFields);
+      payload.changes = recalculatedPricesChanges;
       if (helpers) {
         await handleActionWithValidation("validate", formValues, helpers, () =>
           validateAndSaveMutation.mutate({ jobId, payload }),
@@ -1587,9 +1557,38 @@ export default function JobOverview() {
         validateAndSaveMutation.mutate({ jobId, payload });
       }
     },
-    [jobId, validateAndSaveMutation, buildDiagnosticPayload, handleActionWithValidation],
+    [
+      jobId,
+      validateAndSaveMutation,
+      buildDiagnosticPayload,
+      handleActionWithValidation,
+      recalculatedPricesChanges,
+    ],
   );
+  const onNonPriceFieldChange = useCallback(
+    (fieldName: string) => {
+      if (recalculatePricesMutation.isPending) return;
+      if (!allFieldsRef.current) return;
+      const field = allFieldsRef.current?.find((f) => f.name === fieldName);
+      if (!field) return;
+      const sameRowFields = allFieldsRef.current?.filter(
+        (f) => f.fieldMapping?.nameStartsWith === field.fieldMapping?.nameStartsWith,
+      );
+      const matrerialIdFieldName =
+        sameRowFields.find((f) => f.subtype === "diagnosticMaterialId")?.name ?? "";
+      setFieldValueRef?.current?.(matrerialIdFieldName, null);
 
+      const fildsPriceForReset = sameRowFields.filter((f) => f.type === "price");
+      fildsPriceForReset.forEach((fld) => {
+        setFieldValueRef?.current?.(fld.name, 0);
+      });
+      const statusFieldName =
+        sameRowFields.find((f) => f.subtype === "diagnosticMaterialStatus")?.name ?? "";
+      setFieldValueRef?.current?.(statusFieldName, "PENDING");
+      setArePricesValidated(false);
+    },
+    [recalculatePricesMutation],
+  );
   const onHold = useCallback(() => {
     if (!jobId) return;
     preToggleHoldStateRef.current = jobData?.job?.isOnHold ?? false;
@@ -1727,113 +1726,10 @@ export default function JobOverview() {
     ],
   );
 
-  // const onSummaryDiscountChange = useCallback(
-  //   (newDiscountValue: unknown) => {
-  //     if (discountBase !== "GROSS_PRICE") return;
-
-  //     const fields = allFieldsRef.current;
-  //     const setFV = setFieldValueRef.current;
-  //     if (!fields || !setFV) return;
-
-  //     const values = formValuesRef.current;
-  //     const grossField = fields.find((f) => f.subtype === "diagnosticSummaryGrossAmountMaterial");
-  //     const totalField = fields.find((f) => f.subtype === "diagnosticSummaryTotalAmountMaterial");
-  //     const typeField = fields.find((f) => f.subtype === "diagnosticSummaryType");
-
-  //     const discountPercent = Math.max(0, roundToTwo(Number(newDiscountValue) || 0));
-  //     const currentSummaryType = (values[typeField?.name ?? ""] as string) || "totalSummary";
-  //     const typeFilter =
-  //       SUMMARY_TYPE_FILTER[currentSummaryType] ?? SUMMARY_TYPE_FILTER.totalSummary;
-
-  //     const grossAmountSum = grossField ? Number(values[grossField.name]) || 0 : 0;
-  //     const newAmountToDistribute = roundToTwo(grossAmountSum * (1 - discountPercent / 100));
-
-  //     const activeDiscountMaterialField = fields.find(
-  //       (f) =>
-  //         f.subtype === "diagnosticSummaryDiscountMaterial" &&
-  //         f.dependentFields?.some((df) => df.fieldValue === "GROSS_PRICE"),
-  //     );
-  //     if (activeDiscountMaterialField) setFV(activeDiscountMaterialField.name, discountPercent);
-
-  //     isDistributingRef.current = true;
-  //     if (totalField) setFV(totalField.name, newAmountToDistribute);
-  //     distributeGrossToRows(discountPercent, typeFilter, values, setFV, fields);
-  //   },
-  //   [discountBase],
-  // );
-  // const onSummaryDiscountNetChange = useCallback(
-  //   (newDiscountValue: unknown) => {
-  //     if (discountBase !== "NET_PRICE") return;
-
-  //     const fields = allFieldsRef.current;
-  //     const setFV = setFieldValueRef.current;
-  //     if (!fields || !setFV) return;
-
-  //     const values = formValuesRef.current;
-
-  //     const suggestedNetField = fields.find(
-  //       (f) => f.subtype === "diagnosticSummarySuggestedNetPriceMaterial",
-  //     );
-  //     const netField = fields.find((f) => f.subtype === "diagnosticSummaryNetAmountMaterial");
-  //     const hiddenDiscountField = fields.find(
-  //       (f) => f.subtype === "diagnosticSummaryDiscountMaterialHidden",
-  //     );
-  //     const typeField = fields.find((f) => f.subtype === "diagnosticSummaryType");
-
-  //     const discountPercent = Math.max(0, Number(newDiscountValue) || 0);
-  //     const currentSummaryType = (values[typeField?.name ?? ""] as string) || "totalSummary";
-  //     const typeFilter =
-  //       SUMMARY_TYPE_FILTER[currentSummaryType] ?? SUMMARY_TYPE_FILTER.totalSummary;
-
-  //     const suggestedNetPriceSum = suggestedNetField
-  //       ? Number(values[suggestedNetField.name]) || 0
-  //       : 0;
-
-  //     const newAmountToDistribute = roundToTwo(suggestedNetPriceSum * (1 - discountPercent / 100));
-
-  //     const activeDiscountNetMaterialField = fields.find(
-  //       (f) =>
-  //         f.subtype === "diagnosticSummaryDiscountNetMaterial" &&
-  //         f.dependentFields?.some((df) => df.fieldValue === "NET_PRICE"),
-  //     );
-  //     if (activeDiscountNetMaterialField)
-  //       setFV(activeDiscountNetMaterialField.name, discountPercent);
-
-  //     isDistributingRef.current = true;
-  //     if (netField) setFV(netField.name, newAmountToDistribute);
-  //     if (hiddenDiscountField) setFV(hiddenDiscountField.name, discountPercent);
-  //     distributeNetToRows(discountPercent, typeFilter, values, setFV, fields);
-  //   },
-  //   [discountBase],
-  // );
-
   useEffect(() => {
     setFieldValueRef.current?.("discountBase", discountBase);
   }, [discountBase]);
 
-  // Releases the resync guard (isResyncingRef/skipFormResetRef) two frames after Formik
-  // applies fresh initial values, so dirty-marking and dependent effects don't stay
-  // permanently suppressed after a validate-and-save / recalculate-prices resync.
-  useEffect(() => {
-    if (!isResyncingRef.current && !skipFormResetRef.current) return;
-    if (clearResyncRafRef.current !== null) {
-      cancelAnimationFrame(clearResyncRafRef.current);
-    }
-    // Clear fallback timeout if RAF fires (normal path)
-    if (resyncFallbackTimeoutRef.current !== null) {
-      clearTimeout(resyncFallbackTimeoutRef.current);
-      resyncFallbackTimeoutRef.current = null;
-    }
-    clearResyncRafRef.current = requestAnimationFrame(() => {
-      clearResyncRafRef.current = requestAnimationFrame(() => {
-        clearResyncRafRef.current = null;
-        isResyncingRef.current = false;
-        skipFormResetRef.current = false;
-        onResyncCompleteRef.current?.();
-        onResyncCompleteRef.current = null;
-      });
-    });
-  }, [initialFormValues, skipFormResetRef]);
 
   const enableValidate = useCallback(() => {
     if (validateAndSaveMutation.isPending) return false;
@@ -1921,110 +1817,6 @@ export default function JobOverview() {
 
   const showProductDetails = useCallback(() => !isRepairAnswerLocked, [isRepairAnswerLocked]);
   const showAddRow = useCallback(() => !isRepairAnswerLocked, [isRepairAnswerLocked]);
-  // const onSummaryTotalAmountChange = useCallback(
-  //   (newTotalAmountValue: unknown) => {
-  //     if (discountBase !== "GROSS_PRICE") return;
-  //     // Guard: prevent re-entry if already distributing
-  //     if (isDistributingRef.current) return;
-
-  //     const fields = allFieldsRef.current;
-  //     const setFV = setFieldValueRef.current;
-  //     if (!fields || !setFV) return;
-
-  //     const values = formValuesRef.current;
-  //     const grossField = fields.find((f) => f.subtype === "diagnosticSummaryGrossAmountMaterial");
-  //     const totalSummaryField = fields.find((f) => f.subtype === "diagnosticSummaryTotalAmount");
-  //     const discountField = fields.find((f) => f.subtype === "diagnosticSummaryDiscountMaterial");
-  //     const hiddenDiscountField = fields.find(
-  //       (f) => f.subtype === "diagnosticSummaryDiscountMaterialHidden",
-  //     );
-  //     const typeField = fields.find((f) => f.subtype === "diagnosticSummaryType");
-
-  //     const rawTotalAmountValue = Math.max(0, Number(newTotalAmountValue) || 0);
-  //     const currentSummaryType = (values[typeField?.name ?? ""] as string) || "totalSummary";
-  //     const typeFilter =
-  //       SUMMARY_TYPE_FILTER[currentSummaryType] ?? SUMMARY_TYPE_FILTER.totalSummary;
-  //     const currentGrossAmountSum = grossField ? Number(values[grossField.name]) || 0 : 0;
-
-  //     // Clamp: total amount cannot exceed gross amount sum (discount cannot go negative)
-  //     const totalAmountValue =
-  //       currentGrossAmountSum > 0
-  //         ? Math.min(rawTotalAmountValue, currentGrossAmountSum)
-  //         : rawTotalAmountValue;
-
-  //     const newDiscount = calculateSummaryTotalAmountDistribution(
-  //       totalAmountValue,
-  //       currentGrossAmountSum,
-  //     );
-
-  //     const materialTotalField = fields.find(
-  //       (f) => f.subtype === "diagnosticSummaryTotalAmountMaterial",
-  //     );
-  //     if (materialTotalField) setFV(materialTotalField.name, totalAmountValue);
-  //     if (discountField) setFV(discountField.name, newDiscount);
-  //     if (hiddenDiscountField) setFV(hiddenDiscountField.name, newDiscount);
-  //     if (totalSummaryField) setFV(totalSummaryField.name, totalAmountValue);
-  //     isDistributingRef.current = true;
-  //     distributeGrossToRows(newDiscount, typeFilter, values, setFV, fields);
-  //   },
-  //   [discountBase],
-  // );
-
-  // const onSummaryNetAmountChange = useCallback(
-  //   (newNetAmountValue: unknown) => {
-  //     if (discountBase !== "NET_PRICE") return;
-  //     // Guard: prevent re-entry if already distributing
-  //     if (isDistributingRef.current) return;
-
-  //     const fields = allFieldsRef.current;
-  //     const setFV = setFieldValueRef.current;
-  //     if (!fields || !setFV) return;
-
-  //     const values = formValuesRef.current;
-
-  //     const suggestedNetField = fields.find(
-  //       (f) => f.subtype === "diagnosticSummarySuggestedNetPriceMaterial",
-  //     );
-  //     const discountField = fields.find(
-  //       (f) => f.subtype === "diagnosticSummaryDiscountNetMaterial",
-  //     );
-  //     const hiddenDiscountField = fields.find(
-  //       (f) => f.subtype === "diagnosticSummaryDiscountMaterialHidden",
-  //     );
-  //     const typeField = fields.find((f) => f.subtype === "diagnosticSummaryType");
-
-  //     const rawNetAmountValue = Math.max(0, Number(newNetAmountValue) || 0);
-  //     const currentSummaryType = (values[typeField?.name ?? ""] as string) || "totalSummary";
-  //     const typeFilter =
-  //       SUMMARY_TYPE_FILTER[currentSummaryType] ?? SUMMARY_TYPE_FILTER.totalSummary;
-
-  //     const suggestedNetPriceSum = suggestedNetField
-  //       ? Number(values[suggestedNetField.name]) || 0
-  //       : 0;
-
-  //     // Clamp: net amount cannot exceed suggested net price sum (discount cannot go negative)
-  //     const netAmountValue =
-  //       suggestedNetPriceSum > 0
-  //         ? Math.min(rawNetAmountValue, suggestedNetPriceSum)
-  //         : rawNetAmountValue;
-
-  //     const newDiscount = calculateSummaryNetAmountDistribution(
-  //       netAmountValue,
-  //       suggestedNetPriceSum,
-  //     );
-
-  //     const materialNetField = fields.find(
-  //       (f) => f.subtype === "diagnosticSummaryNetAmountMaterial",
-  //     );
-  //     if (materialNetField) setFV(materialNetField.name, netAmountValue);
-  //     if (discountField) setFV(discountField.name, newDiscount);
-  //     if (hiddenDiscountField) setFV(hiddenDiscountField.name, newDiscount);
-
-  //     isDistributingRef.current = true;
-  //     distributeNetToRows(newDiscount, typeFilter, values, setFV, fields);
-  //   },
-  //   [discountBase],
-  // );
   const hasPricesPopulated = useMemo(
     () =>
       materials.some(
@@ -2081,7 +1873,7 @@ export default function JobOverview() {
       );
       return hasBoschInternalPending && materials.every((m) => m.status !== "REJECTED");
     }
-    const pendingApprovals: string[] = mergedJobData?.job?.pendingApprovals ?? [];
+    const pendingApprovals: string[] = jobFullData?.job?.pendingApprovals ?? [];
     const { hasBoschInternalPending } = getBoschInternalPending(
       materialsFieldsRef.current,
       formValuesRef.current,
@@ -2090,7 +1882,7 @@ export default function JobOverview() {
   }, [
     internalApprovalRequestMutation.isPending,
     formValuesRef,
-    mergedJobData?.job?.pendingApprovals,
+    jobFullData?.job?.pendingApprovals,
     currentStatus,
     materials,
     arePricesValidated,
@@ -2104,13 +1896,13 @@ export default function JobOverview() {
       );
       return hasBoschInternalPending;
     }
-    const pendingApprovals: string[] = mergedJobData?.job?.pendingApprovals ?? [];
+    const pendingApprovals: string[] = jobFullData?.job?.pendingApprovals ?? [];
     const { hasBoschInternalPending } = getBoschInternalPending(
       materialsFieldsRef.current,
       formValuesRef.current,
     );
     return hasBoschInternalPending && !pendingApprovals.includes("BOSCH_INTERNAL");
-  }, [formValuesRef, mergedJobData?.job?.pendingApprovals, currentStatus]);
+  }, [formValuesRef, jobFullData?.job?.pendingApprovals, currentStatus]);
 
   const showApproveForRepair = useCallback(() => {
     if (enableRequestApproval()) return false;
@@ -2126,18 +1918,18 @@ export default function JobOverview() {
   }, [formValuesRef, enableRequestApproval]);
 
   const showCreateCostEstimate = useCallback(() => {
-    const pendingApprovals: string[] = mergedJobData?.job?.pendingApprovals ?? [];
+    const pendingApprovals: string[] = jobFullData?.job?.pendingApprovals ?? [];
     const { hasChargeablePending } = getChargeablePendingInfo(
       materialsFieldsRef.current,
       formValuesRef.current,
     );
     return hasChargeablePending && !pendingApprovals.includes("CUSTOMER");
-  }, [mergedJobData?.job?.pendingApprovals]);
+  }, [jobFullData?.job?.pendingApprovals]);
 
   const enableCreateCostEstimate = useCallback(() => {
     if (createCostEstimateMutation.isPending) return false;
     if (!arePricesValidated) return false;
-    const pendingApprovals: string[] = mergedJobData?.job?.pendingApprovals ?? [];
+    const pendingApprovals: string[] = jobFullData?.job?.pendingApprovals ?? [];
     const { hasChargeablePending } = getChargeablePendingInfo(
       materialsFieldsRef.current,
       formValuesRef.current,
@@ -2145,7 +1937,7 @@ export default function JobOverview() {
     return hasChargeablePending && !pendingApprovals.includes("CUSTOMER");
   }, [
     createCostEstimateMutation.isPending,
-    mergedJobData?.job?.pendingApprovals,
+    jobFullData?.job?.pendingApprovals,
     arePricesValidated,
     formValuesRef,
   ]);
@@ -2153,19 +1945,19 @@ export default function JobOverview() {
   const showCustomerAnswer = useCallback(() => {
     if (currentStatus === "CUSTOMER_APPROVAL_PENDING") return true;
     if (currentStatus === "MULTIPLE_APPROVAL_PENDING" && !isFromApprovalList) return true;
-    const pendingApprovals: string[] = mergedJobData?.job?.pendingApprovals ?? [];
+    const pendingApprovals: string[] = jobFullData?.job?.pendingApprovals ?? [];
     const { hasChargeablePending } = getChargeablePendingInfo(
       materialsFieldsRef.current,
       formValuesRef.current,
     );
     return hasChargeablePending && pendingApprovals.includes("CUSTOMER");
-  }, [currentStatus, isFromApprovalList, mergedJobData?.job?.pendingApprovals]);
+  }, [currentStatus, isFromApprovalList, jobFullData?.job?.pendingApprovals]);
 
   const enableCustomerAnswer = useCallback(() => {
     if (customerAnswerMutation.isPending) return false;
     if (currentStatus === "CUSTOMER_APPROVAL_PENDING") return true;
     if (currentStatus === "MULTIPLE_APPROVAL_PENDING" && !isFromApprovalList) return true;
-    const pendingApprovals: string[] = mergedJobData?.job?.pendingApprovals ?? [];
+    const pendingApprovals: string[] = jobFullData?.job?.pendingApprovals ?? [];
     const { hasChargeablePending } = getChargeablePendingInfo(
       materialsFieldsRef.current,
       formValuesRef.current,
@@ -2175,7 +1967,7 @@ export default function JobOverview() {
     customerAnswerMutation.isPending,
     currentStatus,
     isFromApprovalList,
-    mergedJobData?.job?.pendingApprovals,
+    jobFullData?.job?.pendingApprovals,
   ]);
 
   const handleAreaValueChange = useCallback(
@@ -2217,10 +2009,6 @@ export default function JobOverview() {
         onHold,
         onGoToNextStep,
         onCustomerAnswer,
-        // onSummaryDiscountChange,
-        // onSummaryDiscountNetChange,
-        // onSummaryTotalAmountChange,
-        // onSummaryNetAmountChange,
         enableAddingSparePart,
         enableAddingSpecialMaterials,
         enableProductDetails,
@@ -2252,7 +2040,8 @@ export default function JobOverview() {
         onFinishRepair,
         onToolDelivered,
         onCreateCostEstimate,
-        onRecalculatePrices,
+        onRecalculatePrices: onRecalculatePrices as (...args: unknown[]) => void,
+        onNonPriceFieldChange: onNonPriceFieldChange as (...args: unknown[]) => void,
       },
       radioSourceCallbacks: {
         getRadioButtonsForSummaryType: () => summaryTypeOptions,
@@ -2318,6 +2107,7 @@ export default function JobOverview() {
       warrantyPanelInfo,
       isRepairAnswerLocked,
       onRecalculatePrices,
+      onNonPriceFieldChange,
     ],
   );
 
@@ -2351,8 +2141,6 @@ export default function JobOverview() {
       getExistingMaterialsAsPositionItems,
       summaryTypeOptions,
       setSummaryTypeOptions,
-      isDistributingRef,
-      isResyncingRef,
       arePricesValidated,
       setArePricesValidated,
       hasPricesPopulated,
@@ -2362,7 +2150,6 @@ export default function JobOverview() {
       isArchivedExpanded,
       setIsArchivedExpanded,
       canArchiveOnDelete,
-      resyncMaterialsFromAPI,
       jobStatus: currentStatus,
       discountBase,
       automaticRows,
@@ -2395,7 +2182,6 @@ export default function JobOverview() {
       isArchivedExpanded,
       setIsArchivedExpanded,
       canArchiveOnDelete,
-      resyncMaterialsFromAPI,
       currentStatus,
       discountBase,
       automaticRows,
@@ -2412,18 +2198,13 @@ export default function JobOverview() {
   }, []);
 
   const syncData = useCallback(
-    (mergedJobData: Record<string, unknown>, allFields: Field[]) => {
-      // useDiagnosticsManager owns materials/archivedMaterials and the byJobType/total
-      // summary rows end-to-end, populating their fields directly by subtype. Their
-      // attributeMapping (materials#./archivedMaterials#.) is missing the "diagnostic."
-      // prefix every other diagnostic field has (compare diagnostic.technicianNote or
-      // diagnostic.priceSummaryDetailed.total.*), so resolving it against mergedJobData
-      // (which nests diagnostic data one level under .diagnostic) always misses and falls
-      // back to "" / defaultValue - clobbering whatever useDiagnosticsManager already
-      // wrote correctly. Keep this generic sync out of their way entirely.
-      const genericFields = allFields.filter((f) => !isDiagnosticsManagerOwnedField(f.name));
-      const dataMapped = convertAPIDataToFormValues(mergedJobData, genericFields);
-      dataMapped.discountBase = discountBase;
+    (jobFullData: JobOverviewItem, allFields?: Field[]) => {
+      const dataMapped = convertAPIDataToFormValues(
+        jobFullData,
+        allFields || [],
+        formValuesRef.current,
+      );
+      dataMapped.discountBase = discountBase;     
       buildFaultCodeDropdowns(dataMapped);
       setInitialFormValues((prev) => ({
         ...prev,
@@ -2432,21 +2213,21 @@ export default function JobOverview() {
     },
     [discountBase, setInitialFormValues, buildFaultCodeDropdowns],
   );
-  //refactor
-  useEffect(() => {
-    const mergedJobDataChanged = mergedJobData !== prevMergedJobDataRef.current;
 
-    if (mergedJobDataChanged && mergedJobData && allFields && allFields.length > 0) {
-      prevMergedJobDataRef.current = mergedJobData;
-      syncData(mergedJobData, allFields);
+  useEffect(() => {
+    const jobFullDataChanged = jobFullData !== prevjobFullDataRef.current;
+    if (jobFullDataChanged && jobFullData && allFields && allFields.length > 0) {
+      syncData(jobFullData, allFieldsRef.current || undefined);
+      prevjobFullDataRef.current = jobFullData;
     }
   }, [
-    mergedJobData,
+    jobFullData,
     allFields,
     discountBase,
     setInitialFormValues,
     buildFaultCodeDropdowns,
     syncData,
+    setJobFullData,
   ]);
 
   if (loading) {
@@ -2524,7 +2305,7 @@ export default function JobOverview() {
 
   return (
     <div>
-      {jobData.job.isOnHold && (
+      {jobData.job?.isOnHold && (
         <Notification type="warning" className="on-hold-banner">
           {t("jobOnHoldBanner")}
         </Notification>
@@ -2569,7 +2350,7 @@ export default function JobOverview() {
                 )) {
                   dependencyActionCallbacks[key] = () => {
                     if (typeof callback === "function") {
-                      return callback(values);
+                      return (callback as (...args: unknown[]) => unknown)(values);
                     }
                     return undefined;
                   };

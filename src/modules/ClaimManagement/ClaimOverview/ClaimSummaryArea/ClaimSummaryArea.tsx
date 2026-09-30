@@ -17,7 +17,7 @@ import { useClaimContext } from "../ClaimContext";
  */
 function ClaimSummaryArea({ area }: Readonly<{ area: Area }>) {
   const {
-    isDistributingRef,
+  //  isDistributingRef,
     hasPricesPopulated,
     setSummaryTypeOptions,
     discountBase,
@@ -29,6 +29,9 @@ function ClaimSummaryArea({ area }: Readonly<{ area: Area }>) {
     () => ({
       materials,
       setMaterials,
+      priceSummaryDetailedByJobType: [],
+      setPriceSummaryDetailedByJobType: () => {},
+      // setPriceSummaryDetailedbyJobType,
       onAddRow: () => {},
       onAddMaterials: () => {},
       onDeleteRow: () => {},
@@ -37,8 +40,8 @@ function ClaimSummaryArea({ area }: Readonly<{ area: Area }>) {
       positionDropdownOptions: [],
       allowedPositions: [],
       getExistingPartNumbers: () => new Set(),
-      isDistributingRef,
-      isResyncingRef: { current: false },
+   //   isDistributingRef,
+   //   isResyncingRef: { current: false },
       arePricesValidated: false,
       setArePricesValidated: () => {},
       hasPricesPopulated,
@@ -50,7 +53,7 @@ function ClaimSummaryArea({ area }: Readonly<{ area: Area }>) {
       isArchivedExpanded: false,
       setIsArchivedExpanded: () => {},
       canArchiveOnDelete: false,
-      resyncMaterialsFromAPI: () => {},
+   //   resyncMaterialsFromAPI: () => {},
       jobStatus: "",
       discountBase,
       automaticRows: [],
@@ -62,7 +65,8 @@ function ClaimSummaryArea({ area }: Readonly<{ area: Area }>) {
     [
       materials,
       setMaterials,
-      isDistributingRef,
+
+    //  isDistributingRef,
       hasPricesPopulated,
       setSummaryTypeOptions,
       discountBase,

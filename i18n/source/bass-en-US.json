@@ -1168,7 +1168,7 @@
     "errorDiagnosticPurchaseDateRequiredForWarranty": "Purchase date is required to determine warranty eligibility. Please provide the purchase date to proceed.",
     "CUSTOM": "Manual",
     "errorDiagnosticProServiceItemsNotEligibleForValidation": "Purchase date is required to determine PRO Service eligibility. Please provide the purchase date to proceed.",
-    "errorDiagnosticCannotDeleteApprovedChargeableItem": "Deleting already approved chargable item is not allowed",
+    "errorDiagnosticCannotDeleteApprovedChargeableItem": "Deleting already approved chargeable item is not allowed",
     "errorErpValidationMisingPricePartNumbers": "Price is not available",
     "sparePartNumberNotFound": "Part number '{{id}}' not found.",
     "previousMonth": "Previous month",
