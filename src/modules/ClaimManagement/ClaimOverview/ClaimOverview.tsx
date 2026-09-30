@@ -327,7 +327,7 @@ export default function ClaimOverview() {
       helpers?: {
         setFieldValue: (field: string, value: unknown) => void;
         setErrors: (errors: Record<string, unknown>) => void;
-        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, string>>;
+        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, unknown>>;
       },
     ) => {
       if (!claimData?.jobId || !formValues || !helpers) return;
@@ -357,7 +357,7 @@ export default function ClaimOverview() {
       formValues: Record<string, unknown>,
       helpers: {
         setErrors: (errors: Record<string, unknown>) => void;
-        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, string>>;
+        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, unknown>>;
         setFieldValue: (field: string, value: unknown) => void;
       },
     ) => {
@@ -509,7 +509,7 @@ export default function ClaimOverview() {
       formValues: Record<string, unknown>,
       helpers: {
         setErrors: (errors: Record<string, unknown>) => void;
-        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, string>>;
+        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, unknown>>;
         setFieldValue: (field: string, value: unknown) => void;
       },
     ) => {
@@ -664,7 +664,7 @@ export default function ClaimOverview() {
         setErrors: helpers.setErrors,
         setTouched: helpers.setTouched as (
           touched: Record<string, boolean>,
-        ) => Promise<void | Record<string, string>>,
+        ) => Promise<void | Record<string, unknown>>,
       };
 
       const actionMap: Record<string, () => void> = {
