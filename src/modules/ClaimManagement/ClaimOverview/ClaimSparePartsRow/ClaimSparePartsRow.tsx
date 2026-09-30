@@ -33,8 +33,7 @@ function ClaimSparePartsRow({
     markRowDirty,
     allowedPositions,
     positionDropdownOptions,
- //   isResyncingRef,
-  //  discountBase,
+    isResyncingRef,
     canDeleteRows,
     automaticRows,
     materials,
@@ -99,15 +98,23 @@ function ClaimSparePartsRow({
     return { ...field, isDisabled: true };
   };
 
+  const quantityField = fields.find((f) => f.subtype === "diagnosticQuantity");
+  const typeField = fields.find((f) => f.subtype === "diagnosticType");
+  const nonPriceInputKey = JSON.stringify(
+    [positionField, partNumberField, descriptionField, typeField, quantityField].map((f) =>
+      f ? values[f.name] : undefined,
+    ),
+  );
+
   const isFirstRowRender = useRef(true);
   useEffect(() => {
     if (isFirstRowRender.current) {
       isFirstRowRender.current = false;
       return;
     }
-    if (!arePricesValidated) return;
+    if (isResyncingRef.current || !arePricesValidated) return;
     markRowDirty(areaIndex);
-  }, [markRowDirty, areaIndex, arePricesValidated]);
+  }, [nonPriceInputKey, markRowDirty, areaIndex, isResyncingRef, arePricesValidated]);
 
   const mainFields = fields.filter(
     (field) => !collapsableFieldNames.has(field.fieldMapping?.originalName || ""),

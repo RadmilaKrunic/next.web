@@ -171,7 +171,6 @@ vi.mock("hooks/useDiagnosticsManager", () => ({
     hasExistingDiagnostic: hasExistingDiagnosticMock.value,
     canArchiveOnDelete: false,
     automaticRows: [],
-    //  resyncMaterialsFromAPI: vi.fn(),
   }),
   getBoschInternalPending: () => ({ pendingTypeFields: [], hasBoschInternalPending: false }),
   getChargeablePendingInfo: () => ({ pendingTypeFields: [], hasChargeablePending: false }),

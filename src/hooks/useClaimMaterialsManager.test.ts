@@ -125,7 +125,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: false,
-      //    isResyncingRef: { current: false },
+          isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -174,7 +174,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-       //   isResyncingRef: { current: false },
+          isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -208,7 +208,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: true,
-      //    isResyncingRef: { current: false },
+          isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -247,7 +247,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-        //  isResyncingRef: { current: false },
+          isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -284,7 +284,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-       //   isResyncingRef: { current: false },
+          isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -320,7 +320,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: false,
-    //      isResyncingRef: { current: false },
+          isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -376,7 +376,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: false,
-       //   isResyncingRef: { current: false },
+          isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -418,7 +418,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-    //      isResyncingRef: { current: false },
+          isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -430,5 +430,46 @@ describe("useClaimMaterialsManager", () => {
     });
 
     expect(result.current.archivedMaterials[0].reimbursementPaymentMethod).toBe("BANK_TRANSFER");
+  });
+
+  it("raises isResyncingRef while writing synced rows and releases it after the flush delay", async () => {
+    vi.useFakeTimers();
+    try {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(["user"], { countryCode: "ZA", permissions: [] });
+      const isResyncingRef = { current: false };
+
+      renderHook(
+        () =>
+          useClaimMaterialsManager({
+            claimId: "C1",
+            claimMaterials: loadedClaimMaterials as never,
+            currentActionType: "REPAIR",
+            currentJobType: "WARRANTY",
+            tabs: [claimsTab],
+            setTabs: vi.fn(),
+            allFields,
+            setAllFields: vi.fn(),
+            setInitialFormValues: vi.fn(),
+            skipFormResetRef: { current: false },
+            formValuesRef: { current: {} },
+            arePricesValidated: false,
+            setArePricesValidated: vi.fn(),
+            readOnly: false,
+            isResyncingRef,
+          }),
+        { wrapper: makeWrapper(queryClient) },
+      );
+
+      expect(isResyncingRef.current).toBe(true);
+
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+
+      expect(isResyncingRef.current).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

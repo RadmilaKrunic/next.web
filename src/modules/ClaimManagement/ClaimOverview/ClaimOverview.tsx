@@ -42,7 +42,6 @@ import AddSpecialMaterialModal from "modules/JobManagement/JobOverview/AddSpecia
 import ExplosionDrawingModal from "modules/JobManagement/JobOverview/ExplosionDiagram/ExplosionDrawingModal";
 import { PositionItem } from "modules/JobManagement/JobOverview/ExplosionDiagram/ExplosionDrawing.types";
 import { MessagesContext } from "contexts/messagescontext";
-import { SummaryDetail } from "@/modules/JobManagement/JobList/JobList.types";
 
 function FormikClaimSync({
   setCurrentActionType,
@@ -163,8 +162,7 @@ export default function ClaimOverview() {
   const skipFormResetRef = useRef(false);
   const formValuesRef = useRef<Record<string, unknown>>({});
   const setFieldValueRef = useRef<((field: string, value: unknown) => void) | null>(null);
-  //const claimIsDistributingRef = useRef(false);
-  //const claimIsResyncingRef = useRef(false);
+  const claimIsResyncingRef = useRef(false);
   const prevClaimDataRef = useRef<typeof claimData>(undefined);
   // Prevents markRowDirty from dirtying hasClaimChanges right after a successful
   // validation — React effects in ClaimSparePartsRow fire synchronously on the
@@ -213,7 +211,7 @@ export default function ClaimOverview() {
     arePricesValidated,
     setArePricesValidated,
     readOnly: !isClaimEditMode,
-  //  isResyncingRef: claimIsResyncingRef,
+    isResyncingRef: claimIsResyncingRef,
   });
 
   // Wrap markRowDirty to also flag that user has unsaved changes
@@ -856,8 +854,7 @@ export default function ClaimOverview() {
       allowedPositions,
       automaticRows,
       getExistingPartNumbers,
-     // isDistributingRef: claimIsDistributingRef,
-     // isResyncingRef: claimIsResyncingRef,
+      isResyncingRef: claimIsResyncingRef,
       arePricesValidated,
       setArePricesValidated,
       hasPricesPopulated: materials.some(
