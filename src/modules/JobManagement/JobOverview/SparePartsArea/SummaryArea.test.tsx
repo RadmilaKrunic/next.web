@@ -180,11 +180,11 @@ describe("SummaryArea", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     renderedFields.length = 0;
-    useHasPermissionMock.mockImplementation((permissions: string[]) => {
+    useHasPermissionMock.mockImplementation((permissions: string[] | undefined) => {
       if (
-        permissions.includes(PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_DISCOUNT) ||
-        permissions.includes(PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_AMOUNT) ||
-        permissions.includes(PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES)
+        permissions?.includes(PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_DISCOUNT) ||
+        permissions?.includes(PERMISSIONS.DIAGNOSTICS.CAN_EDIT_TOTAL_AMOUNT) ||
+        permissions?.includes(PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES)
       ) {
         return true;
       }
