@@ -22,7 +22,7 @@ import {
 } from "./GenericField.utils";
 import { useContext, useState } from "react";
 import useFieldVisibilityReset from "./useFieldVisibilityReset";
-import { GenericFormContext } from "../Form/GenericForm.context";
+import { GenericFormContext, type ActionCallback } from "../Form/GenericForm.context";
 import { useDiagnosticsContext } from "modules/JobManagement/JobOverview/DiagnosticsContext";
 import {
   handleAutoCompleteSelect,
@@ -131,11 +131,13 @@ const handleFieldChangeAsync = async (
   allFields: Field[],
   field: Field,
   formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>,
-  actionCallbacks: Record<string, (...args: unknown[]) => unknown>,
+  actionCallbacks: Record<string, ActionCallback>,
 ): Promise<void> => {
   await fieldValueChanged(name, newValue, setFieldValue, allFields, field, formikContext);
   if (field.onValueChange) {
-    const handler = actionCallbacks[field.onValueChange];
+    const handler = actionCallbacks[field.onValueChange] as
+      | ((...args: unknown[]) => unknown)
+      | undefined;
     if (typeof handler === "function") {
       let result;
       if (handler.length > 1) {
@@ -162,11 +164,11 @@ const handleFieldBlurAsync = async (
   allFields: Field[],
   field: Field,
   formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>,
-  actionCallbacks: Record<string, (...args: unknown[]) => unknown>,
+  actionCallbacks: Record<string, ActionCallback>,
 ): Promise<void> => {
   await fieldValueChanged(name, newValue, setFieldValue, allFields, field, formikContext);
   if (field.onBlur) {
-    const handler = actionCallbacks[field.onBlur];
+    const handler = actionCallbacks[field.onBlur] as ((...args: unknown[]) => unknown) | undefined;
     if (typeof handler === "function") {
       const result = handler(name, newValue);
       console.log(`onBlur ${field.onBlur} result:`, result);
