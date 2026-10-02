@@ -523,4 +523,162 @@ describe("GenericArea", () => {
       expect(onAreaValueChange).toHaveBeenCalledWith("diagnosticData_main", expect.any(Object));
     });
   });
+  describe("Action helpers and edit mode", () => {
+    const baseArea = (overrides: Partial<Area> = {}): Area => ({
+      name: "testArea",
+      label: "Test Area",
+      position: 1,
+      fields: [],
+      dependFieldCondition: "",
+      dependentFields: [],
+      actions: [{ name: "save", mode: "primary", onAction: "testAction" }],
+      isSubArea: false,
+      ...overrides,
+    });
+
+    const textareaField = {
+      name: "notes",
+      label: "Notes",
+      type: "textarea" as const,
+      position: 1,
+      fieldMapping: { originalName: "notes" },
+    };
+
+    const renderArea = (area: Area, callbacks: Record<string, unknown>, extra = {}) =>
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <GenericFormContext.Provider
+            value={{
+              ...mockContextValue,
+              actionCallbacks: callbacks as typeof mockActionCallbacks,
+              ...extra,
+            }}
+          >
+            <Formik initialValues={{ notes: "initial" }} onSubmit={vi.fn()}>
+              {({ values, errors, touched }) => (
+                <>
+                  <GenericArea area={area} />
+                  <div data-testid="form-values">{JSON.stringify(values)}</div>
+                  <div data-testid="form-errors">{JSON.stringify(errors)}</div>
+                  <div data-testid="form-touched">{JSON.stringify(touched)}</div>
+                </>
+              )}
+            </Formik>
+          </GenericFormContext.Provider>
+        </QueryClientProvider>,
+      );
+
+    it("ignores action click when action has no onAction", async () => {
+      const user = userEvent.setup();
+      const callback = vi.fn();
+      renderArea(baseArea({ actions: [{ name: "noop", mode: "primary" }] }), {
+        testAction: callback,
+      });
+
+      await user.click(screen.getByTestId("action-noop"));
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it("passes form values and working helpers to the callback", async () => {
+      const user = userEvent.setup();
+      const callback = vi.fn(
+        async (
+          _values: unknown,
+          helpers: {
+            setFieldValue: (f: string, v: unknown) => void;
+            setErrors: (e: Record<string, unknown>) => void;
+            setTouched: (t: Record<string, boolean>) => Promise<unknown>;
+          },
+        ) => {
+          helpers.setFieldValue("notes", "updated");
+          helpers.setErrors({ notes: "bad" });
+          await helpers.setTouched({ notes: true });
+        },
+      );
+      renderArea(baseArea(), { testAction: callback });
+
+      await user.click(screen.getByTestId("action-save"));
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ notes: "initial" }),
+        expect.objectContaining({
+          setFieldValue: expect.any(Function),
+          setErrors: expect.any(Function),
+          setTouched: expect.any(Function),
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(screen.getByTestId("form-values")).toHaveTextContent('"notes":"updated"');
+        expect(screen.getByTestId("form-errors")).toHaveTextContent('"notes":"bad"');
+        expect(screen.getByTestId("form-touched")).toHaveTextContent('"notes":true');
+      });
+    });
+
+    it("evaluates sub-area visibility with empty allFields fallback", () => {
+      vi.mocked(utils.isDependedAndVisible).mockReturnValue(true);
+      renderArea(
+        baseArea({ isSubArea: true, actions: null }),
+        {},
+        {
+          allFields: undefined,
+        },
+      );
+
+      expect(utils.isDependedAndVisible).toHaveBeenCalledWith(expect.any(Object), [], [], "");
+      expect(screen.getByText("Test Area")).toBeInTheDocument();
+    });
+
+    it("hides actions for textarea areas until a field is focused", () => {
+      renderArea(baseArea({ fields: [textareaField] }), { testAction: vi.fn() });
+
+      expect(screen.queryByTestId("generic-actions")).not.toBeInTheDocument();
+
+      fireEvent.focus(screen.getByTestId("field-notes"));
+
+      expect(screen.getByTestId("generic-actions")).toBeInTheDocument();
+    });
+
+    it("shows actions after a change in a textarea area", () => {
+      renderArea(baseArea({ fields: [textareaField] }), { testAction: vi.fn() });
+
+      fireEvent.change(screen.getByTestId("field-notes"), { target: { value: "x" } });
+
+      expect(screen.getByTestId("generic-actions")).toBeInTheDocument();
+    });
+
+    it("hides actions again after an action runs in a textarea area", async () => {
+      const user = userEvent.setup();
+      const callback = vi.fn();
+      renderArea(baseArea({ fields: [textareaField] }), { testAction: callback });
+
+      fireEvent.focus(screen.getByTestId("field-notes"));
+      await user.click(screen.getByTestId("action-save"));
+
+      expect(callback).toHaveBeenCalled();
+      expect(screen.queryByTestId("generic-actions")).not.toBeInTheDocument();
+    });
+
+    it("resets edit mode when readOnly changes", () => {
+      const area = baseArea({ fields: [textareaField] });
+      const tree = (readOnly: boolean) => (
+        <QueryClientProvider client={new QueryClient()}>
+          <GenericFormContext.Provider value={mockContextValue}>
+            <Formik initialValues={mockInitialValues} onSubmit={vi.fn()}>
+              <GenericArea area={area} readOnly={readOnly} />
+            </Formik>
+          </GenericFormContext.Provider>
+        </QueryClientProvider>
+      );
+      const { rerender } = render(tree(false));
+
+      fireEvent.focus(screen.getByTestId("field-notes"));
+      expect(screen.getByTestId("generic-actions")).toBeInTheDocument();
+
+      rerender(tree(true));
+      rerender(tree(false));
+
+      expect(screen.queryByTestId("generic-actions")).not.toBeInTheDocument();
+    });
+  });
 });

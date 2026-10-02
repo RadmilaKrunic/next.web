@@ -10,7 +10,7 @@ import {
   type RadioSourceCallback,
 } from "../Form/GenericForm.context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { handleFaultCodeSelection } from "./GenericField.utils";
+import { handleFaultCodeSelection, updateDependentFields } from "./GenericField.utils";
 import type { AllowedPosition } from "api/services/countryConfiguration/countryConfiguration";
 import {
   handleAutoCompleteSelect,
@@ -127,12 +127,14 @@ vi.mock("@bosch/react-frok", () => ({
     name,
     value,
     onChange,
+    onBlur,
     disabled,
   }: {
     label: string;
     name: string;
     value: string;
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+    onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
     disabled?: boolean;
   }) => (
     <div>
@@ -142,6 +144,7 @@ vi.mock("@bosch/react-frok", () => ({
         name={name}
         value={value}
         onChange={onChange}
+        onBlur={onBlur}
         disabled={disabled}
         data-testid={`textarea-${name}`}
       />
@@ -201,12 +204,14 @@ vi.mock("components/ui/NumberInputField/NumberInputFiled", () => ({
     label,
     value,
     onChange,
+    onBlur,
     disabled,
   }: {
     name: string;
     label: string;
     value: string;
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
     disabled?: boolean;
   }) => (
     <div>
@@ -217,6 +222,7 @@ vi.mock("components/ui/NumberInputField/NumberInputFiled", () => ({
         name={name}
         value={value}
         onChange={onChange}
+        onBlur={onBlur}
         disabled={disabled}
         data-testid={`number-field-${name}`}
       />
@@ -354,7 +360,7 @@ vi.mock("components/ui/DynamicDropdown/DynamicDropdown", () => ({
   }: {
     name: string;
     label: string;
-    value: string;
+    value: string | string[];
     onChange: (value: string) => void;
     disabled?: boolean;
     onRawOptionSelect?: (rawItem: Record<string, unknown>) => void;
@@ -366,6 +372,7 @@ vi.mock("components/ui/DynamicDropdown/DynamicDropdown", () => ({
         id={name}
         name={name}
         value={value}
+        multiple={Array.isArray(value)}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         data-testid={`dropdown-${name}`}
@@ -1415,6 +1422,635 @@ describe("GenericField", () => {
       renderWithContext(field);
 
       expect(screen.getByText(/unknownType FIELD: Test Field/)).toBeInTheDocument();
+    });
+  });
+  describe("Value change propagation", () => {
+    const renderProbe = (
+      field: Field,
+      contextOverrides: Partial<typeof mockContextValue> = {},
+      initialValues: Record<string, unknown> = {},
+    ) =>
+      render(
+        <QueryClientProvider client={queryClient}>
+          <GenericFormContext.Provider value={{ ...mockContextValue, ...contextOverrides }}>
+            <Formik initialValues={{ ...mockInitialValues, ...initialValues }} onSubmit={vi.fn()}>
+              {({ values, touched }) => (
+                <>
+                  <GenericField field={field} />
+                  <div data-testid="probe-values">{JSON.stringify(values)}</div>
+                  <div data-testid="probe-touched">{JSON.stringify(touched)}</div>
+                </>
+              )}
+            </Formik>
+          </GenericFormContext.Provider>
+        </QueryClientProvider>,
+      );
+
+    const textField = (overrides: Partial<Field> = {}): Field => ({
+      name: "testField",
+      label: "Test Field",
+      type: "text",
+      isRequired: false,
+      fieldMapping: { originalName: "testField" },
+      ...overrides,
+    });
+
+    it("mirrors the value to the sameDataFieldAs target", async () => {
+      const field = textField();
+      renderProbe(
+        field,
+        {
+          allFields: [{ ...field, sameDataFieldAs: "mirrorField" }],
+        },
+        { mirrorField: "" },
+      );
+
+      fireEvent.change(screen.getByTestId("text-field-testField"), { target: { value: "abc" } });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("probe-values")).toHaveTextContent('"mirrorField":"abc"');
+      });
+    });
+
+    it("marks dependent fields touched when a byValueOr dependency is met", async () => {
+      const field = textField();
+      renderProbe(field, {
+        allFields: [
+          field,
+          {
+            name: "dependentField",
+            label: "Dependent",
+            type: "text",
+            requiredDependentFields: {
+              byValueOr: [{ fieldName: "testField", fieldValue: "abc" }],
+            },
+          },
+        ],
+      });
+
+      fireEvent.change(screen.getByTestId("text-field-testField"), { target: { value: "abc" } });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("probe-touched")).toHaveTextContent('"dependentField":true');
+      });
+    });
+
+    it("marks dependent fields untouched when a byValueAnd dependency is not met", async () => {
+      const field = textField();
+      renderProbe(field, {
+        allFields: [
+          field,
+          {
+            name: "dependentField",
+            label: "Dependent",
+            type: "text",
+            requiredDependentFields: {
+              byValueAnd: [{ fieldName: "testField", fieldValue: "expected" }],
+            },
+          },
+        ],
+      });
+
+      fireEvent.change(screen.getByTestId("text-field-testField"), { target: { value: "other" } });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("probe-values")).toHaveTextContent('"testField":"other"');
+      });
+      expect(screen.getByTestId("probe-touched")).not.toHaveTextContent('"dependentField":true');
+    });
+
+    it("ignores fields without a dependency on the changed field", async () => {
+      const field = textField();
+      renderProbe(field, {
+        allFields: [
+          field,
+          {
+            name: "unrelated",
+            label: "Unrelated",
+            type: "text",
+            requiredDependentFields: {
+              byValueOr: [{ fieldName: "otherField", fieldValue: "x" }],
+            },
+          },
+        ],
+      });
+
+      fireEvent.change(screen.getByTestId("text-field-testField"), { target: { value: "abc" } });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("probe-values")).toHaveTextContent('"testField":"abc"');
+      });
+      expect(screen.getByTestId("probe-touched")).not.toHaveTextContent("unrelated");
+    });
+
+    it("invokes a single-argument onValueChange handler with the new value", async () => {
+      const handler = vi.fn((_value: unknown) => undefined);
+      renderProbe(textField({ onValueChange: "onTestChange" }), {
+        actionCallbacks: { onTestChange: handler as unknown as ActionCallback },
+      });
+
+      fireEvent.change(screen.getByTestId("text-field-testField"), { target: { value: "abc" } });
+
+      await waitFor(() => expect(handler).toHaveBeenCalledWith("abc"));
+    });
+
+    it("invokes a two-argument onValueChange handler with name and value", async () => {
+      // A real two-parameter function: the field picks the (name, value) signature by arity,
+      // which a vitest spy (length 0) cannot express.
+      const received: unknown[][] = [];
+      const handler = (name: unknown, value: unknown) => {
+        received.push([name, value]);
+      };
+      renderProbe(textField({ onValueChange: "onTestChange" }), {
+        actionCallbacks: { onTestChange: handler as unknown as ActionCallback },
+      });
+
+      fireEvent.change(screen.getByTestId("text-field-testField"), { target: { value: "abc" } });
+
+      await waitFor(() => expect(received).toEqual([["testField", "abc"]]));
+    });
+
+    it("logs an error when an async onValueChange handler rejects", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const handler = vi.fn((_value: unknown) => Promise.reject(new Error("boom")));
+      renderProbe(textField({ onValueChange: "onTestChange" }), {
+        actionCallbacks: { onTestChange: handler as unknown as ActionCallback },
+      });
+
+      fireEvent.change(screen.getByTestId("text-field-testField"), { target: { value: "abc" } });
+
+      await waitFor(() =>
+        expect(errorSpy).toHaveBeenCalledWith(
+          "onValueChange onTestChange failed:",
+          expect.any(Error),
+        ),
+      );
+      errorSpy.mockRestore();
+    });
+
+    it("skips onValueChange when the callback is not registered", async () => {
+      renderProbe(textField({ onValueChange: "missing" }));
+
+      fireEvent.change(screen.getByTestId("text-field-testField"), { target: { value: "abc" } });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("probe-values")).toHaveTextContent('"testField":"abc"');
+      });
+    });
+
+    it("invokes the onBlur handler with name and value", async () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const handler = vi.fn((_name: unknown, _value: unknown) => undefined);
+      renderProbe(textField({ onBlur: "onTestBlur" }), {
+        actionCallbacks: { onTestBlur: handler as unknown as ActionCallback },
+      });
+
+      const input = screen.getByTestId("text-field-testField");
+      fireEvent.change(input, { target: { value: "abc" } });
+      fireEvent.blur(input);
+
+      await waitFor(() => expect(handler).toHaveBeenCalledWith("testField", "abc"));
+      logSpy.mockRestore();
+    });
+
+    it("logs an error when an async onBlur handler rejects", async () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const handler = vi.fn((_name: unknown, _value: unknown) =>
+        Promise.reject(new Error("blur boom")),
+      );
+      renderProbe(textField({ onBlur: "onTestBlur" }), {
+        actionCallbacks: { onTestBlur: handler as unknown as ActionCallback },
+      });
+
+      fireEvent.blur(screen.getByTestId("text-field-testField"));
+
+      await waitFor(() =>
+        expect(errorSpy).toHaveBeenCalledWith("onBlur onTestBlur failed:", expect.any(Error)),
+      );
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it("skips onBlur when the callback is not registered", async () => {
+      renderProbe(textField({ onBlur: "missing" }));
+
+      fireEvent.blur(screen.getByTestId("text-field-testField"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("probe-values")).toHaveTextContent('"testField"');
+      });
+    });
+
+    it("stops the change when updateDependentFields asks to return", async () => {
+      vi.mocked(updateDependentFields).mockReturnValueOnce(true);
+      renderProbe(textField());
+
+      fireEvent.change(screen.getByTestId("text-field-testField"), { target: { value: "abc" } });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(screen.getByTestId("probe-values")).toHaveTextContent('"testField":""');
+    });
+  });
+
+  describe("Text and price edge cases", () => {
+    it("adds the hidden class when the field is hidden", () => {
+      const field: Field = {
+        name: "hiddenField",
+        label: "Hidden",
+        type: "text",
+        isHidden: true,
+        fieldMapping: { originalName: "hiddenField" },
+      };
+
+      const { container } = renderWithContext(field);
+
+      // eslint-disable-next-line testing-library/no-container, testing-library/no-node-access
+      expect(container.querySelector(".generic-field-hidden")).toBeInTheDocument();
+    });
+
+    it("renders null or undefined values as empty text", () => {
+      const field: Field = {
+        name: "nullField",
+        label: "Null",
+        type: "text",
+        fieldMapping: { originalName: "nullField" },
+      };
+
+      renderWithContext(field, {}, { nullField: null });
+
+      expect(screen.getByTestId("text-field-nullField")).toHaveValue("");
+    });
+
+    it("renders empty price values as empty text", () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: "" });
+
+      expect(screen.getByTestId("text-field-priceField")).toHaveValue("");
+    });
+
+    it("renders price values without percentage or amount subtype as-is", () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: 12.5 });
+
+      expect(screen.getByTestId("text-field-priceField")).toHaveValue("12.5");
+    });
+
+    it("renders non-numeric price values as-is even for amount subtype", () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: "abc" });
+
+      expect(screen.getByTestId("text-field-priceField")).toHaveValue("abc");
+    });
+
+    it("formats percentage values to two decimals", () => {
+      const field: Field = {
+        name: "discountField",
+        label: "Discount",
+        type: "price",
+        subtype: "discount",
+        fieldMapping: { originalName: "discountField" },
+      };
+
+      renderWithContext(field, {}, { discountField: 5 });
+
+      expect(screen.getByTestId("text-field-discountField")).toHaveValue("5.00");
+    });
+
+    it("clears the zero-focus state once the user types", async () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: 0 });
+
+      const input = screen.getByTestId("text-field-priceField");
+      fireEvent.focus(input);
+      expect(input).toHaveValue("");
+
+      fireEvent.change(input, { target: { value: "7" } });
+
+      await waitFor(() => expect(input).toHaveValue("7"));
+    });
+
+    it("keeps non-zero price raw on focus without setting the zero state", () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: 3 });
+
+      const input = screen.getByTestId("text-field-priceField");
+      fireEvent.focus(input);
+
+      expect(input).toHaveValue("3");
+    });
+
+    it("does not enter focused state when a price field is disabled", () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        isDisabled: true,
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: 0 });
+
+      const input = screen.getByTestId("text-field-priceField");
+      fireEvent.focus(input);
+
+      expect(input).toHaveValue("0.00");
+    });
+
+    it("keeps an existing price value on blur", async () => {
+      const field: Field = {
+        name: "priceField",
+        label: "Price",
+        type: "price",
+        subtype: "amount",
+        fieldMapping: { originalName: "priceField" },
+      };
+
+      renderWithContext(field, {}, { priceField: 9 });
+
+      const input = screen.getByTestId("text-field-priceField");
+      fireEvent.focus(input);
+      fireEvent.blur(input);
+
+      await waitFor(() => expect(input).toHaveValue("9.00"));
+    });
+
+    it("does not apply price blur defaults to plain text fields", async () => {
+      const field: Field = {
+        name: "plainField",
+        label: "Plain",
+        type: "text",
+        fieldMapping: { originalName: "plainField" },
+      };
+
+      renderWithContext(field, {}, { plainField: "" });
+
+      const input = screen.getByTestId("text-field-plainField");
+      fireEvent.blur(input);
+
+      await waitFor(() => expect(input).toHaveValue(""));
+    });
+  });
+
+  describe("Number field edge cases", () => {
+    const numberField: Field = {
+      name: "testNumber",
+      label: "Test Number",
+      type: "number",
+      step: 1,
+      defaultValue: 5,
+      fieldMapping: { originalName: "testNumber" },
+    };
+
+    it("falls back to the default value when the input is cleared", async () => {
+      renderWithContext(numberField, {}, { testNumber: "3" });
+
+      fireEvent.change(screen.getByTestId("number-field-testNumber"), { target: { value: "" } });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("number-field-testNumber")).toHaveValue(5);
+      });
+    });
+
+    it("falls back to 0 when cleared and no default value is configured", async () => {
+      renderWithContext({ ...numberField, defaultValue: undefined }, {}, { testNumber: "3" });
+
+      fireEvent.change(screen.getByTestId("number-field-testNumber"), { target: { value: "" } });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("number-field-testNumber")).toHaveValue(0);
+      });
+    });
+
+    it("renders 0 when the form value is missing", () => {
+      renderWithContext(numberField, {}, { testNumber: undefined });
+
+      expect(screen.getByTestId("number-field-testNumber")).toHaveValue(0);
+    });
+
+    it("runs blur handling and the onBlur callback", async () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const handler = vi.fn((_name: unknown, _value: unknown) => undefined);
+      renderWithContext(
+        { ...numberField, onBlur: "onNumberBlur" },
+        { actionCallbacks: { onNumberBlur: handler as unknown as ActionCallback } },
+        { testNumber: "4" },
+      );
+
+      fireEvent.blur(screen.getByTestId("number-field-testNumber"));
+
+      await waitFor(() => expect(handler).toHaveBeenCalledWith("testNumber", "4"));
+      logSpy.mockRestore();
+    });
+  });
+
+  describe("Radio source callbacks", () => {
+    const radioField: Field = {
+      name: "sourceRadio",
+      label: "Source Radio",
+      type: "radiogroup",
+      radioButtonsSource: "getOptions",
+      fieldMapping: { originalName: "sourceRadio" },
+    };
+
+    it("resolves radio buttons from the registered source callback", () => {
+      renderWithContext(radioField, {
+        radioSourceCallbacks: {
+          getOptions: () => [
+            { label: "A", value: "a" },
+            { label: "B", value: "b" },
+          ],
+        },
+      });
+
+      expect(screen.getByTestId("radio-a")).toBeInTheDocument();
+      expect(screen.getByTestId("radio-b")).toBeInTheDocument();
+    });
+
+    it("renders no radio buttons when the source callback is missing", () => {
+      renderWithContext(radioField, { radioSourceCallbacks: {} });
+
+      expect(screen.getByTestId("radio-group-sourceRadio")).toBeEmptyDOMElement();
+    });
+
+    it("renders no radio buttons when no callbacks are provided at all", () => {
+      renderWithContext(radioField);
+
+      expect(screen.getByTestId("radio-group-sourceRadio")).toBeEmptyDOMElement();
+    });
+
+    it("renders no radio buttons when neither source nor buttons are configured", () => {
+      renderWithContext({ ...radioField, radioButtonsSource: undefined });
+
+      expect(screen.getByTestId("radio-group-sourceRadio")).toBeEmptyDOMElement();
+    });
+  });
+
+  describe("Multi-select dropdown and permissions", () => {
+    it("uses an empty array when a multi-select has no value", () => {
+      const field: Field = {
+        name: "multiDropdown",
+        label: "Multi",
+        type: "dropdown",
+        multiSelect: true,
+        options: [
+          { value: "a", label: "A" },
+          { value: "b", label: "B" },
+        ],
+        fieldMapping: { originalName: "multiDropdown" },
+      };
+
+      renderWithContext(field);
+
+      expect(screen.getByTestId("dropdown-multiDropdown")).toBeInTheDocument();
+    });
+
+    it("uses the stored array for a multi-select value", () => {
+      const field: Field = {
+        name: "multiDropdown",
+        label: "Multi",
+        type: "dropdown",
+        multiSelect: true,
+        options: [
+          { value: "a", label: "A" },
+          { value: "b", label: "B" },
+        ],
+        fieldMapping: { originalName: "multiDropdown" },
+      };
+
+      renderWithContext(field, {}, { multiDropdown: ["a", "b"] });
+
+      expect(screen.getByRole("option", { name: "A" })).toHaveProperty("selected", true);
+      expect(screen.getByRole("option", { name: "B" })).toHaveProperty("selected", true);
+    });
+
+    it("falls back to the default value for single dropdowns", () => {
+      const field: Field = {
+        name: "defaultDropdown",
+        label: "Default",
+        type: "dropdown",
+        defaultValue: "b",
+        options: [
+          { value: "a", label: "A" },
+          { value: "b", label: "B" },
+        ],
+        fieldMapping: { originalName: "defaultDropdown" },
+      };
+
+      renderWithContext(field);
+
+      expect(screen.getByTestId("dropdown-defaultDropdown")).toHaveValue("b");
+    });
+
+    it("renders nothing when the user lacks the required permission", () => {
+      const field: Field = {
+        name: "secretField",
+        label: "Secret",
+        type: "text",
+        permissions: ["NOPE"],
+        fieldMapping: { originalName: "secretField" },
+      };
+
+      renderWithContext(field);
+
+      expect(screen.queryByTestId("text-field-secretField")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Upload and textarea callbacks", () => {
+    it("stores selected files in the form", async () => {
+      const field: Field = {
+        name: "uploadField",
+        label: "Upload",
+        type: "upload",
+        fieldMapping: { originalName: "uploadField" },
+      };
+      const file = new File(["x"], "doc.txt", { type: "text/plain" });
+
+      renderWithContext(field);
+      fireEvent.change(screen.getByTestId("file-upload-uploadField"), {
+        target: { files: [file] },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("file-upload-initial-uploadField")).toHaveTextContent("[{}]");
+      });
+    });
+
+    it("passes delete callbacks and defaults to empty file lists", () => {
+      const field: Field = {
+        name: "uploadField",
+        label: "Upload",
+        type: "upload",
+        allowedFormats: ["pdf"],
+        maxFilesAllowed: 2,
+        maxFileSizeInMb: 5,
+        options: [{ value: "t", label: "T" }],
+        existingFiles: [{ name: "a.pdf" }],
+        fieldMapping: { originalName: "uploadField" },
+      };
+
+      renderWithContext(field, { onDeleteStart: vi.fn(), onDeleteEnd: vi.fn() });
+
+      expect(screen.getByTestId("file-upload-initial-uploadField")).toHaveTextContent("[]");
+    });
+
+    it("runs the onBlur callback for textarea fields", async () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const handler = vi.fn((_name: unknown, _value: unknown) => undefined);
+      const field: Field = {
+        name: "testTextarea",
+        label: "Notes",
+        type: "textarea",
+        isRequired: true,
+        onBlur: "onNotesBlur",
+        fieldMapping: { originalName: "testTextarea" },
+      };
+
+      renderWithContext(
+        field,
+        { actionCallbacks: { onNotesBlur: handler as unknown as ActionCallback } },
+        { testTextarea: "hello" },
+      );
+      fireEvent.blur(screen.getByTestId("textarea-testTextarea"));
+
+      await waitFor(() => expect(handler).toHaveBeenCalledWith("testTextarea", "hello"));
+      logSpy.mockRestore();
     });
   });
 });

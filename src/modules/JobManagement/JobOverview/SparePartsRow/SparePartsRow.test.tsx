@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Formik, useFormikContext } from "formik";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { GenericFormContext } from "components/generics/Form/GenericForm.context";
+import {
+  GenericFormContext,
+  type GenericFormContextType,
+} from "components/generics/Form/GenericForm.context";
 import { DiagnosticsContext, type DiagnosticsContextValue } from "../DiagnosticsContext";
 import SparePartsRow from "./SparePartsRow";
 import type Field from "components/generics/Field/GenericField.types";
@@ -339,6 +342,7 @@ const renderRow = (
   warrantyPanelInfo: WarrantyPanelInfo = ELIGIBLE_WARRANTY_PANEL_INFO,
   rowProps: RowProps = {},
   contextOverrides: Partial<DiagnosticsContextValue> = {},
+  formContextOverrides: Partial<GenericFormContextType> = {},
 ) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(["user"], { permissions: rowProps.userPermissions ?? ["ALL"] });
@@ -389,6 +393,7 @@ const renderRow = (
           actionCallbacks: {},
           sparePartNotBelongsToTool: { current: sparePartNotBelongsToTool },
           warrantyPanelInfo,
+          ...formContextOverrides,
         }}
       >
         <DiagnosticsContext.Provider value={diagnosticsContextValue}>
@@ -1891,7 +1896,7 @@ describe("SparePartsRow part number change effect (resolvePartNumberChangeAction
       {},
       ELIGIBLE_WARRANTY_PANEL_INFO,
       {},
-    );  
+    );
     fireEvent.change(screen.getByTestId("field-row0_partNumber"), {
       target: { value: "9999999999" },
     });
@@ -2647,7 +2652,7 @@ describe("SparePartsRow preserveFields restore branch", () => {
     fireEvent.change(screen.getByTestId("field-row0_type"), { target: { value: "WARRANTY" } });
     await waitFor(() => {
       expect((screen.getByTestId("field-row0_type") as HTMLSelectElement).value).toBe("WARRANTY");
-    });   
+    });
     fireEvent.change(screen.getByTestId("field-row0_discount"), { target: { value: "99" } });
 
     await waitFor(() => {
@@ -2798,5 +2803,595 @@ describe("SparePartsRow field-lookup fallbacks", () => {
     // undefined must resolve the same as an explicit "GROSS_PRICE".
     expect(screen.getByTestId("field-row0_discount")).toBeDisabled();
     expect(screen.getByTestId("field-row0_totalAmount")).toBeDisabled();
+  });
+});
+
+describe("SparePartsRow current row behavior", () => {
+  const rowMapping = (originalName: string) => ({
+    originalName,
+    map: originalName,
+    parentMap: [],
+    prefixes: [],
+    nameStartsWith: "diagnosticsSpareParts#0_",
+  });
+
+  const descriptionField: Field = createField({
+    name: "row0_description",
+    subtype: "diagnosticDescription",
+    type: "text",
+    fieldMapping: rowMapping("description"),
+  });
+
+  const positionDropdown = (name: string, nameStartsWith: string): Field =>
+    createField({
+      name,
+      subtype: "diagnosticPosition",
+      type: "dropdown",
+      options: [
+        { value: "SP", name: "SP" },
+        { value: "AC", name: "AC" },
+      ],
+      fieldMapping: { ...rowMapping("position"), nameStartsWith },
+    });
+
+  const withoutPosition = rowFields.filter((f) => f.subtype !== "diagnosticPosition");
+
+  const selectOptions = (testId: string) =>
+    Object.fromEntries(
+      Array.from((screen.getByTestId(testId) as HTMLSelectElement).options).map((option) => [
+        option.value,
+        option,
+      ]),
+    );
+
+  describe("field locking by subtype", () => {
+    it("always disables the unit price field", () => {
+      renderRow({ row0_position: "SP", row0_type: "CHARGEABLE" }, [], "GROSS_PRICE");
+
+      expect(screen.getByTestId("field-row0_unitPrice")).toBeDisabled();
+    });
+
+    it("disables quantity for a protected position when the user cannot edit its units", () => {
+      renderRow(
+        { row0_position: "LA", row0_type: "CHARGEABLE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        { userPermissions: [] },
+      );
+
+      expect(screen.getByTestId("field-row0_quantity")).toBeDisabled();
+    });
+
+    it("enables quantity for a protected position when the user can edit its units", () => {
+      renderRow(
+        { row0_position: "LA", row0_type: "CHARGEABLE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        { userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_EDIT_LABOUR_UNITS] },
+      );
+
+      expect(screen.getByTestId("field-row0_quantity")).toBeEnabled();
+    });
+
+    it("enables quantity for positions without a permission mapping", () => {
+      renderRow(
+        { row0_position: "AC", row0_type: "CHARGEABLE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        { userPermissions: [] },
+      );
+
+      expect(screen.getByTestId("field-row0_quantity")).toBeEnabled();
+    });
+
+    it("locks part number and description on rows with hard-coded autofill (LA)", () => {
+      renderRow(
+        { row0_position: "LA", row0_type: "CHARGEABLE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        { fields: [...rowFields, descriptionField] },
+      );
+
+      expect(screen.getByTestId("field-row0_partNumber")).toBeDisabled();
+      expect(screen.getByTestId("field-row0_description")).toBeDisabled();
+    });
+
+    it("keeps part number and description editable on automatic rows without autofill (PC)", () => {
+      renderRow(
+        { row0_position: "PC", row0_type: "CHARGEABLE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        { fields: [...rowFields, descriptionField] },
+      );
+
+      expect(screen.getByTestId("field-row0_partNumber")).toBeEnabled();
+      expect(screen.getByTestId("field-row0_description")).toBeEnabled();
+    });
+
+    it("keeps part number and description editable on PN rows without autofill", () => {
+      renderRow(
+        { row0_position: "PN", row0_type: "CHARGEABLE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        { fields: [...rowFields, descriptionField] },
+      );
+
+      expect(screen.getByTestId("field-row0_partNumber")).toBeEnabled();
+      expect(screen.getByTestId("field-row0_description")).toBeEnabled();
+    });
+  });
+
+  describe("price visibility and collapse", () => {
+    it("hides the arrow and price fields without the price view permission", () => {
+      vi.mocked(useHasPermission).mockImplementation(
+        (perms: string[] | undefined) =>
+          !(perms ?? []).includes(PERMISSIONS.DIAGNOSTICS.CAN_VIEW_PRICES),
+      );
+      renderRow(
+        { row0_position: "SP", row0_type: "CHARGEABLE", row0_materialId: "MAT-1" },
+        [],
+        "GROSS_PRICE",
+      );
+
+      expect(screen.queryByTestId("icon-up")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("icon-down")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("field-row0_unitPrice")).not.toBeInTheDocument();
+    });
+
+    it("starts expanded when prices are not validated and hides the price fields", () => {
+      renderRow(
+        { row0_position: "SP", row0_type: "CHARGEABLE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        {},
+        { arePricesValidated: false },
+      );
+
+      expect(screen.getByTestId("icon-down")).toBeInTheDocument();
+      expect(screen.queryByTestId("field-row0_unitPrice")).not.toBeInTheDocument();
+    });
+
+    it("shows the price fields after expanding a row with populated prices", () => {
+      renderRow(
+        { row0_position: "SP", row0_type: "CHARGEABLE", row0_unitPrice: 5 },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        {},
+        { arePricesValidated: false },
+      );
+
+      fireEvent.click(screen.getByTestId("icon-down"));
+
+      expect(screen.getByTestId("icon-up")).toBeInTheDocument();
+      expect(screen.getByTestId("field-row0_unitPrice")).toBeInTheDocument();
+    });
+
+    it("collapses a saved row (with material id) even while prices are not validated", async () => {
+      renderRow(
+        { row0_position: "SP", row0_type: "CHARGEABLE", row0_materialId: "MAT-9" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        {},
+        { arePricesValidated: false },
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("icon-up")).toBeInTheDocument();
+      });
+      expect(screen.getByTestId("field-row0_unitPrice")).toBeInTheDocument();
+    });
+
+    it("renders main and collapsed fields ordered by their position", () => {
+      const reordered = rowFields.map((field) => {
+        if (field.subtype === "diagnosticTax") return { ...field, position: -1 };
+        if (field.subtype === "diagnosticUnitPrice") return { ...field, position: 5 };
+        if (field.subtype === "diagnosticNetAmount") return { ...field, position: 1 };
+        return field;
+      });
+      renderRow(
+        { row0_position: "SP", row0_type: "CHARGEABLE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        { fields: reordered },
+      );
+
+      const order = screen.getAllByTestId(/^field-/).map((el) => el.getAttribute("data-testid"));
+      expect(order[0]).toBe("field-row0_tax");
+      expect(order.indexOf("field-row0_netAmount")).toBeLessThan(
+        order.indexOf("field-row0_unitPrice"),
+      );
+    });
+  });
+
+  describe("revised/rejected status reset on edit", () => {
+    const renderWithStatus = (status: string, setRevisedRejectedRowPending = vi.fn()) => {
+      renderRow(
+        { row0_position: "SP", row0_type: "WARRANTY", row0_status: status },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        { fields: [...rowFields, statusField] },
+        { setRevisedRejectedRowPending },
+      );
+      return setRevisedRejectedRowPending;
+    };
+
+    it("resets a REJECTED row to pending when a regular field changes", () => {
+      const reset = renderWithStatus("REJECTED");
+
+      fireEvent.change(screen.getByTestId("field-row0_tax"), { target: { value: "7" } });
+
+      expect(reset).toHaveBeenCalledWith("diagnosticsSpareParts#0");
+    });
+
+    it("does not reset a PENDING row when a regular field changes", () => {
+      const reset = renderWithStatus("PENDING");
+
+      fireEvent.change(screen.getByTestId("field-row0_tax"), { target: { value: "7" } });
+
+      expect(reset).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["type", "field-row0_type", "CHARGEABLE"],
+      ["part number", "field-row0_partNumber", "PN-1"],
+    ])("does not reset the row when the %s changes", (_label, testId, value) => {
+      const reset = renderWithStatus("REVISED");
+
+      fireEvent.change(screen.getByTestId(testId), { target: { value } });
+
+      expect(reset).not.toHaveBeenCalled();
+    });
+
+    it("does not reset the row when the position changes", () => {
+      const reset = vi.fn();
+      renderRow(
+        { row0_position: "SP", row0_type: "WARRANTY", row0_status: "REVISED" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        {
+          fields: [
+            positionDropdown("row0_position", "diagnosticsSpareParts#0_"),
+            ...withoutPosition,
+            statusField,
+          ],
+        },
+        { setRevisedRejectedRowPending: reset },
+      );
+
+      fireEvent.change(screen.getByTestId("field-row0_position"), { target: { value: "AC" } });
+
+      expect(reset).not.toHaveBeenCalled();
+    });
+
+    it("ignores changes when the row has no status field", () => {
+      const reset = vi.fn();
+      renderRow(
+        { row0_position: "SP", row0_type: "WARRANTY" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        {},
+        { setRevisedRejectedRowPending: reset },
+      );
+
+      fireEvent.change(screen.getByTestId("field-row0_tax"), { target: { value: "7" } });
+
+      expect(reset).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("delete icon", () => {
+    const deleteProps = (userPermissions: string[], extra: Partial<RowProps> = {}): RowProps => ({
+      userPermissions,
+      ...extra,
+    });
+
+    it("hides the delete icon while the repair answer is locked", () => {
+      denyApproveCommercialGoodwill();
+      renderRow(
+        { row0_position: "SP", row0_type: "WARRANTY" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        deleteProps([PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS]),
+        {},
+        { isRepairAnswerLocked: true },
+      );
+
+      expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
+    });
+
+    it("hides the delete icon when the user cannot delete rows of this position", () => {
+      denyApproveCommercialGoodwill();
+      renderRow(
+        { row0_position: "SP", row0_type: "WARRANTY" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        deleteProps([]),
+      );
+
+      expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
+    });
+
+    it("hides the delete icon for approved rows", () => {
+      denyApproveCommercialGoodwill();
+      renderRow(
+        { row0_position: "SP", row0_type: "WARRANTY", row0_status: "APPROVED" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        deleteProps([PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS], {
+          fields: [...rowFields, statusField],
+        }),
+      );
+
+      expect(screen.queryByTestId("icon-delete")).not.toBeInTheDocument();
+    });
+
+    it("shows the delete icon for positions without a permission mapping", () => {
+      denyApproveCommercialGoodwill();
+      renderRow(
+        { row0_position: "AC", row0_type: "WARRANTY" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        deleteProps([]),
+      );
+
+      expect(screen.getByTestId("icon-delete")).toBeInTheDocument();
+    });
+
+    it("does not throw when the delete icon is clicked without an onDeleteRow handler", () => {
+      denyApproveCommercialGoodwill();
+      renderRow(
+        { row0_position: "AC", row0_type: "WARRANTY" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        deleteProps([]),
+      );
+
+      expect(() => fireEvent.click(screen.getByTestId("icon-delete"))).not.toThrow();
+    });
+
+    it("keeps the delete icon for a non-exchange row even when its position is an automatic row", () => {
+      denyApproveCommercialGoodwill();
+      renderRow(
+        { row0_position: "AC", row0_type: "WARRANTY", actionType: "REPAIR" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        deleteProps([]),
+        { automaticRows: ["AC"] },
+      );
+
+      expect(screen.getByTestId("icon-delete")).toBeInTheDocument();
+    });
+
+    it("shows the delete icon for an exchange action when the position is not an automatic row", () => {
+      denyApproveCommercialGoodwill();
+      renderRow(
+        { row0_position: "AC", row0_type: "WARRANTY", actionType: "NEW_TOOL_EXCHANGE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        deleteProps([]),
+        { automaticRows: ["LA"] },
+      );
+
+      expect(screen.getByTestId("icon-delete")).toBeInTheDocument();
+    });
+
+    it("treats a missing automaticRows list as no automatic rows", () => {
+      denyApproveCommercialGoodwill();
+      renderRow(
+        { row0_position: "AC", row0_type: "WARRANTY", actionType: "NEW_TOOL_EXCHANGE" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        deleteProps([]),
+        { automaticRows: undefined },
+      );
+
+      expect(screen.getByTestId("icon-delete")).toBeInTheDocument();
+    });
+
+    it("shows the delete icon when the job status is undefined", () => {
+      denyApproveCommercialGoodwill();
+      renderRow(
+        { row0_position: "AC", row0_type: "WARRANTY" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        deleteProps([]),
+        { jobStatus: undefined },
+      );
+
+      expect(screen.getByTestId("icon-delete")).toBeInTheDocument();
+    });
+  });
+
+  describe("position option gating", () => {
+    const allowed = (position: string, maxCount: number) => ({
+      position,
+      maxCount,
+      minCount: 0,
+      quantity: { quantitySource: "MANUAL", defaultQuantity: 1 },
+      unitPriceSource: "MANUAL",
+    });
+
+    it("keeps options without a permission mapping or configuration enabled", () => {
+      renderRow({ row0_position: "AC" }, [], "GROSS_PRICE", {}, ELIGIBLE_WARRANTY_PANEL_INFO, {
+        fields: [positionDropdown("row0_position", "diagnosticsSpareParts#0_"), ...withoutPosition],
+        userPermissions: [],
+      });
+
+      const options = selectOptions("field-row0_position");
+      expect(options.AC.disabled).toBe(false);
+      expect(options.SP.disabled).toBe(true);
+    });
+
+    it("does not count the row's own position against the maximum", () => {
+      renderRow(
+        { row0_position: "SP" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        {
+          fields: [
+            positionDropdown("row0_position", "diagnosticsSpareParts#0_"),
+            ...withoutPosition,
+          ],
+          userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
+        },
+        { allowedPositions: [allowed("SP", 1)] },
+      );
+
+      expect(selectOptions("field-row0_position").SP.disabled).toBe(false);
+    });
+
+    it("disables a configured option once a sibling row uses up its maximum", () => {
+      const sibling = positionDropdown("row1_position", "diagnosticsSpareParts#1_");
+      renderRow(
+        { row0_position: "AC", row1_position: "AC" },
+        [sibling],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        {
+          fields: [
+            positionDropdown("row0_position", "diagnosticsSpareParts#0_"),
+            ...withoutPosition,
+          ],
+          userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
+        },
+        { allowedPositions: [allowed("AC", 1)] },
+      );
+
+      expect(selectOptions("field-row0_position").AC.disabled).toBe(true);
+    });
+
+    it("leaves a configured option enabled while capacity remains", () => {
+      renderRow(
+        { row0_position: "AC" },
+        [],
+        "GROSS_PRICE",
+        {},
+        ELIGIBLE_WARRANTY_PANEL_INFO,
+        {
+          fields: [
+            positionDropdown("row0_position", "diagnosticsSpareParts#0_"),
+            ...withoutPosition,
+          ],
+          userPermissions: [PERMISSIONS.DIAGNOSTICS.CAN_INSERT_AND_DELETE_SPARE_PARTS_ITEMS],
+        },
+        { allowedPositions: [allowed("AC", 2)] },
+      );
+
+      expect(selectOptions("field-row0_position").AC.disabled).toBe(false);
+    });
+  });
+
+  describe("type option gating", () => {
+    it("keeps WARRANTY and SERVICE_OFFERING enabled on a spare parts exchange", () => {
+      renderRow(
+        { row0_position: "SP", row0_type: "CHARGEABLE", actionType: "SPARE_PARTS_EXCHANGE" },
+        [],
+        "GROSS_PRICE",
+      );
+
+      const options = selectOptions("field-row0_type");
+      expect(options.WARRANTY.disabled).toBe(false);
+      expect(options.SERVICE_OFFERING.disabled).toBe(false);
+    });
+
+    it("only disables the warranty-related options for a restricted spare part", () => {
+      renderRow({ row0_position: "SP", row0_type: "CHARGEABLE" }, [], "GROSS_PRICE");
+
+      const options = selectOptions("field-row0_type");
+      expect(options.WARRANTY.disabled).toBe(true);
+      expect(options.SERVICE_OFFERING.disabled).toBe(true);
+      expect(options.CHARGEABLE.disabled).toBe(false);
+      expect(options.COMMERCIAL_GOODWILL.disabled).toBe(false);
+    });
+
+    it("treats a whitespace-only part number on an SP row as restricted", () => {
+      renderRow(
+        { row0_position: "SP", row0_type: "CHARGEABLE", row0_partNumber: "   " },
+        [],
+        "GROSS_PRICE",
+      );
+
+      expect(selectOptions("field-row0_type").WARRANTY.disabled).toBe(true);
+    });
+
+    it("keeps the options enabled for a valid spare part on an eligible job", () => {
+      renderRow(
+        { row0_position: "SP", row0_type: "CHARGEABLE", row0_partNumber: "PN-1" },
+        [],
+        "GROSS_PRICE",
+        { row0_partNumber: false },
+      );
+
+      expect(selectOptions("field-row0_type").WARRANTY.disabled).toBe(false);
+    });
+
+    it("disables warranty-related options when the tool has no purchase date", () => {
+      renderRow(
+        { row0_position: "SP", row0_type: "CHARGEABLE", row0_partNumber: "PN-1" },
+        [],
+        "GROSS_PRICE",
+        { row0_partNumber: false },
+        { isIneligible: false, hasPurchaseDate: false, supportedWarrantyType: "" },
+      );
+
+      expect(selectOptions("field-row0_type").WARRANTY.disabled).toBe(true);
+    });
+
+    it("leaves non-SP rows with a valid part number untouched on an eligible job", () => {
+      renderRow(
+        { row0_position: "PN", row0_type: "CHARGEABLE", row0_partNumber: "PN-1" },
+        [],
+        "GROSS_PRICE",
+      );
+
+      expect(selectOptions("field-row0_type").WARRANTY.disabled).toBe(false);
+    });
   });
 });

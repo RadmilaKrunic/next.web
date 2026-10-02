@@ -65,6 +65,13 @@ vi.mock("../Action/GenericAction", () => ({
   ),
 }));
 
+// Mock InfoIconWithTooltip
+vi.mock("components/ui/TooltipContent/InfoIconWithTooltip", () => ({
+  default: ({ infoText }: { infoText?: string }) => (
+    <span data-testid="warranty-info-tooltip">{infoText}</span>
+  ),
+}));
+
 describe("GenericSection", () => {
   const mockActionCallbacks = {
     testAction: vi.fn(),
