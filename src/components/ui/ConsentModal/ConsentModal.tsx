@@ -118,16 +118,14 @@ function ConsentModal({ isOpen }: Readonly<ConsentModalProps>) {
                 data-testid="consent-privacy-checkbox"
               />
               <label htmlFor="consent-privacy" className="consent-modal__checkbox-text">
-                {t("consentModalPrivacyPrefix")}{" "}
                 <a
                   href={privacyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="consent-modal__link"
                 >
-                  {t("consentModalPrivacyLink")}
+                  {t("consentModalPrivacyText")}
                 </a>
-                {t("consentModalPrivacySuffix")}
               </label>
             </div>
           )}
@@ -141,16 +139,14 @@ function ConsentModal({ isOpen }: Readonly<ConsentModalProps>) {
                 data-testid="consent-terms-checkbox"
               />
               <label htmlFor="consent-terms" className="consent-modal__checkbox-text">
-                {t("consentModalTermsPrefix")}{" "}
                 <a
                   href={termsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="consent-modal__link"
                 >
-                  {t("consentModalTermsLink")}
+                  {t("consentModalTermsText")}
                 </a>
-                {t("consentModalTermsSuffix")}
               </label>
             </div>
           )}

@@ -141,8 +141,8 @@ export interface SummaryDetail {
 }
 
 export interface SummaryDetailAll {
-  total: SummaryPrice;
-  byJobType: SummaryDetail[];
+  total?: SummaryPrice;
+  byJobType?: SummaryDetail[];
 }
 
 export interface JobOverviewItem {

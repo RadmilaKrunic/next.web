@@ -31,7 +31,7 @@ export function useSingleDateSelection({
     setTempDate(dateString);
 
     const formattedDate = formatDateForBackend(
-      new Date(dateString),
+      dateString,
       calendar?.startOfTheDay,
       calendar?.endOfTheDay,
     );
@@ -43,7 +43,7 @@ export function useSingleDateSelection({
     setTempDate(dateString);
 
     const formattedDate = formatDateForBackend(
-      newDate,
+      dateString,
       calendar?.startOfTheDay,
       calendar?.endOfTheDay,
     );
@@ -53,7 +53,7 @@ export function useSingleDateSelection({
   const handleConfirm = (closeFn: () => void) => {
     if (tempDate) {
       const formattedDate = formatDateForBackend(
-        new Date(tempDate),
+        tempDate,
         calendar?.startOfTheDay,
         calendar?.endOfTheDay,
       );

@@ -4,6 +4,9 @@ import { getApiErrorMessage } from "./getApiErrorMessage";
 const t = vi.fn((key: string) => {
   if (key === "errorDetail") return "Translated detail";
   if (key === "genericError") return "Generic Error";
+  if (key === "errorProServiceItemsNotEligible") {
+    return "PRO Service is not eligible for: ";
+  }
   return key; // returns key unchanged for unknown keys
 });
 
@@ -35,6 +38,22 @@ describe("getApiErrorMessage", () => {
     expect(result).toBe("Generic Error");
   });
 
+  it("returns dedicated PRO Service message when violated part numbers are provided as an array", () => {
+    const error = {
+      response: {
+        data: {
+          detail: "errorDiagnosticProServiceItemsNotEligibleForValidation",
+          params: { violatedPartNumbers: ["06010000", "06010001"] },
+        },
+      },
+    };
+
+    const result = getApiErrorMessage(error, t as never, "genericError");
+
+    expect(result).toBe("PRO Service is not eligible for: 06010000, 06010001");
+    expect(t).toHaveBeenCalledWith("errorProServiceItemsNotEligible");
+  });
+
   it("passes interpolation params to translation", () => {
     const error = { response: { data: { detail: "errorDetail", params: { name: "Bosch" } } } };
     getApiErrorMessage(error, t as never, "genericError");
@@ -63,5 +82,15 @@ describe("getApiErrorMessage", () => {
     };
     getApiErrorMessage(error, t as never, "genericError");
     expect(t).toHaveBeenCalledWith("errorDetail", { violatedPartNumbers: "06010000" });
+  });
+
+  it("keeps valid non-array JSON params unchanged", () => {
+    const error = {
+      response: { data: { detail: "errorDetail", params: { metadata: '{"code":"06010000"}' } } },
+    };
+
+    getApiErrorMessage(error, t as never, "genericError");
+
+    expect(t).toHaveBeenCalledWith("errorDetail", { metadata: '{"code":"06010000"}' });
   });
 });

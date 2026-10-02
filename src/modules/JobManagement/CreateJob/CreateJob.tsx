@@ -12,6 +12,7 @@ import {
   getAssetCollapsedTitle,
   getCustomerCollapsedTitle,
   getDeliveryAddressConfirmationInfo,
+  buildCustomerChangeConfirmationData,
   DeliveryAddressConfirmationInfo,
 } from "./CreateJob.utils";
 import { CreateJobContext } from "./CreateJob.context";
@@ -48,6 +49,9 @@ import {
 } from "./CreateJob.warranty.utils";
 import { buildWarrantyInfoContent, formatWarrantyDate } from "../warranty.utils";
 import DeliveryAddressConfirmModal from "../../../components/ui/DeliveryAddressConfirmModal/DeliveryAddressConfirmModal";
+import CustomerChangeConfirmModal from "@/components/ui/CustomerChangeConfirmModal/CustomerChangeConfirmModal";
+import { Customer } from "@/api/services/customers/customers.types";
+import { CustomerChangeFieldComparison } from "@/components/ui/CustomerChangeConfirmModal/CustomerChangeConfirmModal.utils";
 
 interface WarrantyInfoContentData extends WarrantyInfoPayload {
   reasonKey: WarrantyInfoPayload["reasonKey"];
@@ -80,6 +84,16 @@ function CreateJob() {
   const [deliveryAddressConfirmInfo, setDeliveryAddressConfirmInfo] =
     useState<DeliveryAddressConfirmationInfo | null>(null);
   const pendingActionAfterDeliveryConfirmRef = useRef<(() => void | Promise<void>) | null>(null);
+
+  const [isCustomerChangeModalOpen, setIsCustomerChangeModalOpen] = useState(false);
+  const customerChangeConfirmationRef = useRef<{
+    comparisons: CustomerChangeFieldComparison[];
+    signature: string;
+  } | null>(null);
+  const pendingActionAfterCustomerChangeConfirmRef = useRef<
+    ((customerIdOverride?: null) => void | Promise<void>) | null
+  >(null);
+  const confirmedCustomerChangeSignatureRef = useRef<string | null>(null);
 
   const isEditMode = !!orderId;
   const warrantyCheckMutation = usePostWarrantyCheck();
@@ -120,6 +134,14 @@ function CreateJob() {
   ]);
   const createJobForm =
     uiConfigurationForms?.forms.find((form) => form.name === "CreateJob") || null;
+
+  useEffect(() => {
+    queryClient.setQueryData(["selectedCustomer"], null);
+
+    return () => {
+      queryClient.setQueryData(["selectedCustomer"], null);
+    };
+  }, [queryClient]);
 
   useBreadcrumbs([
     {
@@ -322,6 +344,7 @@ function CreateJob() {
         setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, string>>;
       },
       onSuccess?: () => void | Promise<void>,
+      skipCustomerChangeCheck = false,
     ) => {
       if (!allFields) return;
 
@@ -353,6 +376,35 @@ function CreateJob() {
 
       stopValidation();
 
+      if ((actionName === "next" || actionName === "submit") && !skipCustomerChangeCheck) {
+        const selectedCustomer = queryClient.getQueryData<Customer>(["selectedCustomer"]);
+        const { comparisons, signature } = buildCustomerChangeConfirmationData(
+          formikProps.values,
+          selectedCustomer,
+          sections[0],
+          allFields,
+        );
+
+        if (comparisons.length > 0 && signature !== confirmedCustomerChangeSignatureRef.current) {
+          customerChangeConfirmationRef.current = { comparisons, signature };
+          pendingActionAfterCustomerChangeConfirmRef.current = (customerIdOverride) =>
+            handleAction(
+              actionName,
+              {
+                ...formikProps,
+                values:
+                  customerIdOverride === null
+                    ? { ...formikProps.values, customerId: null }
+                    : formikProps.values,
+              },
+              onSuccess,
+              true,
+            );
+          setIsCustomerChangeModalOpen(true);
+          return;
+        }
+      }
+
       if (actionName === "next" || actionName === "submit") {
         const confirmationInfo = getDeliveryAddressConfirmationInfo(formikProps.values);
         if (confirmationInfo) {
@@ -367,7 +419,15 @@ function CreateJob() {
         await onSuccess();
       }
     },
-    [allFields, startValidation, stopValidation, setCurrentAction, allMandatoryFieldsFilled],
+    [
+      allFields,
+      sections,
+      startValidation,
+      stopValidation,
+      setCurrentAction,
+      allMandatoryFieldsFilled,
+      queryClient,
+    ],
   );
 
   const handleCreateOrder = useCallback(
@@ -402,6 +462,7 @@ function CreateJob() {
               setTimeout(() => URL.revokeObjectURL(pdfUrl), 10000);
             }
           }
+          queryClient.setQueryData(["selectedCustomer"], null);
           await queryClient.invalidateQueries({ queryKey: ["jobs"] });
           await navigate("/job-list");
         }
@@ -594,13 +655,16 @@ function CreateJob() {
       setIsCustomerOpen(true);
       setAssetsAccessories([]);
       lastWarrantyPayloadKeyRef.current = {};
+      pendingActionAfterCustomerChangeConfirmRef.current = null;
+      setIsCustomerChangeModalOpen(false);
+      queryClient.setQueryData(["selectedCustomer"], null);
       if (helpers) {
         for (const key of Object.keys(initialFormValues)) {
           helpers.setFieldValue(key, initialFormValues[key]);
         }
       }
     },
-    [reset, initialFormValues, setAssetsAccessories],
+    [reset, initialFormValues, setAssetsAccessories, queryClient],
   );
 
   const runWarrantyCheck = useCallback(
@@ -741,6 +805,23 @@ function CreateJob() {
     setIsDeliveryAddressModalOpen(false);
     setDeliveryAddressConfirmInfo(null);
     pendingActionAfterDeliveryConfirmRef.current = null;
+  }, []);
+
+  const handleCustomerChangeConfirm = useCallback((customerIdOverride?: null) => {
+    setIsCustomerChangeModalOpen(false);
+    confirmedCustomerChangeSignatureRef.current =
+      customerChangeConfirmationRef.current?.signature ?? null;
+    const pendingAction = pendingActionAfterCustomerChangeConfirmRef.current;
+    pendingActionAfterCustomerChangeConfirmRef.current = null;
+    if (pendingAction) {
+      pendingAction(customerIdOverride);
+    }
+  }, []);
+
+  const handleCustomerChangeCancel = useCallback(() => {
+    setIsCustomerChangeModalOpen(false);
+    customerChangeConfirmationRef.current = null;
+    pendingActionAfterCustomerChangeConfirmRef.current = null;
   }, []);
 
   const genericFormContextValue = useMemo(
@@ -901,6 +982,13 @@ function CreateJob() {
           isAddressCompletelyEmpty={deliveryAddressConfirmInfo?.isAddressCompletelyEmpty ?? false}
           onConfirm={handleDeliveryAddressConfirm}
           onCancel={handleDeliveryAddressCancel}
+        />
+        <CustomerChangeConfirmModal
+          isOpen={isCustomerChangeModalOpen}
+          fieldComparisons={customerChangeConfirmationRef.current?.comparisons ?? []}
+          onClose={handleCustomerChangeCancel}
+          onEdit={() => handleCustomerChangeConfirm()}
+          onCreate={() => handleCustomerChangeConfirm(null)}
         />
       </CreateJobContext.Provider>
     </GenericFormContext.Provider>

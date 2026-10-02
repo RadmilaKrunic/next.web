@@ -332,7 +332,6 @@ export const postValidateAndSave = async (
 ): Promise<ValidateAndSaveResponse> => {
   try {
     const response = await axiosClient.post(`/v2/jobs/flow/validate-and-save`, {
-      //   const response = await axiosClient.post(`/v1/jobs/flow/validate-and-save`, {
       jobId,
       ...payload,
     });

@@ -6922,7 +6922,7 @@
                   "sameDataFieldAs": "summaryDiscount",
                   "allowedFormats": [],
                   "isMultiple": false,
-                  "onValueChange": "onSummaryDiscountNetChange",
+                  "onValueChange": "",
                   "permissions": [],
                   "multiSelect": false
                 },

@@ -104,6 +104,13 @@ npm run lint         # ESLint check
 npm run typecheck    # TypeScript validation
 ```
 
+### Git Workflow Baseline
+
+- Default base branch for all ticket branches: `master`
+- Never infer base branch from `origin/HEAD`
+- If `master` is missing or stale, ask user before branching
+- Only use `main` when user explicitly requests it
+
 ### Testing
 
 - **Vitest** with **@testing-library/react** - config in `vite.config.ts`
@@ -279,31 +286,30 @@ Selecting a fault code fires `handleFaultCodeSelection()` which populates the th
 
 ### Diagnostics Hooks
 
-| Hook                      | Purpose                                                                                                                                                           |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `useDiagnosticsConfig`    | Reads `CountryConfig.diagnosticsConfiguration` from query cache; returns `allowedPositions`, `automaticRows`, `positionDropdownOptions`, `getQuantityForPosition` |
-| `useDiagnosticData`       | Fetches `JobDiagnostic` based on job status; skips if `hiddenForStatuses` applies                                                                                 |
-| `useDiagnosticMaterials`  | Populates diagnostic spare-parts rows from API response                                                                                                           |
-| `usePositionDropdownSync` | Syncs position dropdown options and enforces row limits across all spare-part rows                                                                                |
+| Hook                       | Purpose                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useDiagnosticsConfig`     | Reads `CountryConfig.diagnosticsConfiguration` from query cache; returns `allowedPositions`, `automaticRows`, `positionDropdownOptions`, `getQuantityForPosition`   |
+| `useDiagnosticData`        | Fetches `JobDiagnostic` based on job status; skips if `hiddenForStatuses` applies                                                                                   |
+| `useDiagnosticMaterials`   | Populates diagnostic spare-parts rows from API response                                                                                                             |
+| `usePositionDropdownSync`  | Syncs position dropdown options and enforces row limits across all spare-part rows                                                                                  |
+| `usePostRecalculatePrices` | Mutation (in `api/services/jobs/hooks.ts`) called onBlur of price fields; response includes `priceSummaryDetailed` used to refresh row/summary values               |
+| `usePostValidateAndSave`   | Mutation called on save/validate actions; response normalized via `extractDiagnosticFromValidateResponse` before being written to the `["diagnostic", jobId]` cache |
 
 ### Country-Driven Rules
 
 `CountryConfig.diagnosticsConfiguration.rules[]` drives which positions/quantities are allowed per `actionType` + `jobType` combination. `useDiagnosticsConfig` resolves this at runtime.
 
-### Price Calculation
+### Price Calculation (server-driven)
 
-`useSparePartPriceCalculation` hook (in `SparePartsRow`) + `src/utils/priceCalculator.ts` utility handle per-row and total price logic.
+Price calculation is performed by the backend, not the UI. `JobOverview` calls `usePostRecalculatePrices` (onBlur of price-relevant fields) and `usePostValidateAndSave` (on validate/save). Both responses carry `priceSummaryDetailed` (and/or a `diagnostic` payload) which the UI renders as-is.
 
-The mode is controlled by `CountryConfig.diagnosticsConfiguration.priceCalculationMode: "GROSS_PRICE" | "NET_PRICE"`, defaulting to `"GROSS_PRICE"` if absent.
-
-- **GROSS_PRICE mode**: `suggestedNetPrice = netAmount = qty×unitPrice` → `grossAmount = netAmount + taxAmount` → `totalAmount = grossAmount − discountAmount (gross × disc%)`
-- **NET_PRICE mode**: `suggestedNetPrice = qty×unitPrice` → `netAmount = suggestedNetPrice − discountAmount (suggested × disc%)` → `grossAmount = totalAmount = netAmount + taxAmount`
-- **Negative discounts are not allowed.** `priceCalculator.ts` clamps all discount calculations to ≥0. Back-calculated discounts that would go negative are clamped to 0 and the affected amount is reset to its maximum valid value.
-- **Stale price detection**: both `useDiagnosticsManager` and `useSparePartPriceCalculation` detect when the backend returned stale downstream prices (comparing `roundToTwo(qty * unitPrice) !== roundToTwo(suggestedNetPrice)`). When stale, a full recalculation is triggered even if `grossAmount !== 0`.
-- **Commercial Goodwill rows** always use GROSS_PRICE regardless of country mode — `SparePartsRow` forces this via `effectivePriceCalculationMode`.
-- Summary writebacks use `distributeGrossToRows` / `distributeNetToRows` to apply a calculated discount percent to eligible rows.
-- Distribution targets only `SP`, `PN`, `AC` positions; all other positions are excluded.
-- Read `priceCalculationMode` from `useDiagnosticsContext()` — never prop-drill or hardcode mode.
+- `extractDiagnosticFromValidateResponse(data, jobId)` (exported from `JobOverview.tsx`) normalizes the validate/save response into a `JobDiagnostic` shape before it is written to the cache: `queryClient.setQueryData(["diagnostic", jobId], diagnostic)`.
+- `src/utils/priceCalculator.ts` and `useSparePartPriceCalculation` are **not authoritative** anymore — use them only for client-side previews and stale-price detection, never to persist a final value over what the backend returned.
+- **Stale price detection**: comparing `roundToTwo(qty * unitPrice) !== roundToTwo(suggestedNetPrice)` still flags rows where the backend response looks out of date; this should trigger a new `postRecalculatePrices` call, not a local recompute-and-store.
+- **Negative discounts are not allowed.** `priceCalculator.ts` clamps all discount calculations to ≥0 for any local/preview math.
+- **Commercial Goodwill rows** are still expected to behave like GROSS_PRICE mode; confirm via the `diagnostic`/`priceSummaryDetailed` response rather than recalculating locally.
+- Distribution helpers (`distributeGrossToRows` / `distributeNetToRows`) may build request payloads (target positions `SP`, `PN`, `AC`), but the values rendered after distribution must come from the backend response.
+- Read `priceCalculationMode` from `useDiagnosticsContext()` for display/formatting decisions only — never to compute persisted totals.
 
 ## GenericFormContext
 

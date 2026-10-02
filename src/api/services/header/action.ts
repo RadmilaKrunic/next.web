@@ -12,6 +12,10 @@ export interface HeaderUserData {
   roles: string[];
   permissions: string[];
   countryCode: string;
+  // Countries the logged-in user has access to (in addition to `countryCode`).
+  // Used to resolve which UI configuration to apply for resources that
+  // belong to a country other than the user's current/default one.
+  availableCountries?: string[];
   language: string;
   locale: string;
   consent?: ConsentData;

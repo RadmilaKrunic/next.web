@@ -9,6 +9,7 @@ const {
   useMutationMock,
   useParamsMock,
   useLocationMock,
+  useResourceUIConfigurationMock,
   invalidateQueriesMock,
   setQueryDataMock,
   mutateMock,
@@ -22,10 +23,10 @@ const {
   useActionWithValidationMock,
   actionWithValidationRunnerMock,
   putMock,
+  createUiConfig,
   queryStateRef,
   formInitStateRef,
   formValuesRef,
-  uiConfigRef,
   userRef,
 } = vi.hoisted(() => ({
   useQueryClientMock: vi.fn(),
@@ -33,6 +34,7 @@ const {
   useMutationMock: vi.fn(),
   useParamsMock: vi.fn(),
   useLocationMock: vi.fn(),
+  useResourceUIConfigurationMock: vi.fn(),
   invalidateQueriesMock: vi.fn(),
   setQueryDataMock: vi.fn(),
   mutateMock: vi.fn(),
@@ -46,6 +48,16 @@ const {
   useActionWithValidationMock: vi.fn(),
   actionWithValidationRunnerMock: vi.fn(),
   putMock: vi.fn((url?: string) => Promise.resolve({ url })),
+  // Fresh config per test: the component mutates section.isDisabled.
+  createUiConfig: () => ({
+    forms: [
+      {
+        name: "ASCOverview",
+        sections: [{ name: "generalInfo", isDisabled: true, areas: [{ fields: [] }] }],
+        actions: [{ onAction: "onDeactivateASC" }],
+      },
+    ],
+  }),
   queryStateRef: {
     current: {
       data: undefined as any,
@@ -119,17 +131,6 @@ const {
       parentNotificationSMS: true,
     } as Record<string, unknown>,
   },
-  uiConfigRef: {
-    current: {
-      forms: [
-        {
-          name: "ASCOverview",
-          sections: [{ name: "generalInfo", isDisabled: true, areas: [{ fields: [] }] }],
-          actions: [{ onAction: "onDeactivateASC" }],
-        },
-      ],
-    },
-  },
   userRef: {
     current: {
       ascId: "ASC-1",
@@ -153,6 +154,12 @@ vi.mock("react-router-dom", async () => {
 
 vi.mock("hooks/useBreadcrumbs", () => ({
   useBreadcrumbs: vi.fn(),
+}));
+
+// The real hook calls useQuery internally, which is mocked below to return the
+// ASC query state, so the hook itself must be mocked.
+vi.mock("hooks/useUIConfiguration", () => ({
+  useResourceUIConfiguration: (...args: unknown[]) => useResourceUIConfigurationMock(...args),
 }));
 
 vi.mock("contexts/messagescontext", () => ({
@@ -285,10 +292,16 @@ describe("AscOverview", () => {
     useParamsMock.mockReturnValue({});
     useLocationMock.mockReturnValue({ hash: "#generalInfo" });
 
+    useResourceUIConfigurationMock.mockReturnValue({
+      uiConfiguration: createUiConfig(),
+      countryCode: "TR",
+      isLoading: false,
+      isError: false,
+    });
+
     useQueryClientMock.mockReturnValue({
       getQueryData: (key: unknown[]) => {
         if (key[0] === "user") return userRef.current;
-        if (key[0] === "UIConfiguration") return uiConfigRef.current;
         return undefined;
       },
       invalidateQueries: invalidateQueriesMock,
@@ -326,6 +339,62 @@ describe("AscOverview", () => {
     render(<AscOverview />);
 
     expect(screen.getByTestId("loading")).toBeInTheDocument();
+  });
+
+  it("resolves UI configuration using the ASC's default country", () => {
+    queryStateRef.current = {
+      isLoading: false,
+      data: {
+        ascId: "ASC-1",
+        name: "Bosch ASC",
+        isActive: true,
+        defaultCountry: "ZA",
+        address: {},
+      },
+    };
+
+    render(<AscOverview />);
+
+    expect(useResourceUIConfigurationMock).toHaveBeenCalledWith("ZA");
+  });
+
+  it("renders the section from the resolved UI configuration", () => {
+    queryStateRef.current = {
+      isLoading: false,
+      data: {
+        ascId: "ASC-1",
+        name: "Bosch ASC",
+        isActive: true,
+        address: {},
+      },
+    };
+
+    render(<AscOverview />);
+
+    expect(screen.getByTestId("section-generalInfo")).toBeInTheDocument();
+  });
+
+  it("renders no section when ASCOverview form is missing from configuration", () => {
+    useResourceUIConfigurationMock.mockReturnValue({
+      uiConfiguration: { forms: [] },
+      countryCode: "TR",
+      isLoading: false,
+      isError: false,
+    });
+    queryStateRef.current = {
+      isLoading: false,
+      data: {
+        ascId: "ASC-1",
+        name: "Bosch ASC",
+        isActive: true,
+        address: {},
+      },
+    };
+
+    render(<AscOverview />);
+
+    expect(screen.queryByTestId("section-generalInfo")).not.toBeInTheDocument();
+    expect(screen.getByTestId("overview-header")).toBeInTheDocument();
   });
 
   it("maps ASC response into form initial values", async () => {

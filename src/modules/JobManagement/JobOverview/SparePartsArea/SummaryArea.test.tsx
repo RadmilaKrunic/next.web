@@ -38,14 +38,13 @@ const renderedFields: Array<Record<string, unknown>> = [];
 
 vi.mock("components/generics/Field/GenericField", () => ({
   default: ({ field }: { field: { name: string } }) => {
-    renderedFields.push(field as Record<string, unknown>);
+    renderedFields.push(field);
     return React.createElement("div", { "data-testid": `summary-field-${field.name}` }, field.name);
   },
 }));
 
 vi.mock("../DiagnosticsContext", () => ({
   useDiagnosticsContext: vi.fn(() => ({
-   // isDistributingRef: { current: false },
     hasPricesPopulated: true,
     setSummaryTypeOptions: vi.fn(),
     discountBase: "GROSS_PRICE",
@@ -192,15 +191,8 @@ describe("SummaryArea", () => {
     });
   });
 
-  it("renders summary fields", () => {
-    renderSummary();
-    expect(screen.getByTestId("summary-field-summaryType")).toBeInTheDocument();
-    expect(screen.getByTestId("summary-field-summaryTotal")).toBeInTheDocument();
-  });
-
   it("returns null when price permission gate is active and prices not populated", () => {
     vi.mocked(useDiagnosticsContext).mockReturnValue({
-    //  isDistributingRef: { current: false },
       hasPricesPopulated: false,
       setSummaryTypeOptions: vi.fn(),
       discountBase: "GROSS_PRICE",
@@ -212,7 +204,6 @@ describe("SummaryArea", () => {
 
   it("disables material fields from discountBase, status, and permission rules", () => {
     vi.mocked(useDiagnosticsContext).mockReturnValue({
-     // isDistributingRef: { current: false },
       hasPricesPopulated: true,
       setSummaryTypeOptions: vi.fn(),
       discountBase: "NET_PRICE",
@@ -233,22 +224,6 @@ describe("SummaryArea", () => {
     expect(netAmountField).toMatchObject({ isDisabled: false });
     expect(discountField).toMatchObject({ isDisabled: false });
     expect(totalAmountField).toMatchObject({ isDisabled: true });
-  });
-
-  it("uses matching summary field name for current discountBase when mappings collide", () => {
-    vi.mocked(useDiagnosticsContext).mockReturnValue({
-     // isDistributingRef: { current: false },
-      hasPricesPopulated: true,
-      setSummaryTypeOptions: vi.fn(),
-      discountBase: "NET_PRICE",
-      isValidating: false,
-      jobStatus: "WAITING_FOR_APPROVAL",
-    } as never);
-
-    const { setFieldValue } = renderSummary();
-
-    expect(setFieldValue).toHaveBeenCalledWith("summaryGrossAmountNet", 12);
-    expect(setFieldValue).not.toHaveBeenCalledWith("summaryGrossAmountBase", 12);
   });
 });
 

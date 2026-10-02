@@ -27,7 +27,7 @@ export function useRangeSelection({ name, isDateValid }: UseRangeSelectionProps)
       setTempRangeStart(startDateString);
       setTempRangeEnd(null);
 
-      const startFormatted = formatDateForBackend(new Date(startDateString), true, false);
+      const startFormatted = formatDateForBackend(startDateString, true, false);
       void setFieldValue(name, `${startFormatted},`);
     } else {
       const start = new Date(tempRangeStart);
@@ -38,16 +38,16 @@ export function useRangeSelection({ name, isDateValid }: UseRangeSelectionProps)
       setTempRangeStart(startDate);
       setTempRangeEnd(endDate);
 
-      const startFormatted = formatDateForBackend(new Date(startDate), true, false);
-      const endFormatted = formatDateForBackend(new Date(endDate), false, true);
+      const startFormatted = formatDateForBackend(startDate, true, false);
+      const endFormatted = formatDateForBackend(endDate, false, true);
       void setFieldValue(name, `${startFormatted},${endFormatted}`);
     }
   };
 
   const handleConfirm = (closeFn: () => void) => {
     if (tempRangeStart && tempRangeEnd) {
-      const startFormatted = formatDateForBackend(new Date(tempRangeStart), true, false);
-      const endFormatted = formatDateForBackend(new Date(tempRangeEnd), false, true);
+      const startFormatted = formatDateForBackend(tempRangeStart, true, false);
+      const endFormatted = formatDateForBackend(tempRangeEnd, false, true);
       flushSync(() => {
         void setFieldValue(name, `${startFormatted},${endFormatted}`);
       });

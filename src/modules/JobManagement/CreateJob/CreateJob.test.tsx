@@ -25,6 +25,46 @@ const useOrderByIdReturnMock = vi.hoisted(() => ({
   isLoading: false,
   error: null as unknown,
 }));
+const selectedCustomerMock = vi.hoisted(() => ({
+  customerId: "customer-1",
+  customerTitle: "Mr",
+  ascId: "1",
+  customerType: "INDIVIDUAL_PRIVATE",
+  firstName: "John",
+  lastName: "Doe",
+  primaryEmail: "john@example.com",
+  phoneNumber: "123456789",
+  mobileNumber: "987654321",
+  companyName: "Bosch GmbH",
+  dealershipName: "Dealer",
+  typeOfIndustry: "INDUSTRY",
+  boschCustomerNumber: "BCN-1",
+  vatNumber: "VAT-1",
+  communicationMedium: "EMAIL",
+  useBillingAddressForDelivery: false,
+  billingAddress: {
+    street: "Billing St",
+    houseNumber: "5",
+    additionalDetails: "",
+    neighborhood: "Center",
+    district: "District 1",
+    city: "Ankara",
+    stateProvinceRegion: "Ankara",
+    postalCode: "34000",
+    countryCode: "TR",
+  },
+  deliveryAddress: {
+    street: "Delivery St",
+    houseNumber: "7",
+    additionalDetails: "",
+    neighborhood: "North",
+    district: "District 2",
+    city: "Istanbul",
+    stateProvinceRegion: "Istanbul",
+    postalCode: "10000",
+    countryCode: "TR",
+  },
+}));
 
 // Mock dependencies
 vi.mock("react-router", async () => {
@@ -105,6 +145,16 @@ vi.mock("react-i18next", () => ({
         customerAndPaymentData: "Customer and Payment Data",
         assetData: "Asset Data",
         isRequired: "is required",
+        customerChangeConfirmModalTitle: "Customer data changed",
+        customerChangeConfirmModalText:
+          "Review original and updated customer information before continuing.",
+        customerChangeComparisonTableLabel: "Customer change comparison",
+        customerChangeField: "Field",
+        customerChangeOriginalValue: "Original value",
+        customerChangeNewValue: "New value",
+        customerChangeStatus: "Status",
+        customerChangeChanged: "Changed",
+        customerChangeEmptyValue: "Not provided",
       };
       return translations[key] || key;
     },
@@ -125,7 +175,7 @@ vi.mock("../../../components/generics/Section/GenericSection", () => ({
     };
     isCollapsed?: boolean;
   }) {
-    const { onAreaValueChange } = useContext(GenericFormContext);
+    const { onAreaValueChange, actionCallbacks } = useContext(GenericFormContext);
     const hasTriggeredRef = useRef(false);
 
     useEffect(() => {
@@ -148,6 +198,15 @@ vi.mock("../../../components/generics/Section/GenericSection", () => ({
                 type="button"
                 data-mode={action.mode}
                 data-testid={`section-action-${action.name}`}
+                onClick={() => {
+                  if (action.onAction === "nextSection") {
+                    actionCallbacks[action.onAction]?.({}, {
+                      setErrors: vi.fn(),
+                      setTouched: vi.fn(),
+                      setFieldValue: vi.fn(),
+                    } as never);
+                  }
+                }}
               >
                 {getActionLabel(action.name)}
               </button>
@@ -397,13 +456,15 @@ describe("CreateJob", () => {
       forms: [mockCreateJobForm],
     });
 
-    return render(
+    const utils = render(
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <CreateJob />
         </BrowserRouter>
       </QueryClientProvider>,
     );
+
+    return { ...utils, queryClient };
   };
 
   describe("Component Rendering", () => {
@@ -446,7 +507,7 @@ describe("CreateJob", () => {
     it("renders Cancel button", async () => {
       renderComponent();
       await waitFor(() => {
-        expect(screen.getByText("Cancel")).toBeInTheDocument();
+        expect(screen.getByTestId("form-action-cancel")).toBeInTheDocument();
       });
     });
 
@@ -483,6 +544,33 @@ describe("CreateJob", () => {
         const submitButton = screen.getByText("Submit");
         expect(submitButton).toBeEnabled();
       });
+    });
+  });
+
+  describe("Customer change confirmation", () => {
+    it("shows original and updated customer values when customer changes", async () => {
+      const user = userEvent.setup();
+      const { queryClient } = renderComponent();
+
+      queryClient.setQueryData(["selectedCustomer"], selectedCustomerMock);
+
+      await waitFor(() => {
+        expect(screen.getByText("Next")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText("Next"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("customer-change-confirm-modal")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("Field")).toBeInTheDocument();
+      expect(screen.getByText("Original value")).toBeInTheDocument();
+      expect(screen.getByText("New value")).toBeInTheDocument();
+      expect(screen.getByText("Changed")).toBeInTheDocument();
+      expect(screen.getByText("firstName")).toBeInTheDocument();
+      expect(screen.getByText("John")).toBeInTheDocument();
+      expect(screen.getByText("Not provided")).toBeInTheDocument();
     });
   });
 
@@ -556,7 +644,7 @@ describe("CreateJob", () => {
     it("renders Cancel button", async () => {
       renderComponent();
       await waitFor(() => {
-        expect(screen.getByText("Cancel")).toBeInTheDocument();
+        expect(screen.getByTestId("form-action-cancel")).toBeInTheDocument();
       });
     });
 
@@ -565,11 +653,11 @@ describe("CreateJob", () => {
       renderComponent();
 
       await waitFor(() => {
-        const cancelButton = screen.getByText("Cancel");
+        const cancelButton = screen.getByTestId("form-action-cancel");
         expect(cancelButton).toBeInTheDocument();
       });
 
-      const cancelButton = screen.getByText("Cancel");
+      const cancelButton = screen.getByTestId("form-action-cancel");
       await user.click(cancelButton);
 
       // Form should reset (we can verify by checking if sections are still there)

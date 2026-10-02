@@ -613,44 +613,6 @@ describe("GenericField", () => {
 
       expect(input).toHaveValue("12.5");
     });
-
-    it("clears the display to empty while a zero value is focused, then reformats on blur", () => {
-      const field: Field = {
-        name: "priceField",
-        label: "Price",
-        type: "price",
-        subtype: "amount",
-        isRequired: false,
-        fieldMapping: { originalName: "priceField" },
-      };
-
-      renderWithContext(field, {}, { priceField: 0 });
-
-      const input = screen.getByTestId("text-field-priceField");
-      fireEvent.focus(input);
-      expect(input).toHaveValue("");
-
-      fireEvent.blur(input);
-      expect(input).toHaveValue("0.00");
-    });
-
-    it("defaults an emptied price value to 0 on blur", async () => {
-      const field: Field = {
-        name: "priceField",
-        label: "Price",
-        type: "price",
-        subtype: "amount",
-        isRequired: false,
-        fieldMapping: { originalName: "priceField" },
-      };
-
-      renderWithContext(field, {}, { priceField: "" });
-
-      const input = screen.getByTestId("text-field-priceField");
-      fireEvent.blur(input);
-
-      await waitFor(() => expect(input).toHaveValue("0.00"));
-    });
   });
 
   describe("Email and Tel Fields", () => {

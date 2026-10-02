@@ -267,10 +267,7 @@ describe("useDateInput", () => {
     expect(formatDateForBackend).toHaveBeenCalled();
 
     const parsedArg = vi.mocked(formatDateForBackend).mock.calls.at(-1)?.[0];
-    expect(parsedArg).toBeInstanceOf(Date);
-    expect((parsedArg as Date).getUTCFullYear()).toBe(2024);
-    expect((parsedArg as Date).getUTCMonth()).toBe(0);
-    expect((parsedArg as Date).getUTCDate()).toBe(10);
+    expect(parsedArg).toBe("2024-01-10");
   });
 
   it("range input with invalid end clears temp end", () => {
@@ -466,10 +463,8 @@ describe("useDateInput", () => {
 
     const startCall = vi.mocked(formatDateForBackend).mock.calls.at(-2)?.[0];
     const endCall = vi.mocked(formatDateForBackend).mock.calls.at(-1)?.[0];
-    expect(startCall).toBeInstanceOf(Date);
-    expect(endCall).toBeInstanceOf(Date);
-    expect((startCall as Date).getUTCDate()).toBe(1);
-    expect((endCall as Date).getUTCDate()).toBe(10);
+    expect(startCall).toBe("2024-01-01");
+    expect(endCall).toBe("2024-01-10");
   });
 
   it("blur with complete but invalid single date clears field", () => {

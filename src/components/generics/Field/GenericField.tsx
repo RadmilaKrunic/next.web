@@ -22,7 +22,7 @@ import {
 } from "./GenericField.utils";
 import { useContext, useState } from "react";
 import useFieldVisibilityReset from "./useFieldVisibilityReset";
-import { GenericFormContext } from "../Form/GenericForm.context";
+import { GenericFormContext, type ActionCallback } from "../Form/GenericForm.context";
 import { useDiagnosticsContext } from "modules/JobManagement/JobOverview/DiagnosticsContext";
 import {
   handleAutoCompleteSelect,
@@ -38,8 +38,6 @@ import { CountryConfig } from "api/services/countryConfiguration/countryConfigur
 import { BareToolOption } from "api/services/orders/orders.types";
 import FieldError from "./components/FieldError";
 import { INELIGIBLE_JOB_TYPES } from "modules/JobManagement/warranty.utils";
-
-const LOCKED_VALUE_CHANGE_FIELDS_WHILE_EDITING = new Set(["onRecalculatePrices"]);
 
 type GenericFieldProps = {
   field: Field;
@@ -81,7 +79,8 @@ interface FieldRenderCtx {
   };
   allowedPositions?: AllowedPosition[];
 }
-const fieldValueChanged = async ( name: string,
+const fieldValueChanged = async (
+  name: string,
   newValue: FieldValueType,
   setFieldValue: (
     field: string,
@@ -131,11 +130,13 @@ const handleFieldChangeAsync = async (
   allFields: Field[],
   field: Field,
   formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>,
-  actionCallbacks: Record<string, (...args: unknown[]) => unknown>,
+  actionCallbacks: Record<string, ActionCallback>,
 ): Promise<void> => {
   await fieldValueChanged(name, newValue, setFieldValue, allFields, field, formikContext);
   if (field.onValueChange) {
-    const handler = actionCallbacks[field.onValueChange];
+    const handler = actionCallbacks[field.onValueChange] as
+      | ((...args: unknown[]) => unknown)
+      | undefined;
     if (typeof handler === "function") {
       let result;
       if (handler.length > 1) {
@@ -162,14 +163,13 @@ const handleFieldBlurAsync = async (
   allFields: Field[],
   field: Field,
   formikContext: ReturnType<typeof useFormikContext<Record<string, unknown>>>,
-  actionCallbacks: Record<string, (...args: unknown[]) => unknown>,
+  actionCallbacks: Record<string, ActionCallback>,
 ): Promise<void> => {
   await fieldValueChanged(name, newValue, setFieldValue, allFields, field, formikContext);
   if (field.onBlur) {
-    const handler = actionCallbacks[field.onBlur];
+    const handler = actionCallbacks[field.onBlur] as ((...args: unknown[]) => unknown) | undefined;
     if (typeof handler === "function") {
       const result = handler(name, newValue);
-      console.log(`onBlur ${field.onBlur} result:`, result);
       if (result instanceof Promise) {
         result.catch((error: unknown) => {
           console.error(`onBlur ${field.onBlur} failed:`, error);
@@ -272,7 +272,6 @@ function renderTextPriceField(ctx: FieldRenderCtx): ReactElement {
             const currentVal = values[name];
             if (currentVal === "" || currentVal == null) void setFieldValue(name, 0);
           }
-          //remove this also
           onBlurActions(field, e, formikContext, t);
           handleBlur(field?.name, e.target.value);
         }}
@@ -512,8 +511,17 @@ function renderUploadField(ctx: FieldRenderCtx): ReactElement {
 }
 
 function renderTextareaField(ctx: FieldRenderCtx): ReactElement {
-  const { field, fullWidth, className, restProps, effectiveIsDisabled, values, t, handleChange, handleBlur } =
-    ctx;
+  const {
+    field,
+    fullWidth,
+    className,
+    restProps,
+    effectiveIsDisabled,
+    values,
+    t,
+    handleChange,
+    handleBlur,
+  } = ctx;
   const { name, label } = field;
   return (
     <span className={`${fullWidth} ${className || ""}`} {...restProps}>

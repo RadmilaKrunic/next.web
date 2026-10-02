@@ -358,6 +358,98 @@ function validateSerialNumberField({
   }
 }
 
+const MANUFACTURED_MONTH_ERROR_KEY = "manufacturedDateMustBeBeforePurchaseDate";
+
+const getYearMonthKey = (year: number, month: number): number | null => {
+  if (!Number.isInteger(year) || !Number.isInteger(month)) return null;
+  if (month < 1 || month > 12) return null;
+  return year * 12 + month;
+};
+
+export const parsePurchaseYearMonth = (value: unknown): number | null => {
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  const isoDateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (isoDateMatch) {
+    const year = Number(isoDateMatch[1]);
+    const month = Number(isoDateMatch[2]);
+    return getYearMonthKey(year, month);
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return getYearMonthKey(parsed.getFullYear(), parsed.getMonth() + 1);
+};
+
+export const parseManufacturedYearMonth = (value: unknown): number | null => {
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  const monthYearMatch = /^(\d{1,2})\/(\d{4})$/.exec(value);
+  if (monthYearMatch) {
+    const month = Number(monthYearMatch[1]);
+    const year = Number(monthYearMatch[2]);
+    return getYearMonthKey(year, month);
+  }
+
+  const compactYearMonthMatch = /^(\d{4})(\d{2})$/.exec(value);
+  if (compactYearMonthMatch) {
+    const year = Number(compactYearMonthMatch[1]);
+    const month = Number(compactYearMonthMatch[2]);
+    return getYearMonthKey(year, month);
+  }
+
+  const isoDateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (isoDateMatch) {
+    const year = Number(isoDateMatch[1]);
+    const month = Number(isoDateMatch[2]);
+    return getYearMonthKey(year, month);
+  }
+
+  return null;
+};
+
+function validateManufacturedBeforePurchaseDate({
+  field,
+  errors,
+  fieldName,
+  values,
+  t,
+}: {
+  field: Field;
+  errors: Record<string, string>;
+  fieldName: string;
+  values: Record<string, unknown>;
+  t: (key: string) => string;
+}): void {
+  if (field.fieldMapping?.originalName !== "purchaseDate") return;
+
+  const purchaseYearMonth = parsePurchaseYearMonth(values[fieldName]);
+  if (!purchaseYearMonth) {
+    if (errors[fieldName] === t(MANUFACTURED_MONTH_ERROR_KEY)) {
+      delete errors[fieldName];
+    }
+    return;
+  }
+
+  const manufacturedDateFieldName = fieldName.replace("purchaseDate", "manufacturedDate");
+  const manufacturedYearMonth = parseManufacturedYearMonth(values[manufacturedDateFieldName]);
+  if (!manufacturedYearMonth) {
+    if (errors[fieldName] === t(MANUFACTURED_MONTH_ERROR_KEY)) {
+      delete errors[fieldName];
+    }
+    return;
+  }
+
+  if (manufacturedYearMonth > purchaseYearMonth) {
+    errors[fieldName] = t(MANUFACTURED_MONTH_ERROR_KEY);
+    return;
+  }
+
+  if (errors[fieldName] === t(MANUFACTURED_MONTH_ERROR_KEY)) {
+    delete errors[fieldName];
+  }
+}
+
 function validateSparePartCompatibility({
   field,
   errors,
@@ -491,6 +583,13 @@ function validateSingleField({
 
   validatePattern(field, errors, fieldName, value, hasValue, t);
   validateLengthAndRange(field, errors, fieldName, value, hasValue, t);
+  validateManufacturedBeforePurchaseDate({
+    field,
+    errors,
+    fieldName,
+    values,
+    t,
+  });
   validateSerialNumberField({
     field,
     errors,

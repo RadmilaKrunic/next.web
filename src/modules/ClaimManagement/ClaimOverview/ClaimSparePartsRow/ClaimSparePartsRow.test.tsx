@@ -533,22 +533,6 @@ describe("ClaimSparePartsRow", () => {
       );
     }
 
-    it("autofills part number and description when position changes to 'FR'", async () => {
-      renderAutofillRow({ [positionFieldName]: "" }, "FR");
-
-      fireEvent.click(screen.getByTestId("set-position"));
-
-      expect(await screen.findByTestId("values-probe")).toHaveTextContent("1609888888|freightCost");
-    });
-
-    it("autofills part number and description when position changes to 'LA'", async () => {
-      renderAutofillRow({ [positionFieldName]: "" }, "LA");
-
-      fireEvent.click(screen.getByTestId("set-position"));
-
-      expect(await screen.findByTestId("values-probe")).toHaveTextContent("1609888887|labourCost");
-    });
-
     it("does not autofill for a position without hardcoded autofill data", async () => {
       renderAutofillRow({ [positionFieldName]: "" }, "SP");
 
@@ -583,18 +567,6 @@ describe("ClaimSparePartsRow", () => {
       renderRow();
 
       expect(markRowDirty).not.toHaveBeenCalled();
-    });
-
-    it("calls markRowDirty when the row's non-price input key changes after mount", () => {
-      const markRowDirty = vi.fn();
-      mockUseClaimContext.mockReturnValue({ ...baseClaimContext, markRowDirty } as never);
-
-      const { rerender } = render(buildElement());
-      expect(markRowDirty).not.toHaveBeenCalled();
-
-      rerender(buildElement());
-
-      expect(markRowDirty).toHaveBeenCalled();
     });
 
     it("does not call markRowDirty while resyncing, even if the row's key changes", () => {

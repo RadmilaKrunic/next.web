@@ -123,8 +123,10 @@ export function useDatePicker({ name, calendar }: UseDatePickerProps) {
       // setDefaultToday should not be used with date ranges
       if (calendar?.setDefaultToday && !calendar?.allowDateRange) {
         const today = new Date();
-        today.setHours(12, 0, 0, 0);
-        void setFieldValue(name, today.toISOString());
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, "0");
+        const day = String(today.getDate()).padStart(2, "0");
+        void setFieldValue(name, `${year}-${month}-${day}T00:00:00.000Z`);
       } else if (calendar?.defaultDate) {
         void setFieldValue(name, calendar.defaultDate);
       }

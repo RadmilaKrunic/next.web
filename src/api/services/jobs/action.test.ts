@@ -25,8 +25,10 @@ import {
   postCustomerAnswer,
   postToggleJobHold,
   postValidateAndSave,
+  postRecalculatePrices,
   postDiagnostic,
   updateJobAttachments,
+  postPurchaseDate,
 } from "./action";
 
 vi.mock("api/axios-client/axiosClient", () => ({
@@ -303,19 +305,35 @@ describe("getCostEstimationPdf", () => {
 });
 
 describe("postValidateAndSave", () => {
-  it("returns validate response", async () => {
-    mockPost.mockResolvedValueOnce({ data: { errorMessages: [] } });
-    const result = await postValidateAndSave("J001", { materials: [] });
-    expect(result).toEqual({ errorMessages: [] });
-    expect(mockPost).toHaveBeenCalledWith("/v1/jobs/flow/validate-and-save", {
+  it("posts payload and returns response data", async () => {
+    const data = { errorMessages: [], priceSummaryDetailed: { byJobType: [] } };
+    mockPost.mockResolvedValueOnce({ data });
+    const result = await postValidateAndSave("J001", { actionType: "REPAIR" });
+    expect(result).toEqual(data);
+    expect(mockPost).toHaveBeenCalledWith("/v2/jobs/flow/validate-and-save", {
       jobId: "J001",
-      materials: [],
+      actionType: "REPAIR",
     });
   });
 
   it("throws on error", async () => {
     mockPost.mockRejectedValueOnce(new Error("fail"));
     await expect(postValidateAndSave("J001", {})).rejects.toThrow("fail");
+  });
+});
+
+describe("postRecalculatePrices", () => {
+  it("posts payload and returns response data", async () => {
+    const data = { errorMessages: [], priceSummaryDetailed: { byJobType: [] } };
+    mockPost.mockResolvedValueOnce({ data });
+    const result = await postRecalculatePrices({ jobId: "J001" });
+    expect(result).toEqual(data);
+    expect(mockPost).toHaveBeenCalledWith("/v1/diagnostic/prices/recalculate", { jobId: "J001" });
+  });
+
+  it("throws on error", async () => {
+    mockPost.mockRejectedValueOnce(new Error("fail"));
+    await expect(postRecalculatePrices({})).rejects.toThrow("fail");
   });
 });
 
@@ -342,5 +360,20 @@ describe("updateJobAttachments", () => {
   it("throws on error", async () => {
     mockPut.mockRejectedValueOnce(new Error("fail"));
     await expect(updateJobAttachments("J001", [])).rejects.toThrow("fail");
+  });
+});
+
+describe("postPurchaseDate", () => {
+  it("patches purchase date", async () => {
+    mockPatch.mockResolvedValueOnce(undefined);
+    await postPurchaseDate("J001", "2024-01-01");
+    expect(mockPatch).toHaveBeenCalledWith("/v1/jobs/J001/purchase-date", {
+      purchaseDate: "2024-01-01",
+    });
+  });
+
+  it("throws on error", async () => {
+    mockPatch.mockRejectedValueOnce(new Error("fail"));
+    await expect(postPurchaseDate("J001", "2024-01-01")).rejects.toThrow("fail");
   });
 });

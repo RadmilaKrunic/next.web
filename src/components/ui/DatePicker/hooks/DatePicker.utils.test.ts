@@ -62,11 +62,9 @@ describe("formatDateForBackend", () => {
     expect(formatDateForBackend("not-a-date")).toBeNull();
   });
 
-  it("returns ISO string for valid date", () => {
+  it("returns local Y/M/D with midnight time for valid date", () => {
     const result = formatDateForBackend("2024-06-01");
-    // Result should be an ISO string containing the date (may be 05-31 or 06-01 depending on timezone)
-    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    expect(result).toContain("2024-");
+    expect(result).toBe("2024-06-01T00:00:00.000Z");
   });
 
   it("sets start of day (UTC midnight) with startOfTheDayFlag", () => {
@@ -83,6 +81,19 @@ describe("formatDateForBackend", () => {
     const date = new Date("2024-06-01T00:00:00.000Z");
     const result = formatDateForBackend(date, true);
     expect(result).toBe("2024-06-01T00:00:00.000Z");
+  });
+
+  it("preserves local calendar day digits for Date input", () => {
+    const date = new Date(2024, 5, 14);
+    const result = formatDateForBackend(date);
+
+    expect(result).toBe("2024-06-14T00:00:00.000Z");
+  });
+
+  it("preserves leading Y/M/D digits from ISO-like strings", () => {
+    const result = formatDateForBackend("2024-06-15T00:00:00.000Z");
+
+    expect(result).toBe("2024-06-15T00:00:00.000Z");
   });
 });
 

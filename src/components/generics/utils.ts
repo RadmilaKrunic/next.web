@@ -349,7 +349,6 @@ export const mapFieldToFieldMapping = (field: Field): Field => {
     map,
     nameStartsWith,
   };
-
   return field;
 };
 

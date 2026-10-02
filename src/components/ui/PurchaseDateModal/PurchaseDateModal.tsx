@@ -10,6 +10,12 @@ import { MessagesContext } from "contexts/messagescontext";
 import { getApiErrorMessage } from "utils/getApiErrorMessage";
 import { format } from "date-fns";
 import "./PurchaseDateModal.scss";
+import { JobOverviewItem } from "../../../modules/JobManagement/JobList/JobList.types";
+import {
+  parseManufacturedYearMonth,
+  parsePurchaseYearMonth,
+} from "../../generics/Form/formValidation";
+import FieldError from "../../generics/Field/components/FieldError";
 
 interface PurchaseDateModalProps {
   jobId: string;
@@ -44,6 +50,8 @@ function PurchaseDateModal({ jobId, isOpen, onClose }: Readonly<PurchaseDateModa
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { setMessages } = useContext(MessagesContext);
+  const manufactureDate = queryClient.getQueryData<JobOverviewItem>(["job", jobId])?.job?.asset
+    ?.manufacturedDate;
 
   const purchaseDateMutation = usePostPurchaseDate({
     onSuccess: () => {
@@ -73,9 +81,25 @@ function PurchaseDateModal({ jobId, isOpen, onClose }: Readonly<PurchaseDateModa
     onClose();
   };
 
+  const validate = (values: PurchaseDateFormValues) => {
+    const errors: Record<string, string> = {};
+    const manufacturedYearMonth = parseManufacturedYearMonth(manufactureDate);
+    const purchaseYearMonth = parsePurchaseYearMonth(values.purchaseDate);
+
+    if (manufacturedYearMonth && purchaseYearMonth && purchaseYearMonth < manufacturedYearMonth) {
+      errors.purchaseDate =
+        t("purchaseDateMustBeSameOrAfterManufacturedDate") + ` (${manufactureDate}).`;
+    }
+    return errors;
+  };
+
   return (
-    <Formik<PurchaseDateFormValues> initialValues={{ purchaseDate: null }} onSubmit={handleSubmit}>
-      {({ values, submitForm }) => (
+    <Formik<PurchaseDateFormValues>
+      initialValues={{ purchaseDate: null }}
+      onSubmit={handleSubmit}
+      validate={validate}
+    >
+      {({ values, submitForm, isValid, resetForm }) => (
         <Dialog
           ref={modalRef}
           modal
@@ -97,6 +121,7 @@ function PurchaseDateModal({ jobId, isOpen, onClose }: Readonly<PurchaseDateModa
 
           <div className="modal-datepicker">
             <DatePicker name="purchaseDate" label={t("purchaseDate")} calendar={calendarConfig} />
+            <FieldError name="purchaseDate" />
             {errorMessage && (
               <div className="text-input-error-message" role="alert">
                 {errorMessage}
@@ -106,7 +131,10 @@ function PurchaseDateModal({ jobId, isOpen, onClose }: Readonly<PurchaseDateModa
           <div className="modal-actions action-buttons">
             <Button
               mode="secondary"
-              onClick={handleCancel}
+              onClick={() => {
+                resetForm();
+                handleCancel();
+              }}
               data-testid="purchase-date-cancel-button"
               disabled={purchaseDateMutation.isPending}
               type="button"
@@ -120,7 +148,7 @@ function PurchaseDateModal({ jobId, isOpen, onClose }: Readonly<PurchaseDateModa
                 void submitForm();
               }}
               data-testid="purchase-date-submit-button"
-              disabled={!values.purchaseDate || purchaseDateMutation.isPending}
+              disabled={!values.purchaseDate || purchaseDateMutation.isPending || !isValid}
             >
               {t("checkEligibility")}
             </Button>

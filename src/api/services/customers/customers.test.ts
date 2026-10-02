@@ -24,13 +24,85 @@ import {
   getCustomerByCompanyName,
   getCustomersByAsc,
   getCustomerById,
-  createClient,
+  getCustomerJobs,
+  getCustomerOrders,
 } from "./customers";
 
 const mockCustomers = [{ id: "1", firstName: "John", lastName: "Doe" }];
 const mockCustomer = { id: "1", firstName: "John", lastName: "Doe" };
 
 beforeEach(() => vi.clearAllMocks());
+
+describe("getCustomerJobs", () => {
+  it("fetches a customer jobs page with search and pagination params", async () => {
+    const page = { number: 0, totalElements: 1, totalPages: 1, size: 10 };
+    const content = [
+      {
+        jobId: "job-1",
+        orderId: "order-1",
+        serialNumber: "SN-1",
+        assetName: "Drill",
+        createdOn: "2026-09-01T00:00:00Z",
+        updatedOn: "2026-09-02T00:00:00Z",
+        assigneeName: "Pat",
+        status: "COMPLETED",
+      },
+    ];
+    const response = { page, content };
+    mockGet.mockResolvedValueOnce({ data: response });
+
+    await expect(
+      getCustomerJobs("client-123", { searchTerm: "drill", page: 1, size: 20 }),
+    ).resolves.toEqual(response);
+    expect(mockGet).toHaveBeenCalledWith("/client-123/jobs", {
+      params: { searchTerm: "drill", page: 1, size: 20 },
+    });
+  });
+
+  it("uses backend defaults and omits blank search terms", async () => {
+    mockGet.mockResolvedValueOnce({ data: { page: {}, content: [] } });
+
+    await getCustomerJobs("client-123", { searchTerm: "   " });
+
+    expect(mockGet).toHaveBeenCalledWith("/client-123/jobs", {
+      params: { searchTerm: undefined, page: 0, size: 10 },
+    });
+  });
+});
+
+describe("getCustomerOrders", () => {
+  it("fetches the requested customer order page", async () => {
+    const response = {
+      page: { number: 1, totalElements: 23, totalPages: 3, size: 10 },
+      content: [
+        {
+          orderId: "order-1",
+          assets: 2,
+          createdOn: "2026-09-01T00:00:00Z",
+          updatedOn: "2026-09-02T00:00:00Z",
+        },
+      ],
+    };
+    mockGet.mockResolvedValueOnce({ data: response });
+
+    await expect(
+      getCustomerOrders("client-123", { searchTerm: "order", page: 1, size: 10 }),
+    ).resolves.toEqual(response);
+    expect(mockGet).toHaveBeenCalledWith("/client-123/orders", {
+      params: { searchTerm: "order", page: 1, size: 10 },
+    });
+  });
+
+  it("uses backend defaults and omits blank search terms", async () => {
+    mockGet.mockResolvedValueOnce({ data: { page: {}, content: [] } });
+
+    await getCustomerOrders("client-123", { searchTerm: "   " });
+
+    expect(mockGet).toHaveBeenCalledWith("/client-123/orders", {
+      params: { searchTerm: undefined, page: 0, size: 10 },
+    });
+  });
+});
 
 describe("getCustomerByFirstName", () => {
   it("returns customers on success", async () => {
@@ -134,33 +206,5 @@ describe("getCustomerById", () => {
   it("throws error with message on failure", async () => {
     mockGet.mockRejectedValueOnce({ message: "not found" });
     await expect(getCustomerById("1")).rejects.toThrow("Error fetching customer by id: not found");
-  });
-});
-
-describe("createClient", () => {
-  const payload = {
-    clientId: "1",
-    firstName: "John",
-    lastName: "Doe",
-    email: "john@example.com",
-  } as never;
-
-  it("sends a PUT request with the payload and returns the updated customer", async () => {
-    mockPut.mockResolvedValueOnce({ data: mockCustomer });
-    const result = await createClient(payload);
-    expect(result).toEqual(mockCustomer);
-    expect(mockPut).toHaveBeenCalledWith("/1", payload);
-  });
-
-  it("throws error with axios message on failure", async () => {
-    mockPut.mockRejectedValueOnce({ message: "duplicate email" });
-    await expect(createClient(payload)).rejects.toThrow("Error updating client: duplicate email");
-  });
-
-  it("throws error with stringified error when not an axios error", async () => {
-    mockPut.mockRejectedValueOnce("plain string failure");
-    await expect(createClient(payload)).rejects.toThrow(
-      "Error updating client: plain string failure",
-    );
   });
 });

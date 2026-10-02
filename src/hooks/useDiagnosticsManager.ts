@@ -194,7 +194,6 @@ const buildEmptyMaterial = (
   jobType: string,
   quantity: number,
   t: TFunction<"translation", "app">,
-  // mode?: discountBase,
 ): MaterialItem => {
   const autofill = getPositionAutofill(t)[position];
   const base: MaterialItem = {
@@ -512,13 +511,20 @@ const RESETTABLE_MATERIAL_STATUSES = new Set(["REVISED", "REJECTED"]);
  */
 const shiftSparePartsKey = (key: string, deletedIndex: number): string | null => {
   if (!key.startsWith(SPARE_PARTS_PREFIX)) return key;
+
   const tail = key.slice(SPARE_PARTS_PREFIX.length);
-  const match = /^(\d+)(.*)$/.exec(tail);
-  if (!match) return key;
-  const currentIndex = Number(match[1]);
+  let endOfIndex = 0;
+  while (endOfIndex < tail.length && tail[endOfIndex] >= "0" && tail[endOfIndex] <= "9") {
+    endOfIndex += 1;
+  }
+
+  if (endOfIndex === 0) return key;
+
+  const currentIndex = Number(tail.slice(0, endOfIndex));
+  const suffix = tail.slice(endOfIndex);
   if (currentIndex === deletedIndex) return null;
   if (currentIndex < deletedIndex) return key;
-  return `${SPARE_PARTS_PREFIX}${currentIndex - 1}${match[2]}`;
+  return `${SPARE_PARTS_PREFIX}${currentIndex - 1}${suffix}`;
 };
 
 const shiftSparePartsArea = (area: Area, deletedIndex: number): Area => {
@@ -550,8 +556,10 @@ const reindexSparePartsValues = (
   return next;
 };
 
-const syncMaterialsWithForm = (materials: MaterialItem[], formValues: Record<string, unknown>) => {
-  console.log(formValues);
+export const syncMaterialsWithForm = (
+  materials: MaterialItem[],
+  formValues: Record<string, unknown>,
+) => {
   const syncedMaterials = materials.map((materialItem, index) => {
     return {
       ...materialItem,
@@ -633,10 +641,7 @@ export interface UseDiagnosticsManagerReturn {
   onAddRow: (formValues?: Record<string, unknown>) => void;
   onDeleteRow: (areaName: string) => void;
   onRestoreRow: (areaName: string) => void;
-  onAddMaterials: (
-    items: ImportedMaterial[],
-    setFieldValue?: (field: string, value: unknown) => void,
-  ) => void;
+  onAddMaterials: (items: ImportedMaterial[]) => void;
   getExistingPartNumbers: (formValues: Record<string, unknown>) => Set<string>;
   markAllValidated: () => void;
   markRowDirty: (areaIndex: number) => void;
@@ -672,7 +677,6 @@ export const useDiagnosticsManager = ({
   formValuesRef,
   arePricesValidated,
   setArePricesValidated,
-  // isResyncingRef,
   readOnly = false,
   jobStatus = "",
 }: UseDiagnosticsManagerProps): UseDiagnosticsManagerReturn => {
@@ -782,8 +786,6 @@ export const useDiagnosticsManager = ({
     [allowedPositions, resolveFaultCodesQuantity],
   );
 
-  // ── Source-of-truth list ─────────────────────────────────────────────────
-  //this is OK
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [archivedMaterials, setArchivedMaterials] = useState<MaterialItem[]>([]);
   const [priceSummaryDetailed, setPriceSummaryDetailed] = useState<SummaryDetailAll>();
@@ -792,8 +794,6 @@ export const useDiagnosticsManager = ({
   const [apiMaterialsEmpty, setApiMaterialsEmpty] = useState(false);
   const hasExistingDiagnostic = Boolean(diagnosticData?.jobId);
 
-  //remake the diagnostic
-  // Stable refs so effects don't re-run when callbacks change
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
   const allFieldsRef = useRef(allFields);
@@ -965,8 +965,6 @@ export const useDiagnosticsManager = ({
 
     hasSyncedFromAPIRef.current = true;
 
-    // Signal Effect 3 to force a full rebuild so field components always
-    // re-render with fresh API data, even when the row count hasn't changed.
     forceRebuildRef.current = false;
     setMaterials(buildMaterialsFromAPI(apiMaterials));
   }, [diagnosticData, buildMaterialsFromAPI, setArePricesValidated]);
@@ -978,23 +976,6 @@ export const useDiagnosticsManager = ({
     hasSyncedSummaryDetailedRef.current = true;
     setPriceSummaryDetailed(priceSummary);
   }, [diagnosticData]);
-
-  /**
-   * Applies priceSummaryDetailed straight from a mutation response (e.g. recalculate-prices)
-   * immediately, bypassing the diagnosticData-driven sync effect above (and its
-   * hasSyncedSummaryDetailedRef one-shot guard) entirely - same rationale as
-   * applyRecalculatedMaterials.
-   */
-  // const applyRecalculatedSummary = useCallback(
-  //   (summary: { total?: Partial<SummaryPrice>; byJobType: SummaryDetail[] } | undefined) => {
-  //     if (!summary) return;
-  //     setPriceSummaryDetailed({
-  //       total: { ...ZERO_SUMMARY_PRICE, ...summary.total },
-  //       byJobType: summary.byJobType,
-  //     });
-  //   },
-  //   [],
-  // );
 
   // ── Effect 1b: API archived data → archivedMaterials list ─────────────────
   useEffect(() => {
@@ -1425,16 +1406,6 @@ export const useDiagnosticsManager = ({
     if (needed !== 0 || forceRebuildRef.current) {
       skipFormResetRef.current = true;
 
-      //  updatedFields = withSpecialMaterialSpOption({
-      //    fields: updatedFields,
-      //    rowValues,
-      //    allowedPositions: allowedPositionsRef.current,
-      //    addSpecialMaterialsAllowed: addSpecialMaterialsAllowedRef.current,
-      //  });
-
-      // Use functional updaters so this composes correctly with any concurrent
-      // functional setter from useClaimMaterialsManager (or any other hook)
-      // that shares the same setAllFields / setTabs.
       if (needed > 0) {
         const addedFields = updatedFields.slice(currentFields.length);
         setAllFields((prev) => [...(prev ?? []), ...addedFields]);
@@ -1645,7 +1616,7 @@ export const useDiagnosticsManager = ({
       );
 
       const toAdd: MaterialItem[] = items
-        .filter((m) => !existingPartNumbers.has(m.partNumber))
+        .filter((m) => !existingPartNumbers.has(m.partNumber) && m.partNumber !== "")
         .map((m) => {
           const base: MaterialItem = {
             position: m.position ?? "",
@@ -1666,16 +1637,8 @@ export const useDiagnosticsManager = ({
         });
 
       if (toAdd.length === 0) return;
-      const incomingPositions = new Set(toAdd.map((m) => m.position).filter(Boolean));
       setMaterials((prev) => {
-        const syncedMaterials = syncMaterialsWithForm(prev, formValuesRef.current);
-
-        return normalizeMaterialOrders([
-          ...syncedMaterials.filter(
-            (m) => !(m.partNumber === "" && incomingPositions.has(m.position)),
-          ),
-          ...toAdd,
-        ]);
+        return normalizeMaterialOrders([...prev, ...toAdd]);
       });
       setArePricesValidated(false);
     },
@@ -1776,19 +1739,6 @@ export const useDiagnosticsManager = ({
 
     return !arePricesValidated;
   }, [arePricesValidated]);
-
-  // const resyncMaterialsFromAPI = useCallback(
-  //   (markValidated = false) => {
-  //     hasSyncedFromAPIRef.current = false;
-  //     hasSyncedArchivedRef.current = false;
-  //     hasSyncedSummaryDetailedRef.current = false;
-  //     forceRebuildRef.current = true;
-  //     archivedForceRebuildRef.current = true;
-  //     if (markValidated) shouldMarkValidatedRef.current = true;
-  //     skipFormResetRef.current = true;
-  //   },
-  //   [skipFormResetRef],
-  // );
 
   /** Returns the positional index of an area inside the sparePartsAreas array. */
   const getAreaPositionalIndex = useCallback((areaName: string): number => {

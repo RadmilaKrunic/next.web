@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -19,17 +19,26 @@ vi.mock("api/services/jobs/hooks", () => ({
   },
 }));
 
-vi.mock("components/ui/DatePicker/DatePicker", () => ({
-  default: ({ name, label }: { name: string; label: string }) => (
-    <input
-      data-testid={`datepicker-${name}`}
-      aria-label={label}
-      onChange={() => {}}
-      value=""
-      readOnly
-    />
-  ),
-}));
+vi.mock("components/ui/DatePicker/DatePicker", async () => {
+  const { useFormikContext } = await import("formik");
+
+  return {
+    default: ({ name, label }: { name: string; label: string }) => {
+      const { values, setFieldValue } = useFormikContext<Record<string, string | null>>();
+
+      return (
+        <input
+          data-testid={`datepicker-${name}`}
+          aria-label={label}
+          onChange={(event) => {
+            void setFieldValue(name, event.target.value);
+          }}
+          value={values[name] ?? ""}
+        />
+      );
+    },
+  };
+});
 
 vi.mock("utils/getApiErrorMessage", () => ({
   getApiErrorMessage: () => "translated error message",
@@ -44,6 +53,14 @@ function renderComponent(props: Partial<React.ComponentProps<typeof PurchaseDate
   const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
   const onClose = vi.fn();
   const setMessages = vi.fn();
+
+  qc.setQueryData(["job", "job-1"], {
+    job: {
+      asset: {
+        manufacturedDate: "05/2024",
+      },
+    },
+  });
 
   render(
     <QueryClientProvider client={qc}>
@@ -87,6 +104,40 @@ describe("PurchaseDateModal", () => {
     expect(screen.getByTestId("purchase-date-submit-button")).toBeDisabled();
   });
 
+  it("submits formatted purchase date", async () => {
+    renderComponent();
+
+    fireEvent.change(screen.getByTestId("datepicker-purchaseDate"), {
+      target: { value: "2024-06-15" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("purchase-date-submit-button")).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByTestId("purchase-date-submit-button"));
+
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalledWith({ jobId: "job-1", purchaseDate: "2024-06-15" });
+    });
+  });
+
+  it("shows validation error when purchase date is before manufactured date", async () => {
+    renderComponent();
+
+    fireEvent.change(screen.getByTestId("datepicker-purchaseDate"), {
+      target: { value: "2024-04-30" },
+    });
+
+    fireEvent.click(screen.getByTestId("purchase-date-submit-button"));
+
+    expect(
+      await screen.findByText("purchaseDateMustBeSameOrAfterManufacturedDate (05/2024)."),
+    ).toBeInTheDocument();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(screen.getByTestId("purchase-date-submit-button")).toBeDisabled();
+  });
+
   it("invokes onSuccess handler behavior: invalidates query and shows success message", () => {
     const { onClose, setMessages, invalidateSpy } = renderComponent();
     act(() => {
@@ -103,5 +154,35 @@ describe("PurchaseDateModal", () => {
       mutationOptions.onError?.(new Error("boom"));
     });
     expect(screen.getByRole("alert")).toHaveTextContent("translated error message");
+  });
+
+  it("clears api error when cancel is clicked", () => {
+    renderComponent({ onClose: vi.fn() });
+
+    act(() => {
+      mutationOptions.onError?.(new Error("boom"));
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("translated error message");
+
+    fireEvent.click(screen.getByTestId("purchase-date-cancel-button"));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("clears api error after successful submit callback", () => {
+    renderComponent({ onClose: vi.fn() });
+
+    act(() => {
+      mutationOptions.onError?.(new Error("boom"));
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("translated error message");
+
+    act(() => {
+      mutationOptions.onSuccess?.();
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

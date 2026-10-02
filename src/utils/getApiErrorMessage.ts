@@ -37,6 +37,14 @@ export function getApiErrorMessage(error: unknown, t: TFunction, fallbackKey: st
 
   if (!detail) return t(fallbackKey);
 
+  if (
+    detail === "errorDiagnosticProServiceItemsNotEligibleForValidation" &&
+    Array.isArray(body?.params?.violatedPartNumbers) &&
+    body.params.violatedPartNumbers.length > 0
+  ) {
+    return t("errorProServiceItemsNotEligible") + body.params.violatedPartNumbers?.join(", ");
+  }
+
   const params = body?.params;
   const interpolation: Record<string, string> | undefined = params
     ? Object.fromEntries(Object.entries(params).map(([k, v]) => [k, parseParamValue(v)]))
