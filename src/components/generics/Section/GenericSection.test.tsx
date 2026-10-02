@@ -65,6 +65,13 @@ vi.mock("../Action/GenericAction", () => ({
   ),
 }));
 
+// Mock InfoIconWithTooltip
+vi.mock("components/ui/TooltipContent/InfoIconWithTooltip", () => ({
+  default: ({ infoText }: { infoText?: string }) => (
+    <span data-testid="warranty-info-tooltip">{infoText}</span>
+  ),
+}));
+
 describe("GenericSection", () => {
   const mockActionCallbacks = {
     testAction: vi.fn(),
@@ -691,6 +698,252 @@ describe("GenericSection", () => {
       });
 
       consoleErrorSpy.mockRestore();
+    });
+  });
+  describe("Visibility and permissions", () => {
+    const baseSection = (overrides: Partial<Section> = {}): Section => ({
+      name: "testSection",
+      isHidden: false,
+      label: "Test Section",
+      dependFieldCondition: "",
+      position: 1,
+      areas: [],
+      actions: null,
+      isSubSection: false,
+      isAccordion: false,
+      isTab: false,
+      ...overrides,
+    });
+
+    it("renders nothing when section is hidden", () => {
+      renderWithContext(baseSection({ isHidden: true }));
+
+      expect(screen.queryByText("Test Section")).not.toBeInTheDocument();
+    });
+
+    it("renders nothing when current status is in hiddenForStatuses", () => {
+      renderWithContext(baseSection({ hiddenForStatuses: ["DRAFT"] }), {
+        currentStatus: "DRAFT",
+      });
+
+      expect(screen.queryByText("Test Section")).not.toBeInTheDocument();
+    });
+
+    it("renders when current status is not in hiddenForStatuses", () => {
+      renderWithContext(baseSection({ hiddenForStatuses: ["DRAFT"] }), {
+        currentStatus: "OPEN",
+      });
+
+      expect(screen.getByText("Test Section")).toBeInTheDocument();
+    });
+
+    it("renders when hiddenForStatuses is set but no current status is provided", () => {
+      renderWithContext(baseSection({ hiddenForStatuses: ["DRAFT"] }));
+
+      expect(screen.getByText("Test Section")).toBeInTheDocument();
+    });
+
+    it("renders nothing when user lacks required permission", () => {
+      renderWithContext(baseSection({ permissions: ["X_PERM"] }));
+
+      expect(screen.queryByText("Test Section")).not.toBeInTheDocument();
+    });
+
+    it("renders when user holds a required permission", () => {
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(["user"], { permissions: ["X_PERM"] });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <GenericFormContext.Provider value={mockContextValue}>
+            <Formik initialValues={mockInitialValues} onSubmit={vi.fn()}>
+              <GenericSection section={baseSection({ permissions: ["X_PERM"] })} />
+            </Formik>
+          </GenericFormContext.Provider>
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByText("Test Section")).toBeInTheDocument();
+    });
+  });
+
+  describe("Action helpers", () => {
+    const section: Section = {
+      name: "testSection",
+      isHidden: false,
+      label: "Test Section",
+      dependFieldCondition: "",
+      position: 1,
+      areas: [],
+      actions: [{ name: "save", mode: "primary", onAction: "testAction" }],
+      isSubSection: false,
+      isAccordion: false,
+      isTab: false,
+    };
+
+    const renderSection = (
+      callbacks: Record<string, unknown>,
+      sectionOverride: Section = section,
+    ) =>
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <GenericFormContext.Provider
+            value={{
+              ...mockContextValue,
+              actionCallbacks: callbacks as typeof mockActionCallbacks,
+            }}
+          >
+            <Formik initialValues={{ testField: "initial" }} onSubmit={vi.fn()}>
+              {({ values, errors, touched }) => (
+                <>
+                  <GenericSection section={sectionOverride} />
+                  <div data-testid="form-values">{JSON.stringify(values)}</div>
+                  <div data-testid="form-errors">{JSON.stringify(errors)}</div>
+                  <div data-testid="form-touched">{JSON.stringify(touched)}</div>
+                </>
+              )}
+            </Formik>
+          </GenericFormContext.Provider>
+        </QueryClientProvider>,
+      );
+
+    it("ignores action click when action has no onAction", async () => {
+      const user = userEvent.setup();
+      const callback = vi.fn();
+      renderSection(
+        { testAction: callback },
+        { ...section, actions: [{ name: "noop", mode: "primary" }] },
+      );
+
+      await user.click(screen.getByTestId("section-action-noop"));
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it("provides setFieldValue, setErrors and setTouched helpers to the callback", async () => {
+      const user = userEvent.setup();
+      const callback = vi.fn(
+        async (
+          _values: unknown,
+          helpers: {
+            setFieldValue: (f: string, v: unknown) => void;
+            setErrors: (e: Record<string, unknown>) => void;
+            setTouched: (t: Record<string, boolean>) => Promise<unknown>;
+          },
+        ) => {
+          helpers.setFieldValue("testField", "updated");
+          helpers.setErrors({ testField: "bad" });
+          await helpers.setTouched({ testField: true });
+        },
+      );
+      renderSection({ testAction: callback });
+
+      await user.click(screen.getByTestId("section-action-save"));
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ testField: "initial" }),
+        expect.any(Object),
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("form-values")).toHaveTextContent('"testField":"updated"');
+        expect(screen.getByTestId("form-errors")).toHaveTextContent('"testField":"bad"');
+        expect(screen.getByTestId("form-touched")).toHaveTextContent('"testField":true');
+      });
+    });
+  });
+
+  describe("Header click and dynamic collapsed title", () => {
+    const section: Section = {
+      name: "testSection",
+      isHidden: false,
+      label: "Test Section",
+      dependFieldCondition: "",
+      position: 1,
+      areas: [],
+      actions: null,
+      isSubSection: false,
+      isAccordion: true,
+      isTab: false,
+    };
+
+    it("calls onHeaderClick when the title button is clicked", async () => {
+      const user = userEvent.setup();
+      const onHeaderClick = vi.fn();
+      renderWithContext(section, { onHeaderClick });
+
+      await user.click(screen.getByRole("button", { name: /Test Section/ }));
+
+      expect(onHeaderClick).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses getCollapsedTitle with current form values when collapsed", () => {
+      const getCollapsedTitle = vi.fn(
+        (values: Record<string, unknown>) => `Title ${String(values.testField)}`,
+      );
+      renderWithContext(section, { isCollapsed: true, getCollapsedTitle });
+
+      expect(getCollapsedTitle).toHaveBeenCalled();
+      expect(screen.getByText("Title")).toBeInTheDocument();
+    });
+  });
+
+  describe("Warranty info", () => {
+    const diagnosticSection: Section = {
+      name: "diagnosticData",
+      isHidden: false,
+      label: "Diagnostics",
+      dependFieldCondition: "",
+      position: 1,
+      areas: [],
+      actions: null,
+      isSubSection: false,
+      isAccordion: false,
+      isTab: false,
+    };
+
+    const renderWithWarranty = (warrantyPanelInfo: Record<string, unknown>) =>
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <GenericFormContext.Provider
+            value={{
+              ...mockContextValue,
+              warrantyPanelInfo: {
+                supportedWarrantyType: "STANDARD",
+                ...warrantyPanelInfo,
+              } as never,
+            }}
+          >
+            <Formik initialValues={mockInitialValues} onSubmit={vi.fn()}>
+              <GenericSection section={diagnosticSection} />
+            </Formik>
+          </GenericFormContext.Provider>
+        </QueryClientProvider>,
+      );
+
+    it("shows unavailable message with custom reason when ineligible", () => {
+      renderWithWarranty({ isIneligible: true, unavailableMessage: "Expired" });
+
+      expect(screen.getByText("warrantyUnavailableForTool")).toBeInTheDocument();
+      expect(screen.getByTestId("warranty-info-tooltip")).toHaveTextContent("Expired");
+    });
+
+    it("falls back to the generic message when no reason is provided", () => {
+      renderWithWarranty({ isIneligible: true });
+
+      expect(screen.getByTestId("warranty-info-tooltip")).toHaveTextContent(
+        "warrantyBlockedGeneric",
+      );
+    });
+
+    it("shows unavailable message when purchase date is missing", () => {
+      renderWithWarranty({ hasPurchaseDate: false });
+
+      expect(screen.getByText("warrantyUnavailableForTool")).toBeInTheDocument();
+    });
+
+    it("hides unavailable message when warranty is eligible", () => {
+      renderWithWarranty({ isIneligible: false, hasPurchaseDate: true });
+
+      expect(screen.queryByText("warrantyUnavailableForTool")).not.toBeInTheDocument();
     });
   });
 });
