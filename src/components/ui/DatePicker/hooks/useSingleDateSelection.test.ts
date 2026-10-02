@@ -10,14 +10,15 @@ vi.mock("react-dom", () => ({
 }));
 
 vi.mock("./DatePicker.utils", () => ({
-  formatDateForBackend: vi.fn((d: Date, start?: string, end?: string) => {
+  formatDateForBackend: vi.fn((d: string, start?: string, end?: string) => {
     const mode = start ? "start" : end ? "end" : "plain";
-    return `${mode}:${d.toISOString()}`;
+    return `${mode}:${d}`;
   }),
 }));
 
 import { useFormikContext } from "formik";
 import { useSingleDateSelection } from "./useSingleDateSelection";
+import { formatDateForBackend } from "./DatePicker.utils";
 
 describe("useSingleDateSelection", () => {
   const setFieldValue = vi.fn();
@@ -64,6 +65,27 @@ describe("useSingleDateSelection", () => {
 
     expect(result.current.tempDate).toBe("2024-01-10");
     expect(setFieldValue).toHaveBeenCalledWith("date", expect.stringContaining("2024-01-10"));
+  });
+
+  it("passes calendar-day string to backend formatter on click", () => {
+    const { result } = renderHook(() =>
+      useSingleDateSelection({
+        name: "date",
+        calendar: undefined,
+        isDateValid: () => true,
+        selectedDate: null,
+      }),
+    );
+
+    act(() => {
+      result.current.handleDateClick(new Date("2024-01-10"));
+    });
+
+    expect(vi.mocked(formatDateForBackend)).toHaveBeenCalledWith(
+      "2024-01-10",
+      undefined,
+      undefined,
+    );
   });
 
   it("updates date on month/year change", () => {

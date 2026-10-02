@@ -4,6 +4,8 @@ import {
   Attachment,
   CustomerWish,
   JobDiagnostic,
+  SummaryDetailAll,
+  SummaryPrice,
 } from "modules/JobManagement/JobList/JobList.types";
 
 export interface Asset {
@@ -70,26 +72,28 @@ export interface Material {
 }
 
 export interface ClaimItem {
-  id: string;
-  jobId: string;
-  ascId: string;
-  ascName: string;
-  diagnosticId: string;
-  countryCode: string;
-  actionType: string;
-  jobType: string;
-  typeOfUsage: string;
-  faultCode: string;
-  faultCodeDescription: string;
-  faultCodeLabourQuantity: number;
-  claimStatus: string;
+  id?: string;
+  jobId?: string;
+  ascId?: string;
+  ascName?: string;
+  diagnosticId?: string;
+  countryCode?: string;
+  actionType?: string;
+  jobType?: string;
+  typeOfUsage?: string;
+  faultCode?: string;
+  faultCodeDescription?: string;
+  faultCodeLabourQuantity?: number;
+  claimStatus?: string;
   overallClaimDecision?: string;
   exchangeReason?: string | null;
-  claimNotes: string;
-  customer: Customer;
-  customerId: string;
-  job: Job;
-  materials: Material[];
+  claimNotes?: string;
+  customer?: Customer;
+  customerId?: string;
+  job?: Job;
+  materials?: Material[];
   archivedMaterials?: Material[];
   jobDiagnostic?: JobDiagnostic;
+  claimPriceSummaryDetailed?: SummaryDetailAll;
+  claimPriceSummary?: SummaryPrice;
 }

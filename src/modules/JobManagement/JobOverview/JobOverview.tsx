@@ -27,7 +27,6 @@ import {
   GenericFormContext,
   WarrantyPanelInfo,
 } from "components/generics/Form/GenericForm.context";
-import GenericForm from "components/generics/Form/GenericForm.types";
 import Section from "components/generics/Section/GenericSection.types";
 import { Formik, Form, useFormikContext } from "formik";
 import { useFormValidation } from "components/generics/Form/useFormValidation";
@@ -35,13 +34,17 @@ import { scrollToTop } from "utils/scrollToError";
 import { getApiErrorMessage } from "utils/getApiErrorMessage";
 import { CreateJobContext } from "../CreateJob/CreateJob.context";
 import {
-  buildWarrantyCheckPayloadFromFieldNames,
+  buildJobOverviewWarrantyCheckPayload,
+  updateJobOverviewWarrantyTabs,
+  extractDiagnosticFromValidateResponse,
+} from "./JobOverview.utils";
+import {
   getAllowedWarrantyTypes,
   updateWarrantyFields,
 } from "../CreateJob/CreateJob.warranty.utils";
 import { useTranslation } from "react-i18next";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
-import { User } from "types/user.type";
+import { HeaderUserData } from "api/services/header/action";
 import { Message } from "contexts/messagescontext";
 import { useAccessoriesManager } from "hooks/useAccessoriesManager";
 import { useBreadcrumbs } from "hooks/useBreadcrumbs";
@@ -94,8 +97,10 @@ import {
   useDiagnosticsManager,
   getChargeablePendingInfo,
   hasWarrantyOrProServiceItems,
+  syncMaterialsWithForm,
 } from "hooks/useDiagnosticsManager";
 import { useFormInitialization } from "hooks/useFormInitialization";
+import { useResourceUIConfiguration } from "hooks/useUIConfiguration";
 import {
   useActionWithValidation,
   type ValidationActionHelpers,
@@ -128,68 +133,8 @@ interface WarrantyInfoContentData extends WarrantyInfoPayload {
   recommendation?: string;
 }
 
-// function patchPayloadFromCache(
-//   payload: Record<string, unknown>,
-//   cached: JobDiagnostic | undefined,
-// ): void {
-//   if (!cached) return;
-//   if (cached.status && (payload.status === null || payload.status === undefined)) {
-//     payload.status = cached.status;
-//   }
-//   if (cached.diagnosticId && !payload.diagnosticId) {
-//     payload.diagnosticId = cached.diagnosticId;
-//   }
-// }
-
-const buildJobOverviewWarrantyCheckPayload = (
-  values: Record<string, unknown>,
-  countryCode?: string,
-): WarrantyCheckRequest | null => {
-  return buildWarrantyCheckPayloadFromFieldNames(
-    values,
-    {
-      brandFieldName: "brand",
-      bareToolNumberFieldName: "baretoolNumber",
-      serialNumberFieldName: "serialNumber",
-      purchaseDateFieldName: "purchaseDate",
-    },
-    countryCode,
-  );
-};
-
-const updateJobOverviewWarrantyTabs = (
-  tabs: Section[],
-  response: WarrantyCheckResponse,
-  warrantyInfoPayload: WarrantyInfoPayload | null,
-): Section[] => {
-  return tabs.map((tab) => {
-    if (tab.name !== "assetData") return tab;
-
-    return {
-      ...tab,
-      areas: tab.areas.map((area) => {
-        if (area.name === "customerWish") {
-          return {
-            ...area,
-            fields: updateWarrantyFields(area.fields, response, warrantyInfoPayload) ?? area.fields,
-          };
-        }
-
-        if (area.name !== "warrantyDetails") {
-          return area;
-        }
-
-        return {
-          ...area,
-          fields: updateWarrantyFields(area.fields, response, warrantyInfoPayload) ?? area.fields,
-        };
-      }),
-    };
-  });
-};
-
 /** Bridges Formik values → React state for actionType/jobType that drive the manager. */
-function FormikDiagnosticsSync({
+export function FormikDiagnosticsSync({
   setCurrentActionType,
   setCurrentJobType,
 }: {
@@ -227,14 +172,6 @@ export default function JobOverview() {
   const hasSendForReviewPermission = useHasPermission([
     PERMISSIONS.DIAGNOSTICS.CAN_SEND_FOR_REVIEW,
   ]);
-  const userData = queryClient.getQueryData<User>(["user"]);
-  const uiConfigurationForms = queryClient.getQueryData<{ forms: GenericForm[] }>([
-    "UIConfiguration",
-    userData?.countryCode,
-  ]);
-
-  const jobOverviewForm =
-    uiConfigurationForms?.forms.find((form) => form.name === "JobOverview") ?? null;
   const { jobId } = useParams<{ jobId: string }>();
 
   useEffect(() => {
@@ -242,6 +179,17 @@ export default function JobOverview() {
     void queryClient.invalidateQueries({ queryKey: ["job", jobId] });
     void queryClient.invalidateQueries({ queryKey: ["diagnostic", jobId] });
   }, [jobId, queryClient]);
+  const { data: jobData, isLoading: loading, error } = useJobById(jobId || "");
+  // The job's own countryCode determines which UI configuration to use, not the
+  // user's currently selected/default country (a user can have jobs across
+  // multiple accessible countries).
+  const {
+    uiConfiguration,
+    isLoading: isLoadingUIConfig,
+    isError: isUIConfigError,
+  } = useResourceUIConfiguration(jobData?.order?.countryCode);
+  const jobOverviewForm =
+    uiConfiguration?.forms.find((form) => form.name === "JobOverview") ?? null;
 
   const analytics = useAnalytics();
   const tabFromHash = globalThis.location.hash.substring(1);
@@ -284,8 +232,6 @@ export default function JobOverview() {
     tabs,
     setTabs,
   } = useFormInitialization(jobOverviewForm);
-
-  const { data: jobData, isLoading: loading, error } = useJobById(jobId || "");
 
   const warrantyCheckMutation = usePostWarrantyCheck();
   const lastWarrantyPayloadKeyRef = useRef<string>("");
@@ -472,19 +418,7 @@ export default function JobOverview() {
 
   const getDiagnosticFromValidateResponse = useCallback(
     (data: ValidateAndSaveResponse): JobDiagnostic | undefined => {
-      if (data.diagnostic) return data.diagnostic;
-
-      const hasTopLevelDiagnosticData =
-        Array.isArray(data.materials) ||
-        Array.isArray(data.archivedMaterials) ||
-        !!data.priceSummary ||
-        !!data.priceSummaryDetailed ||
-        typeof data.actionType === "string" ||
-        typeof data.jobType === "string";
-
-      if (!hasTopLevelDiagnosticData || !jobId) return undefined;
-      const responce = { ...data, jobId } as JobDiagnostic;
-      return responce;
+      return extractDiagnosticFromValidateResponse(data, jobId);
     },
     [jobId],
   );
@@ -497,7 +431,7 @@ export default function JobOverview() {
       };
     };
     setJobFullData(jobFullDataMemo());
-  }, [jobData, diagnosticData, isCustomerApprovalPendingStatus]);
+  }, [jobData, diagnosticData]);
   const isRepairAnswerLocked =
     isCustomerApprovalPendingStatus && jobFullData?.diagnostic?.customerAnswer === "REPAIR";
 
@@ -573,7 +507,6 @@ export default function JobOverview() {
 
   const startRepairMutation = usePostStartRepair({
     onSuccess: async () => {
-      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -596,7 +529,6 @@ export default function JobOverview() {
 
   const finishRepairMutation = usePostFinishRepair({
     onSuccess: async () => {
-      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -619,7 +551,6 @@ export default function JobOverview() {
 
   const toolDeliveredMutation = usePostToolDelivered({
     onSuccess: async () => {
-      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -648,7 +579,7 @@ export default function JobOverview() {
         ...prev,
         { text: `${t("successfulJobPreApprovalDecision")}`, type: "success", duration: 3000 },
       ]);
-      // resyncMaterialsFromAPI();
+
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -672,7 +603,6 @@ export default function JobOverview() {
 
   const startReviewMutation = usePostStartReview({
     onSuccess: async () => {
-      //    resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -695,7 +625,6 @@ export default function JobOverview() {
 
   const repairApprovalMutation = usePostRepairApproval({
     onSuccess: async () => {
-      // resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -718,7 +647,6 @@ export default function JobOverview() {
 
   const internalApprovalRequestMutation = usePostInternalApprovalRequest({
     onSuccess: async () => {
-      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -747,7 +675,7 @@ export default function JobOverview() {
   const customerAnswerMutation = usePostCustomerAnswer({
     onSuccess: async () => {
       setArePricesValidated(false);
-      //   resyncMaterialsFromAPI();
+
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -769,7 +697,6 @@ export default function JobOverview() {
 
   const createCostEstimateMutation = usePostCreateCostEstimate({
     onSuccess: async () => {
-      //   resyncMaterialsFromAPI();
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["job", jobId] }),
         queryClient.refetchQueries({ queryKey: ["diagnostic", jobId] }),
@@ -858,7 +785,6 @@ export default function JobOverview() {
   const recalculatePricesMutation = usePostRecalculatePrices({
     onSuccess: (data) => {
       const validatedDiagnostic = getDiagnosticFromValidateResponse(data);
-      console.log("validatedDiagnostic", validatedDiagnostic);
       if (validatedDiagnostic && jobId) {
         queryClient.setQueryData(["diagnostic", jobId], {
           ...validatedDiagnostic,
@@ -1207,7 +1133,6 @@ export default function JobOverview() {
           unitPrice: m.unitPrice,
           origin: "specialMaterial" as const,
         })),
-        setFieldValueRef.current ?? undefined,
       );
     },
     [addMaterialsToForm],
@@ -1217,19 +1142,16 @@ export default function JobOverview() {
     (positions: PositionItem[]) => {
       const jobType = (formValuesRef.current?.jobType as string) || "";
       addMaterialsToForm(
-        positions
-          .filter((p) => p.partNumber)
-          .map((p) => ({
-            position: "SP",
-            partNumber: p.partNumber,
-            notBelongsToTool: false,
-            description: p.partName,
-            type: jobType,
-            quantity: p.quantity,
-            unitPrice: null,
-            origin: "explosionDrawing" as const,
-          })),
-        setFieldValueRef.current ?? undefined,
+        positions.map((p) => ({
+          position: "SP",
+          partNumber: p.partNumber,
+          notBelongsToTool: false,
+          description: p.partName,
+          type: jobType,
+          quantity: p.quantity,
+          unitPrice: null,
+          origin: "explosionDrawing" as const,
+        })),
       );
     },
     [addMaterialsToForm],
@@ -1262,9 +1184,10 @@ export default function JobOverview() {
   );
 
   const onProductDetails = useCallback(() => {
+    const updatedMaterials = syncMaterialsWithForm(materials, formValuesRef.current ?? {});
+    setMaterials(updatedMaterials);
     setIsExplosionDrawingModalOpen(true);
-  }, []);
-
+  }, [materials, setMaterials]);
   useEffect(() => {
     if (!allFields || materials.length === 0) return;
 
@@ -1566,9 +1489,10 @@ export default function JobOverview() {
     ],
   );
   const onNonPriceFieldChange = useCallback(
-    (fieldName: string) => {
+    (fieldName: string, value: unknown) => {
       if (recalculatePricesMutation.isPending) return;
       if (!allFieldsRef.current) return;
+      if (value === undefined) return;
       const field = allFieldsRef.current?.find((f) => f.name === fieldName);
       if (!field) return;
       const sameRowFields = allFieldsRef.current?.filter(
@@ -1591,10 +1515,10 @@ export default function JobOverview() {
   );
   const onHold = useCallback(() => {
     if (!jobId) return;
-    preToggleHoldStateRef.current = jobData?.job?.isOnHold ?? false;
+    preToggleHoldStateRef.current = jobFullData?.job?.isOnHold ?? false;
     setEditingSections(new Set());
     toggleJobHoldMutation.mutate({ jobId });
-  }, [jobId, toggleJobHoldMutation, jobData?.job?.isOnHold, setEditingSections]);
+  }, [jobId, toggleJobHoldMutation, jobFullData?.job?.isOnHold, setEditingSections]);
 
   const onGoToNextStep = useCallback(() => {
     if (!jobId) return;
@@ -1730,7 +1654,6 @@ export default function JobOverview() {
     setFieldValueRef.current?.("discountBase", discountBase);
   }, [discountBase]);
 
-
   const enableValidate = useCallback(() => {
     if (validateAndSaveMutation.isPending) return false;
     if (isCustomerApprovalPendingStatus) return false;
@@ -1839,22 +1762,6 @@ export default function JobOverview() {
       })
     );
   }, [formValuesRef, hasSendForReviewPermission]);
-
-  const enableApproveForRepair = useCallback(() => {
-    if (repairApprovalMutation.isPending) return false;
-    const { pendingTypeFields } = getChargeablePendingInfo(
-      materialsFieldsRef.current,
-      formValuesRef.current,
-    );
-    if (pendingTypeFields.length === 0) return true;
-    if (!arePricesValidated) return false;
-
-    return pendingTypeFields.every((tf) => {
-      const type = formValuesRef.current[tf.name] as string;
-      return type === "WARRANTY" || type === "SERVICE_OFFERING";
-    });
-  }, [repairApprovalMutation.isPending, formValuesRef, arePricesValidated]);
-
   const enableRequestApproval = useCallback(() => {
     if (internalApprovalRequestMutation.isPending) return false;
     if (materials.some((m) => m.status === "REVISED" || m.status === "REJECTED")) return false;
@@ -1888,6 +1795,35 @@ export default function JobOverview() {
     arePricesValidated,
   ]);
 
+  const showApproveForRepair = useCallback(() => {
+    if (enableRequestApproval()) return false;
+    const { hasChargeablePending } = getChargeablePendingInfo(
+      materialsFieldsRef.current,
+      formValuesRef.current,
+    );
+    const { hasBoschInternalPending } = getBoschInternalPending(
+      materialsFieldsRef.current,
+      formValuesRef.current,
+    );
+    return !hasChargeablePending && !hasBoschInternalPending;
+  }, [formValuesRef, enableRequestApproval]);
+
+  const enableApproveForRepair = useCallback(() => {
+    if (repairApprovalMutation.isPending) return false;
+    const { hasChargeablePending } = getChargeablePendingInfo(
+      materialsFieldsRef.current,
+      formValuesRef.current,
+    );
+
+    const { hasBoschInternalPending } = getBoschInternalPending(
+      materialsFieldsRef.current,
+      formValuesRef.current,
+    );
+    if (!arePricesValidated) return false;
+
+    return !hasChargeablePending && !hasBoschInternalPending;
+  }, [repairApprovalMutation.isPending, formValuesRef, arePricesValidated]);
+
   const showRequestApproval = useCallback(() => {
     if (currentStatus === "REVISED" || currentStatus === "REJECTED") {
       const { hasBoschInternalPending } = getBoschInternalPending(
@@ -1903,19 +1839,6 @@ export default function JobOverview() {
     );
     return hasBoschInternalPending && !pendingApprovals.includes("BOSCH_INTERNAL");
   }, [formValuesRef, jobFullData?.job?.pendingApprovals, currentStatus]);
-
-  const showApproveForRepair = useCallback(() => {
-    if (enableRequestApproval()) return false;
-    const { hasChargeablePending } = getChargeablePendingInfo(
-      materialsFieldsRef.current,
-      formValuesRef.current,
-    );
-    const { hasBoschInternalPending } = getBoschInternalPending(
-      materialsFieldsRef.current,
-      formValuesRef.current,
-    );
-    return !hasChargeablePending || !hasBoschInternalPending;
-  }, [formValuesRef, enableRequestApproval]);
 
   const showCreateCostEstimate = useCallback(() => {
     const pendingApprovals: string[] = jobFullData?.job?.pendingApprovals ?? [];
@@ -2204,7 +2127,7 @@ export default function JobOverview() {
         allFields || [],
         formValuesRef.current,
       );
-      dataMapped.discountBase = discountBase;     
+      dataMapped.discountBase = discountBase;
       buildFaultCodeDropdowns(dataMapped);
       setInitialFormValues((prev) => ({
         ...prev,
@@ -2217,7 +2140,7 @@ export default function JobOverview() {
   useEffect(() => {
     const jobFullDataChanged = jobFullData !== prevjobFullDataRef.current;
     if (jobFullDataChanged && jobFullData && allFields && allFields.length > 0) {
-      syncData(jobFullData, allFieldsRef.current || undefined);
+      syncData(jobFullData, allFields || undefined);
       prevjobFullDataRef.current = jobFullData;
     }
   }, [
@@ -2227,10 +2150,9 @@ export default function JobOverview() {
     setInitialFormValues,
     buildFaultCodeDropdowns,
     syncData,
-    setJobFullData,
   ]);
 
-  if (loading) {
+  if (loading || isLoadingUIConfig) {
     return (
       <div className="loading-container">
         <ActivityIndicatorWithDelay delay={1000} />
@@ -2244,6 +2166,10 @@ export default function JobOverview() {
         {t("error")}: {error?.message}
       </div>
     );
+  }
+
+  if (isUIConfigError) {
+    return <div>{t("error")}</div>;
   }
 
   if (!jobData) {
@@ -2271,7 +2197,7 @@ export default function JobOverview() {
               tabWithDisabledState = setSectionDisabledState(tab, false);
             } else if (isFormReadOnly && sectionHasEditableActions(tab)) {
               tabWithDisabledState = setSectionDisabledState(tab, true);
-            } else if (jobData?.job?.isOnHold) {
+            } else if (jobFullData?.job?.isOnHold) {
               tabWithDisabledState = setSectionDisabledState(tab, true);
             } else {
               tabWithDisabledState = setSectionDisabledState(tab);
@@ -2279,7 +2205,7 @@ export default function JobOverview() {
             const currentMode: "view" | "edit" = isEditing ? "edit" : "view";
             const canEdit =
               currentStatus === "READY_FOR_DIAGNOSTIC" &&
-              !(jobData?.job?.isOnHold ?? false) &&
+              !(jobFullData?.job?.isOnHold ?? false) &&
               sectionHasEditableActions(tab);
             const onEditHandler = canEdit ? () => handleEdit(tab.name) : undefined;
             if (tab.name === "diagnosticData" && shouldFetchDiagnostic && diagnosticLoading) {
@@ -2305,7 +2231,7 @@ export default function JobOverview() {
 
   return (
     <div>
-      {jobData.job?.isOnHold && (
+      {jobFullData?.job?.isOnHold && (
         <Notification type="warning" className="on-hold-banner">
           {t("jobOnHoldBanner")}
         </Notification>
@@ -2360,12 +2286,12 @@ export default function JobOverview() {
                   currentMode,
                   currentStatus,
                   formValues: values,
-                  user: userData,
+                  user: queryClient.getQueryData<HeaderUserData>(["user"]),
                   actionCallbacks: dependencyActionCallbacks,
                 };
                 const isFormReadOnly =
                   areAllActionsDisabled(jobOverviewForm?.actions ?? [], ctx) ||
-                  (jobData?.job?.isOnHold ?? false);
+                  (jobFullData?.job?.isOnHold ?? false);
 
                 return (
                   <Form>
@@ -2392,7 +2318,7 @@ export default function JobOverview() {
                       currentMode={currentMode}
                       currentStatus={currentStatus}
                       isGloballyDisabled={isDeletingFile}
-                      isOnHold={jobData?.job?.isOnHold ?? false}
+                      isOnHold={jobFullData?.job?.isOnHold ?? false}
                     />
                   </Form>
                 );

@@ -127,37 +127,73 @@ function ClaimList() {
   };
 
   const bulkApproveClaimsMutation = useBulkApproveClaims({
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       setSelectedRows([]);
       queryClient.invalidateQueries({ queryKey: ["claims"] }).catch(() => undefined);
       queryClient.removeQueries({ queryKey: ["claim"] });
+      const successTextMap = {
+        APPROVED: t("successfulClaimsBulkApprove"),
+        REJECTED: t("successfulClaimsBulkReject"),
+        REVISED: t("successfulClaimsBulkRevise"),
+      };
       setMessages((prev) => [
         ...prev,
-        { type: "success", text: t("successfulClaimsBulkApprove"), duration: 3000 },
+        {
+          type: "success",
+          text: successTextMap[variables.decision] ?? t("successfulClaimsBulkApprove"),
+          duration: 3000,
+        },
       ]);
     },
-    onError: () => {
+    onError: (_, variables) => {
+      const errorTextMap = {
+        APPROVED: t("errorClaimsBulkApprove"),
+        REJECTED: t("errorClaimsBulkReject"),
+        REVISED: t("errorClaimsBulkRevise"),
+      };
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: t("errorClaimsBulkApprove"), duration: 3000 },
+        {
+          type: "error",
+          text: errorTextMap[variables.decision] ?? t("errorClaimsBulkApprove"),
+          duration: 3000,
+        },
       ]);
     },
   });
 
-  const handleBulkApprove = () => {
+  const handleBulkDecision = (decision: "APPROVED" | "REJECTED" | "REVISED") => {
+    const messageMap = {
+      APPROVED: "Approved after bulk review",
+      REJECTED: "Rejected after bulk review",
+      REVISED: "Revision requested after bulk review",
+    };
+
     bulkApproveClaimsMutation.mutate({
       claimIds: selectedRows,
-      decision: "APPROVED",
-      message: "Approved after bulk review",
+      decision,
+      message: messageMap[decision],
     });
   };
 
-  const approveActionButton = canPerformClaimDecision
+  const splitActionButton = canPerformClaimDecision
     ? {
-        icon: "check",
-        label: t("approve"),
-        disabled: selectedRows.length === 0,
-        onClick: handleBulkApprove,
+        primaryLabel: t("approve"),
+        primaryAction: () => handleBulkDecision("APPROVED"),
+        primaryDisabled: selectedRows.length === 0,
+        optionsDisabled: selectedRows.length === 0,
+        options: [
+          {
+            label: t("reject"),
+            onClick: () => handleBulkDecision("REJECTED"),
+            disabled: selectedRows.length === 0,
+          },
+          {
+            label: t("revise"),
+            onClick: () => handleBulkDecision("REVISED"),
+            disabled: selectedRows.length === 0,
+          },
+        ],
       }
     : undefined;
 
@@ -180,7 +216,7 @@ function ClaimList() {
         searchValue={searchValue}
         onSearchChange={setSearchValue}
         onSearchReset={() => setSearchValue("")}
-        actionButton={approveActionButton}
+        splitActionButton={splitActionButton}
         optionsContent={
           <>
             <CustomizeColumnsPopup

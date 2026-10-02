@@ -162,15 +162,6 @@ describe("NumberInputFiled", () => {
     expect(screen.getByTestId("text-field-quantity")).toHaveValue("10");
   });
 
-  it("restores min value on blur when empty", () => {
-    const onChange = vi.fn();
-    renderNumberInputFiled({ value: "", onChange, minValue: 1 });
-    fireEvent.blur(screen.getByTestId("text-field-quantity"));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ target: { value: "1", name: "quantity" } }),
-    );
-  });
-
   it("renders as disabled", () => {
     renderNumberInputFiled({ disabled: true });
     expect(screen.getByTestId("text-field-quantity")).toBeDisabled();
@@ -180,5 +171,61 @@ describe("NumberInputFiled", () => {
     renderNumberInputFiled({ value: 0 });
     fireEvent.focus(screen.getByTestId("text-field-quantity"));
     expect(screen.getByTestId("text-field-quantity")).toHaveValue("");
+  });
+
+  it("renders currency symbol prefix from CountryConfig", () => {
+    renderNumberInputFiled({ prefix: "currencySymbol" });
+    expect(screen.getByText("€")).toBeInTheDocument();
+  });
+
+  it("renders literal prefix text", () => {
+    renderNumberInputFiled({ prefix: "%" });
+    expect(screen.getByText("%")).toBeInTheDocument();
+  });
+
+  it("calls onBlur with valid value", () => {
+    const onBlur = vi.fn();
+    renderNumberInputFiled({ onBlur });
+    fireEvent.blur(screen.getByTestId("text-field-quantity"), { target: { value: "8" } });
+    expect(onBlur).toHaveBeenCalled();
+  });
+
+  it("calls onBlur with empty value", () => {
+    const onBlur = vi.fn();
+    renderNumberInputFiled({ onBlur });
+    fireEvent.blur(screen.getByTestId("text-field-quantity"), { target: { value: "" } });
+    expect(onBlur).toHaveBeenCalled();
+  });
+
+  it("does not call onBlur for value below minValue", () => {
+    const onBlur = vi.fn();
+    renderNumberInputFiled({ onBlur, minValue: 5 });
+    fireEvent.blur(screen.getByTestId("text-field-quantity"), { target: { value: "1" } });
+    expect(onBlur).not.toHaveBeenCalled();
+  });
+
+  it("does not throw when onBlur prop is not provided", () => {
+    renderNumberInputFiled({ onBlur: undefined });
+    expect(() =>
+      fireEvent.blur(screen.getByTestId("text-field-quantity"), { target: { value: "8" } }),
+    ).not.toThrow();
+  });
+
+  it("clears input on Backspace when whole value selected", () => {
+    const onChange = vi.fn();
+    renderNumberInputFiled({ onChange, value: 5 });
+    const input = screen.getByTestId("text-field-quantity") as HTMLInputElement;
+    input.setSelectionRange(0, 1);
+    fireEvent.keyDown(input, { key: "Backspace" });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ target: { value: "", name: "quantity" } }),
+    );
+  });
+
+  it("ignores keys other than Backspace/Delete", () => {
+    const onChange = vi.fn();
+    renderNumberInputFiled({ onChange, value: 5 });
+    fireEvent.keyDown(screen.getByTestId("text-field-quantity"), { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

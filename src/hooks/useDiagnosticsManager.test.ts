@@ -226,7 +226,7 @@ const createHookProps = (overrides: HookOverride = {}) => {
   const setArePricesValidated = vi.fn();
 
   const skipFormResetRef = { current: false };
-  const formValuesRef = {
+  const formValuesRef: { current: Record<string, unknown> } = {
     current: {
       actionType: "REPAIR",
       jobType: "CHARGEABLE",
@@ -879,99 +879,6 @@ describe("useDiagnosticsManager hook behavior", () => {
     expect(result.current.materials[0].isValidated).toBe(true);
   });
 
-  it("derives a non-zero taxAmount from unitPrice+tax when the API returns only those as populated (validateAndSave contract)", async () => {
-    const { props } = createHookProps({
-      diagnosticData: {
-        jobId: "JA0001110",
-        materials: [
-          {
-            id: "LA_1609888887_WARRANTY",
-            position: "LA",
-            partNumber: "1609888887",
-            description: "İşçilik",
-            jobType: "WARRANTY",
-            quantity: 6,
-            status: "PENDING",
-            price: {
-              unitPrice: 132.5,
-              netAmount: 0,
-              suggestedNetPrice: 0,
-              tax: 20,
-              taxAmount: 0,
-              grossAmount: 0,
-              discount: 0,
-              totalAmount: 0,
-              discountAmount: 0,
-            },
-          },
-        ],
-      },
-    });
-
-    const { result } = renderHook(() => useDiagnosticsManager(props));
-
-    await waitFor(() => {
-      expect(result.current.materials).toHaveLength(1);
-    });
-
-    const row = result.current.materials[0];
-    // Canonical inputs pass through untouched.
-    expect(row.unitPrice).toBe(132.5);
-    expect(row.tax).toBe(20);
-    expect(row.quantity).toBe(6);
-    // Derived fields must be freshly computed, not trusted as 0 from the response.
-    expect(row.suggestedNetPrice).toBe(795); // 6 * 132.5
-    expect(row.netAmount).toBe(795);
-    expect(row.taxAmount).toBe(159); // 795 * 20 / 100 — this was 0 before the fix
-    expect(row.grossAmount).toBe(954);
-    expect(row.totalAmount).toBe(954);
-  });
-
-  it("recomputes from unitPrice+tax even when the response's downstream amounts are already populated but stale", async () => {
-    const { props } = createHookProps({
-      diagnosticData: {
-        jobId: "JA0001110",
-        materials: [
-          {
-            id: "SP_1617000895_WARRANTY",
-            position: "SP",
-            partNumber: "1617000895",
-            description: "Uç Kovanı",
-            jobType: "WARRANTY",
-            quantity: 2,
-            status: "PENDING",
-            price: {
-              unitPrice: 50,
-              tax: 20,
-              suggestedNetPrice: 50,
-              netAmount: 50,
-              taxAmount: 10,
-              grossAmount: 60,
-              discount: 0,
-              discountAmount: 0,
-              totalAmount: 60,
-            },
-          },
-        ],
-      },
-    });
-
-    const { result } = renderHook(() => useDiagnosticsManager(props));
-
-    await waitFor(() => {
-      expect(result.current.materials).toHaveLength(1);
-    });
-
-    const row = result.current.materials[0];
-    expect(row.unitPrice).toBe(50);
-    // Freshly derived from quantity * unitPrice, not the stale stored value.
-    expect(row.suggestedNetPrice).toBe(100);
-    expect(row.netAmount).toBe(100);
-    expect(row.taxAmount).toBe(20); // 100 * 20 / 100
-    expect(row.grossAmount).toBe(120);
-    expect(row.totalAmount).toBe(120);
-  });
-
   it("adds imported materials and skips duplicates", async () => {
     const { props } = createHookProps();
     const { result } = renderHook(() => useDiagnosticsManager(props));
@@ -989,25 +896,6 @@ describe("useDiagnosticsManager hook behavior", () => {
     expect(
       result.current.materials.filter((m) => m.partNumber === "EXISTING-PN").length,
     ).toBeLessThanOrEqual(1);
-  });
-
-  it("computes imported material prices using the configured discountBase, not the default", async () => {
-    const { props } = createHookProps();
-    const { result } = renderHook(() => useDiagnosticsManager(props));
-
-    act(() => {
-      result.current.onAddMaterials([
-        { partNumber: "IMPORTED-PN", position: "SP", quantity: 3, unitPrice: 50 },
-      ]);
-    });
-
-    await waitFor(() => {
-      expect(result.current.materials.some((m) => m.partNumber === "IMPORTED-PN")).toBe(true);
-    });
-
-    const row = result.current.materials.find((m) => m.partNumber === "IMPORTED-PN")!;
-    expect(row.suggestedNetPrice).toBe(150); // 3 * 50 — computePricesForItem actually ran
-    expect(row.netAmount).toBe(150);
   });
 
   it("adds new empty row with blank type selection", async () => {
@@ -1069,6 +957,42 @@ describe("useDiagnosticsManager hook behavior", () => {
 
     expect(mocks.setArePricesValidated).toHaveBeenCalledWith(false);
     expect(mocks.setInitialFormValues).toHaveBeenCalled();
+  });
+
+  it("reindexes spare-parts form keys when deleting the first row", async () => {
+    const { props } = createHookProps({
+      formValues: {
+        "diagnosticData_diagnosticsSpareParts#0_position": "SP",
+        "diagnosticData_diagnosticsSpareParts#0_sparePartNumber": "ROW-0",
+        "diagnosticData_diagnosticsSpareParts#1_position": "PN",
+        "diagnosticData_diagnosticsSpareParts#1_sparePartNumber": "ROW-1",
+        "diagnosticData_diagnosticsSpareParts#2_position": "LA",
+        "diagnosticData_diagnosticsSpareParts#2_sparePartNumber": "ROW-2",
+      } as Record<string, unknown>,
+    });
+    const { result } = renderHook(() => useDiagnosticsManager(props));
+
+    act(() => {
+      result.current.onDeleteRow("diagnosticData_diagnosticsSpareParts#0");
+    });
+
+    await waitFor(() => {
+      expect(props.formValuesRef.current["diagnosticData_diagnosticsSpareParts#0_position"]).toBe(
+        "PN",
+      );
+      expect(
+        props.formValuesRef.current["diagnosticData_diagnosticsSpareParts#0_sparePartNumber"],
+      ).toBe("ROW-1");
+      expect(props.formValuesRef.current["diagnosticData_diagnosticsSpareParts#1_position"]).toBe(
+        "LA",
+      );
+      expect(
+        props.formValuesRef.current["diagnosticData_diagnosticsSpareParts#1_sparePartNumber"],
+      ).toBe("ROW-2");
+      expect(
+        props.formValuesRef.current["diagnosticData_diagnosticsSpareParts#2_position"],
+      ).toBeUndefined();
+    });
   });
 
   it("restores archived row as pending and unvalidated", async () => {

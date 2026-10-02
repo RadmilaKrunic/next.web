@@ -8,7 +8,6 @@ import OverviewHeader from "components/ui/OverviewHeader";
 import { formatDateToDisplay } from "utils/dateFormatter";
 import { useBreadcrumbs } from "hooks/useBreadcrumbs";
 import { HeaderUserData } from "api/services/header/action";
-import GenericForm from "components/generics/Form/GenericForm.types";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Tab, TabNavigation } from "@bosch/react-frok";
 import { useFormInitialization } from "hooks/useFormInitialization";
@@ -33,6 +32,7 @@ import { useActionWithValidation } from "../../../../hooks/useActionWithValidati
 import { scrollToTop } from "../../../../utils/scrollToError";
 import GenericAction from "../../../../components/generics/Action/GenericAction";
 import axiosClient from "../../../../api/axios-client/axiosClient";
+import { useResourceUIConfiguration } from "hooks/useUIConfiguration";
 
 function AscOverview() {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
@@ -42,12 +42,23 @@ function AscOverview() {
   const { ascId: paramsAscId } = useParams<{ ascId: string }>();
   const user = queryClient.getQueryData<HeaderUserData>(["user"]);
   const ascId = paramsAscId || user?.ascId || "";
-  const uiConfigurationForms = queryClient.getQueryData<{ forms: GenericForm[] }>([
-    "UIConfiguration",
-    user?.countryCode,
-  ]);
+
+  const { data: asc, isLoading } = useQuery({
+    queryKey: ["ASC", ascId],
+    queryFn: () => getASCById(ascId),
+    refetchOnWindowFocus: false,
+    staleTime: DEFAULT_STALE_TIME_MS,
+    refetchOnMount: false,
+    enabled: Boolean(ascId),
+  });
+
+  const {
+    uiConfiguration,
+    isLoading: isLoadingUIConfig,
+    isError: isUIConfigError,
+  } = useResourceUIConfiguration(asc?.defaultCountry);
   const ascOverviewForm =
-    uiConfigurationForms?.forms.find((form) => form.name === "ASCOverview") || null;
+    uiConfiguration?.forms.find((form) => form.name === "ASCOverview") || null;
   const location = useLocation();
 
   const initialTab = location.hash.replace("#", "") || ascOverviewForm?.sections[0]?.name || "";
@@ -88,14 +99,6 @@ function AscOverview() {
 
   const setFieldValueRef = useRef<any>(null);
 
-  const { data: asc, isLoading } = useQuery({
-    queryKey: ["ASC", ascId],
-    queryFn: () => getASCById(ascId),
-    refetchOnWindowFocus: false,
-    staleTime: DEFAULT_STALE_TIME_MS,
-    refetchOnMount: false,
-    enabled: Boolean(ascId),
-  });
   const status = asc?.isActive ? "ACTIVE" : "INACTIVE";
   const imageUrl = asc?.logo?.logoId
     ? `${import.meta.env.VITE_API_BASE_URL}/v1/files/static/${asc.logo.logoId}`
@@ -361,12 +364,16 @@ function AscOverview() {
     [allFields, setAllFields, mandatoryFields, onSaveUpdate, onCancelUpdate],
   );
 
-  if (isLoading || !ascId) {
+  if (isLoading || !ascId || isLoadingUIConfig) {
     return (
       <div className="loading-container">
         <ActivityIndicatorWithDelay delay={500} />
       </div>
     );
+  }
+
+  if (isUIConfigError) {
+    return <div>{t("error")}</div>;
   }
 
   return (

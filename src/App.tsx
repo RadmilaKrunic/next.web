@@ -13,6 +13,7 @@ import { fetchUserDataFromCookie } from "./api/services/header/action";
 import { ActivityIndicator } from "@bosch/react-frok";
 import { getCountryConfig } from "./api/services/countryConfiguration/countryConfiguration";
 import { getUIConfiguration } from "api/services/uiConfiguration/action";
+import { useAvailableUIConfigurations } from "hooks/useUIConfiguration";
 import { Message, MessagesContext } from "./contexts/messagescontext";
 import { AnalyticsProvider } from "@/analytics";
 import ConsentModal from "./components/ui/ConsentModal/ConsentModal";
@@ -67,6 +68,11 @@ function App() {
     enabled: !!data?.countryCode,
     retry: false,
   });
+
+  // Prefetch & cache the UI configuration for every other country the user has
+  // access to (in the background), so opening a resource that belongs to a
+  // different country does not block on the initial app render.
+  useAvailableUIConfigurations(data);
 
   if (isLoading || !data || (data.countryCode && (isLoadingCountryConfig || isLoadingUIConfig))) {
     return (

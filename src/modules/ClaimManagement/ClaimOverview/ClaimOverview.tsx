@@ -26,7 +26,7 @@ import {
   useUpdateClaimPrices,
   useClaimRequestApproval,
 } from "api/services/claims/hooks";
-import GenericForm from "components/generics/Form/GenericForm.types";
+import { useResourceUIConfiguration } from "hooks/useUIConfiguration";
 import { User } from "types/user.type";
 import { useClaimDecisionPermissions } from "hooks/useClaimDecisionPermissions";
 import { ImportedMaterial, useDiagnosticsManager } from "hooks/useDiagnosticsManager";
@@ -42,7 +42,8 @@ import AddSpecialMaterialModal from "modules/JobManagement/JobOverview/AddSpecia
 import ExplosionDrawingModal from "modules/JobManagement/JobOverview/ExplosionDiagram/ExplosionDrawingModal";
 import { PositionItem } from "modules/JobManagement/JobOverview/ExplosionDiagram/ExplosionDrawing.types";
 import { MessagesContext } from "contexts/messagescontext";
-import { SummaryDetail } from "@/modules/JobManagement/JobList/JobList.types";
+import { ClaimItem } from "./Claims.types";
+import { makeFieldGetter } from "./ClaimOverview.utils";
 
 function FormikClaimSync({
   setCurrentActionType,
@@ -65,27 +66,22 @@ function FormikClaimSync({
 
   return null;
 }
-function makeFieldGetter(
-  fields: Field[],
-  formValues: Record<string, unknown>,
-): (subtype: string) => unknown {
-  return (subtype) => {
-    const field = fields.find((af) => af.subtype === subtype);
-    return field ? formValues[field.name] : undefined;
-  };
-}
-
 export default function ClaimOverview() {
   const { t } = useTranslation("translation", { keyPrefix: "app" });
   const queryClient = useQueryClient();
   const userData = queryClient.getQueryData<User>(["user"]);
-  const uiConfigurationForms = queryClient.getQueryData<{ forms: GenericForm[] }>([
-    "UIConfiguration",
-    userData?.countryCode,
-  ]);
-  const claimOverviewForm =
-    uiConfigurationForms?.forms.find((form) => form.name === "ClaimOverview") ?? null;
   const { claimId } = useParams<{ claimId: string }>();
+  const { data: claimData, isLoading: loading, error } = useClaimById(claimId || "");
+  // The claim's own countryCode determines which UI configuration to use, not the
+  // user's currently selected/default country (a user can have claims across
+  // multiple accessible countries).
+  const {
+    uiConfiguration,
+    isLoading: isLoadingUIConfig,
+    isError: isUIConfigError,
+  } = useResourceUIConfiguration(claimData?.countryCode);
+  const claimOverviewForm =
+    uiConfiguration?.forms.find((form) => form.name === "ClaimOverview") ?? null;
   const analytics = useAnalytics();
   const [isDeletingFile, setIsDeletingFile] = useState(false);
   const [isClaimNoteModalOpen, setIsClaimNoteModalOpen] = useState(false);
@@ -93,13 +89,51 @@ export default function ClaimOverview() {
   const [isClaimEditMode, setIsClaimEditMode] = useState(false);
   const [showAddSpecialMaterialModal, setShowAddSpecialMaterialModal] = useState(false);
   const [isExplosionDrawingModalOpen, setIsExplosionDrawingModalOpen] = useState(false);
+  const [claimFullData, setClaimFullData] = useState<ClaimItem | null>(null);
   const [existingPartNumbersForModal, setExistingPartNumbersForModal] = useState<Set<string>>(
     new Set(),
   );
 
   const { setMessages } = useContext(MessagesContext);
 
-  const validateClaimPricesMutation = useUpdateClaimPrices();
+  const validateClaimPricesMutation = useUpdateClaimPrices({
+    onSuccess: async (data) => {
+      const updated: ClaimItem = {
+        ...claimFullData,
+        ...data,
+      };
+      syncData(updated, allFields ?? []);
+
+      suppressDirtyRef.current = true;
+      markAllValidated();
+      arePricesValidatedRef.current = true;
+      setArePricesValidated(true);
+      hasClaimChangesRef.current = false;
+      scrollToTop();
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: t("claimPricesValidateSuccess"),
+          type: "success",
+          duration: 3000,
+        },
+      ]);
+
+      await queryClient.refetchQueries({ queryKey: ["claim", claimId] });
+    },
+    onError: () => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: t("claimPricesValidateError"),
+          type: "error",
+          duration: 8000,
+        },
+      ]);
+      setArePricesValidated(false);
+      scrollToTop();
+    },
+  });
   const requestApprovalMutation = useClaimRequestApproval();
   const postMessageMutation = useMutation({
     mutationFn: postMessage,
@@ -135,12 +169,27 @@ export default function ClaimOverview() {
     setTabs,
   } = useFormInitialization(claimOverviewForm);
 
-  const { data: claimData, isLoading: loading, error } = useClaimById(claimId || "");
-
   const currentStatus = claimData?.claimStatus || "";
   const isClaimPending = currentStatus === "PENDING";
 
   const [selectedTab, setSelectedTab] = useState<string>("");
+  const prevClaimDataRef = useRef<typeof claimData>(undefined);
+  useEffect(() => {
+    if (claimData) {
+      if (!claimData?.claimPriceSummaryDetailed && claimData?.claimPriceSummary) {
+        claimData.claimPriceSummaryDetailed = {
+          total: claimData?.claimPriceSummary,
+        };
+      }
+      if (!claimData?.claimPriceSummary && claimData?.claimPriceSummaryDetailed) {
+        const detailedTotal = claimData.claimPriceSummaryDetailed.total;
+        if (detailedTotal !== undefined) {
+          claimData.claimPriceSummary = detailedTotal;
+        }
+      }
+      setClaimFullData(claimData);
+    }
+  }, [claimData]);
   const [currentActionType, setCurrentActionType] = useState(
     (initialFormValues?.actionType as string) || "",
   );
@@ -163,9 +212,6 @@ export default function ClaimOverview() {
   const skipFormResetRef = useRef(false);
   const formValuesRef = useRef<Record<string, unknown>>({});
   const setFieldValueRef = useRef<((field: string, value: unknown) => void) | null>(null);
-  //const claimIsDistributingRef = useRef(false);
-  //const claimIsResyncingRef = useRef(false);
-  const prevClaimDataRef = useRef<typeof claimData>(undefined);
   // Prevents markRowDirty from dirtying hasClaimChanges right after a successful
   // validation — React effects in ClaimSparePartsRow fire synchronously on the
   // same render cycle when arePricesValidated flips to true (row collapse effect).
@@ -213,7 +259,6 @@ export default function ClaimOverview() {
     arePricesValidated,
     setArePricesValidated,
     readOnly: !isClaimEditMode,
-  //  isResyncingRef: claimIsResyncingRef,
   });
 
   // Wrap markRowDirty to also flag that user has unsaved changes
@@ -286,7 +331,80 @@ export default function ClaimOverview() {
     jobFullData: claimData,
     setInitialFormValues,
   });
+  const buildClaimPayload = useCallback(
+    (formValues: Record<string, unknown>, claimData: ClaimItem): Record<string, unknown> => {
+      const claimsTab = tabs.find((t) => t.name === "claims");
+      const sparePartsAreas = (claimsTab?.areas ?? []).filter(
+        (a) =>
+          a.isMultiple &&
+          a.name.includes("claimSpareParts") &&
+          !a.name.includes("claimArchivedSpareParts"),
+      );
 
+      const updatedMaterials = sparePartsAreas.map((area, idx) => {
+        const get = makeFieldGetter(area.fields, formValues);
+
+        const original = claimData.materials?.[idx];
+
+        return {
+          ...original,
+          position: (get("diagnosticPosition") as string) ?? original?.position ?? "",
+          partNumber: (get("diagnosticPartNumber") as string) ?? original?.partNumber ?? "",
+          description: (get("diagnosticDescription") as string) ?? original?.description ?? "",
+          jobType: (get("diagnosticType") as string) ?? original?.jobType ?? "",
+          quantity: Number(get("diagnosticQuantity") ?? original?.quantity ?? 1),
+          order: Number(get("diagnosticOrder") ?? original?.order ?? idx + 1),
+          isPriceSetManually: false,
+          price: {
+            unitPrice: Number(get("diagnosticUnitPrice") ?? 0),
+            suggestedNetPrice: Number(get("diagnosticSuggestedNetPrice") ?? 0),
+            netAmount: Number(get("diagnosticNetAmount") ?? 0),
+            tax: Number(get("diagnosticTax") ?? original?.price?.tax ?? 0),
+            taxAmount: Number(get("diagnosticTaxAmount") ?? 0),
+            grossAmount: Number(get("diagnosticGrossAmount") ?? 0),
+            discount: original?.price?.discount ?? 0,
+            totalAmount: Number(get("diagnosticTotalAmount") ?? 0),
+          },
+        };
+      });
+
+      const sortedMaterials = updatedMaterials.toSorted(
+        (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0),
+      );
+      const jobDiagnostic = claimData.jobDiagnostic;
+      if (!jobDiagnostic?.priceSummary && jobDiagnostic?.priceSummaryDetailed?.total) {
+        jobDiagnostic.priceSummary = jobDiagnostic.priceSummaryDetailed.total;
+      }
+      // Send full claim payload
+      const payload = {
+        id: claimData.id,
+        jobId: claimData.jobId,
+        ascId: claimData.ascId,
+        customerId: claimData.customerId,
+        ascName: claimData.ascName,
+        diagnosticId: claimData.diagnosticId,
+        countryCode: claimData.countryCode,
+        actionType: claimData.actionType,
+        jobType: claimData.jobType,
+        typeOfUsage: claimData.typeOfUsage,
+        faultCode: claimData.faultCode,
+        faultCodeDescription: claimData.faultCodeDescription,
+        faultCodeLabourQuantity: claimData.faultCodeLabourQuantity,
+        exchangeReason: claimData.exchangeReason,
+        claimStatus: claimData.claimStatus,
+        claimNotes: claimData.claimNotes,
+        customer: claimData.customer,
+        job: claimData.job,
+        materials: sortedMaterials,
+        archivedMaterials: archivedMaterials.filter((m) => Boolean(m.partNumber)),
+        claimPriceSummary: claimData.claimPriceSummaryDetailed?.total,
+        claimPriceSummaryDetailed: claimData.claimPriceSummaryDetailed,
+        jobDiagnostic: jobDiagnostic,
+      };
+      return payload;
+    },
+    [tabs, archivedMaterials],
+  );
   const onCancelNewNote = useCallback(
     (
       formValues?: Record<string, unknown>,
@@ -319,7 +437,7 @@ export default function ClaimOverview() {
       helpers?: {
         setFieldValue: (field: string, value: unknown) => void;
         setErrors: (errors: Record<string, unknown>) => void;
-        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, string>>;
+        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, unknown>>;
       },
     ) => {
       if (!claimData?.jobId || !formValues || !helpers) return;
@@ -349,150 +467,34 @@ export default function ClaimOverview() {
       formValues: Record<string, unknown>,
       helpers: {
         setErrors: (errors: Record<string, unknown>) => void;
-        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, string>>;
+        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, unknown>>;
         setFieldValue: (field: string, value: unknown) => void;
       },
     ) => {
       if (!claimId || !allFields || !claimData) return;
-      await handleActionWithValidation("onValidate", formValues, helpers, async () => {
-        // Build updated materials array from current form values
-        const claimsTab = tabs.find((t) => t.name === "claims");
-        const sparePartsAreas = (claimsTab?.areas ?? []).filter(
-          (a) =>
-            a.isMultiple &&
-            a.name.includes("claimSpareParts") &&
-            !a.name.includes("claimArchivedSpareParts"),
+      const payload = buildClaimPayload(formValues, claimFullData || {});
+      claimForceRebuildRef.current = true;
+      skipFormResetRef.current = true;
+
+      claimHasSyncedRef.current = false;
+      if (helpers) {
+        await handleActionWithValidation("onValidate", formValues, helpers, () =>
+          validateClaimPricesMutation.mutate({ claimId, payload }),
         );
-
-        const updatedMaterials = sparePartsAreas.map((area, idx) => {
-          const get = makeFieldGetter(area.fields, formValues);
-
-          const original = claimData.materials?.[idx];
-
-          return {
-            ...original,
-            position: (get("diagnosticPosition") as string) ?? original?.position ?? "",
-            partNumber: (get("diagnosticPartNumber") as string) ?? original?.partNumber ?? "",
-            description: (get("diagnosticDescription") as string) ?? original?.description ?? "",
-            jobType: (get("diagnosticType") as string) ?? original?.jobType ?? "",
-            quantity: Number(get("diagnosticQuantity") ?? original?.quantity ?? 1),
-            order: Number(get("diagnosticOrder") ?? original?.order ?? idx + 1),
-            isPriceSetManually: false,
-            price: {
-              unitPrice: Number(get("diagnosticUnitPrice") ?? 0),
-              suggestedNetPrice: Number(get("diagnosticSuggestedNetPrice") ?? 0),
-              netAmount: Number(get("diagnosticNetAmount") ?? 0),
-              tax: Number(get("diagnosticTax") ?? original?.price?.tax ?? 0),
-              taxAmount: Number(get("diagnosticTaxAmount") ?? 0),
-              grossAmount: Number(get("diagnosticGrossAmount") ?? 0),
-              discount: original?.price?.discount ?? 0,
-              totalAmount: Number(get("diagnosticTotalAmount") ?? 0),
-            },
-          };
-        });
-
-        const sortedMaterials = updatedMaterials.toSorted(
-          (a, b) => Number(a.order ?? 0) - Number(b.order ?? 0),
-        );
-
-        // Compute price summary by aggregating all material rows
-        const claimPriceSummary = sortedMaterials.reduce(
-          (acc, m) => {
-            const price = (m as { price?: Record<string, number> }).price ?? {};
-            return {
-              netAmount: acc.netAmount + (Number(price.netAmount) || 0),
-              suggestedNetPrice: acc.suggestedNetPrice + (Number(price.suggestedNetPrice) || 0),
-              grossAmount: acc.grossAmount + (Number(price.grossAmount) || 0),
-              discount: acc.discount + (Number(price.discount) || 0),
-              totalAmount: acc.totalAmount + (Number(price.totalAmount) || 0),
-              taxAmount: acc.taxAmount + (Number(price.taxAmount) || 0),
-            };
-          },
-          {
-            netAmount: 0,
-            suggestedNetPrice: 0,
-            grossAmount: 0,
-            discount: 0,
-            totalAmount: 0,
-            taxAmount: 0,
-          },
-        );
-
-        // Send full claim payload
-        const payload = {
-          id: claimData.id,
-          jobId: claimData.jobId,
-          ascId: claimData.ascId,
-          customerId: claimData.customerId,
-          ascName: claimData.ascName,
-          diagnosticId: claimData.diagnosticId,
-          countryCode: claimData.countryCode,
-          actionType: claimData.actionType,
-          jobType: claimData.jobType,
-          typeOfUsage: claimData.typeOfUsage,
-          faultCode: claimData.faultCode,
-          faultCodeDescription: claimData.faultCodeDescription,
-          faultCodeLabourQuantity: claimData.faultCodeLabourQuantity,
-          exchangeReason: claimData.exchangeReason,
-          claimStatus: claimData.claimStatus,
-          claimNotes: claimData.claimNotes,
-          customer: claimData.customer,
-          job: claimData.job,
-          materials: sortedMaterials,
-          archivedMaterials: archivedMaterials.filter((m) => Boolean(m.partNumber)),
-          claimPriceSummary,
-          jobDiagnostic: claimData.jobDiagnostic,
-        };
-
-        try {
-          // Force all rows to rebuild from server response — not just new ones.
-          // Also set skipFormReset=true so the data-mapping effect uses the skip branch
-          // (header fields only) and lets Effect 2 handle the row values from the server
-          // response. Setting it to false caused a full convertAPIDataToFormValues reset
-          // that overwrote rows with potentially wrong values before Effect 2 could correct.
-          claimForceRebuildRef.current = true;
-          skipFormResetRef.current = true;
-          // Allow Effect 1 to re-load materials from the new server response
-          // (invalidateQueries returns fresh claimMaterials with updated prices).
-          claimHasSyncedRef.current = false;
-          await validateClaimPricesMutation.mutateAsync({ claimId, payload });
-          suppressDirtyRef.current = true;
-          markAllValidated();
-          arePricesValidatedRef.current = true;
-          setArePricesValidated(true);
-          hasClaimChangesRef.current = false;
-          scrollToTop();
-          setMessages((prev) => [
-            ...prev,
-            { text: t("claimPricesValidateSuccess"), type: "success", duration: 3000 },
-          ]);
-          // Release the suppress flag after all queued React effects have fired
-          setTimeout(() => {
-            suppressDirtyRef.current = false;
-          }, 0);
-        } catch {
-          scrollToTop();
-          setMessages((prev) => [
-            ...prev,
-            { text: t("claimPricesValidateError"), type: "error", duration: 3000 },
-          ]);
-        }
-      });
+      } else {
+        validateClaimPricesMutation.mutate({ claimId, payload });
+      }
     },
     [
       claimId,
       allFields,
       claimData,
-      tabs,
-      handleActionWithValidation,
-      validateClaimPricesMutation,
-      markAllValidated,
-      setArePricesValidated,
-      setMessages,
-      t,
+      buildClaimPayload,
+      claimFullData,
       claimForceRebuildRef,
       claimHasSyncedRef,
-      archivedMaterials,
+      handleActionWithValidation,
+      validateClaimPricesMutation,
     ],
   );
 
@@ -501,7 +503,7 @@ export default function ClaimOverview() {
       formValues: Record<string, unknown>,
       helpers: {
         setErrors: (errors: Record<string, unknown>) => void;
-        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, string>>;
+        setTouched: (touched: Record<string, boolean>) => Promise<void | Record<string, unknown>>;
         setFieldValue: (field: string, value: unknown) => void;
       },
     ) => {
@@ -544,7 +546,7 @@ export default function ClaimOverview() {
 
   const handleAddSpecialMaterials = useCallback(
     (items: ImportedMaterial[]) => {
-      addMaterialsToForm(items, setFieldValueRef.current ?? undefined);
+      addMaterialsToForm(items);
       hasClaimChangesRef.current = true;
       arePricesValidatedRef.current = false;
     },
@@ -567,7 +569,6 @@ export default function ClaimOverview() {
             unitPrice: null,
             origin: "explosionDrawing" as const,
           })),
-        setFieldValueRef.current ?? undefined,
       );
       hasClaimChangesRef.current = true;
       arePricesValidatedRef.current = false;
@@ -754,7 +755,7 @@ export default function ClaimOverview() {
         enableAddingSparePart,
         enableAddingSpecialMaterials,
         enableProductDetails,
-      } as Record<string, (...args: unknown[]) => void | boolean | Promise<void>>,
+      },
       radioSourceCallbacks: {
         getRadioButtonsForSummaryType: () => summaryTypeOptions,
       },
@@ -856,8 +857,8 @@ export default function ClaimOverview() {
       allowedPositions,
       automaticRows,
       getExistingPartNumbers,
-     // isDistributingRef: claimIsDistributingRef,
-     // isResyncingRef: claimIsResyncingRef,
+      // isDistributingRef: claimIsDistributingRef,
+      // isResyncingRef: claimIsResyncingRef,
       arePricesValidated,
       setArePricesValidated,
       hasPricesPopulated: materials.some(
@@ -913,7 +914,7 @@ export default function ClaimOverview() {
     setFieldValueRef.current?.("discountBase", discountBase);
   }, [discountBase]);
 
-  const buildFaultCodeDropdowns = (values: Record<string, unknown>) => {
+  const buildFaultCodeDropdowns = useCallback((values: Record<string, unknown>) => {
     const faultCode = values.faultCode as string;
     if (faultCode) {
       values.faultCodeDropdown = faultCode;
@@ -922,43 +923,34 @@ export default function ClaimOverview() {
     if (claimFaultCode) {
       values.claimFaultCodeDropdown = claimFaultCode;
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    const claimDataChanged = claimData !== prevClaimDataRef.current;
-
-    if (allFields && allFields.length > 0) {
-      prevClaimDataRef.current = claimData;
-    }
-
-    if (skipFormResetRef.current) {
-      skipFormResetRef.current = false;
-      if (claimDataChanged && claimData && allFields && allFields.length > 0) {
-        prevClaimDataRef.current = claimData;
-        const dataMapped = convertAPIDataToFormValues(claimData, allFields);
-        const headerValues = Object.fromEntries(
-          Object.entries(dataMapped).filter(
-            ([k]) =>
-              !k.startsWith("claims_claimSpareParts") &&
-              !k.startsWith("diagnosticData_diagnosticsSpareParts"),
-          ),
-        );
-        buildFaultCodeDropdowns(headerValues);
-        setInitialFormValues((prev) => ({ ...prev, ...headerValues, discountBase }));
-      }
-      return;
-    }
-
-    if (claimDataChanged && claimData && allFields && allFields.length > 0) {
-      prevClaimDataRef.current = claimData;
-      const dataMapped = convertAPIDataToFormValues(claimData, allFields);
+  const syncData = useCallback(
+    (claimFullData: ClaimItem, allFields?: Field[]) => {
+      const dataMapped = convertAPIDataToFormValues(
+        claimFullData,
+        allFields || [],
+        formValuesRef.current,
+      );
       dataMapped.discountBase = discountBase;
       buildFaultCodeDropdowns(dataMapped);
-      setInitialFormValues(dataMapped);
-    }
-  }, [claimData, allFields, setInitialFormValues, discountBase]);
+      setInitialFormValues((prev) => ({
+        ...prev,
+        ...dataMapped,
+      }));
+    },
+    [discountBase, setInitialFormValues, buildFaultCodeDropdowns],
+  );
+  useEffect(() => {
+    const claimDataChanged = claimFullData !== prevClaimDataRef.current;
 
-  if (loading) {
+    if (claimDataChanged && claimFullData && allFields && allFields.length > 0) {
+      syncData(claimFullData, allFields || undefined);
+      prevClaimDataRef.current = claimFullData;
+    }
+  }, [claimFullData, allFields, setInitialFormValues, discountBase, syncData]);
+
+  if (loading || isLoadingUIConfig) {
     return (
       <div className="loading-container">
         <ActivityIndicatorWithDelay delay={1000} />
@@ -972,6 +964,10 @@ export default function ClaimOverview() {
         {t("error")}: {error?.message}
       </div>
     );
+  }
+
+  if (isUIConfigError) {
+    return <div>{t("error")}</div>;
   }
 
   if (!claimData) {
@@ -1075,12 +1071,12 @@ export default function ClaimOverview() {
       <ClaimNoteModal
         action={claimNoteModalAction}
         claimId={claimId}
-        jobId={claimData.jobId}
+        jobId={claimFullData?.jobId}
         isOpen={isClaimNoteModalOpen}
         setIsOpen={setIsClaimNoteModalOpen}
       />
       <AddSpecialMaterialModal
-        jobId={claimData.jobId}
+        jobId={claimFullData?.jobId}
         isOpen={showAddSpecialMaterialModal}
         setIsOpen={setShowAddSpecialMaterialModal}
         onAddMaterials={handleAddSpecialMaterials}
@@ -1131,13 +1127,32 @@ export default function ClaimOverview() {
                 };
                 const currentMode: "view" | "edit" =
                   editingSections.size > 0 || isClaimEditMode ? "edit" : "view";
-                const userData = queryClient.getQueryData<User>(["user"]);
+                const dependencyActionCallbacks: Record<string, (...args: unknown[]) => unknown> =
+                  {};
+                for (const [key, callback] of Object.entries(
+                  genericFormContextValue.actionCallbacks,
+                )) {
+                  dependencyActionCallbacks[key] = () => {
+                    if (typeof callback === "function") {
+                      return callback(values, {
+                        setFieldValue: (field: string, value: unknown) => {
+                          void setFieldValue(field, value);
+                        },
+                        setErrors: (errors: Record<string, unknown>) => {
+                          setErrors(errors as Record<string, string>);
+                        },
+                        setTouched: (touched: Record<string, boolean>) => setTouched(touched),
+                      });
+                    }
+                    return undefined;
+                  };
+                }
                 const ctx: ActionDependencyContext = {
                   currentMode,
                   currentStatus,
                   formValues: values,
                   user: userData,
-                  actionCallbacks: genericFormContextValue.actionCallbacks,
+                  actionCallbacks: dependencyActionCallbacks,
                 };
                 const isFormReadOnly = areAllActionsDisabled(claimOverviewForm?.actions ?? [], ctx);
 

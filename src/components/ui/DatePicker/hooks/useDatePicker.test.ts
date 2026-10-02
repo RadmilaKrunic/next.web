@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
 vi.mock("formik", () => ({
@@ -120,6 +120,10 @@ describe("useDatePicker", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("returns expected shape with computed values", () => {
     setupMocks({ values: { date: "2024-01-10T00:00:00.000Z" } });
 
@@ -191,6 +195,8 @@ describe("useDatePicker", () => {
 
   it("sets default today when setDefaultToday=true and no value", () => {
     const { setFieldValue } = setupMocks({ values: { date: null } });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-06-15T00:30:00+05:30"));
 
     renderHook(() =>
       useDatePicker({
@@ -199,7 +205,10 @@ describe("useDatePicker", () => {
       }),
     );
 
-    expect(setFieldValue).toHaveBeenCalled();
+    const current = new Date();
+    const expected = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}T00:00:00.000Z`;
+
+    expect(setFieldValue).toHaveBeenCalledWith("date", expected);
   });
 
   it("sets defaultDate when provided and no value", () => {

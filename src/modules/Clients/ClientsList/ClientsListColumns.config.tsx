@@ -1,13 +1,13 @@
 import { ReactNode } from "react";
-import { Customer } from "api/services/customers/customers.types";
+import { ClientManagementCustomer } from "api/services/clientManagement/clientManagement.types";
 import { getCustomerNameWithIcon } from "utils/customerUtils";
 
-export type ClientColumnKey = "name" | "email" | "phoneNumber" | "assetsCount" | "status";
+export type ClientColumnKey = "name" | "email" | "phoneNumber" | "assetsCount";
 
 export type ClientColumnConfig = {
   key: ClientColumnKey;
   label: string;
-  render: (customer: Customer) => string | ReactNode;
+  render: (customer: ClientManagementCustomer) => string | ReactNode;
 };
 
 export const getClientColumns = (t: (key: string) => string): ClientColumnConfig[] => {
@@ -15,7 +15,8 @@ export const getClientColumns = (t: (key: string) => string): ClientColumnConfig
     {
       key: "name",
       label: t("clientName"),
-      render: (customer) => getCustomerNameWithIcon(customer),
+      render: (customer) =>
+        getCustomerNameWithIcon({ customerType: customer.customerType, firstName: customer.name }),
     },
     {
       key: "email",
@@ -25,17 +26,12 @@ export const getClientColumns = (t: (key: string) => string): ClientColumnConfig
     {
       key: "phoneNumber",
       label: t("phoneNumber"),
-      render: (customer) => customer.phoneNumber || customer.mobileNumber || "-",
+      render: (customer) => customer.phoneNumber || "-",
     },
     {
       key: "assetsCount",
       label: t("assetsCount"),
-      render: (customer) => customer.assetsCount?.toString() ?? "-",
-    },
-    {
-      key: "status",
-      label: t("status"),
-      render: (customer) => customer.status || "-",
+      render: (customer) => customer.assetCount?.toString() ?? "-",
     },
   ];
 };

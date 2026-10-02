@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { ActivityIndicator, Button, Icon } from "@bosch/react-frok";
 import Filters from "components/ui/List/Filters/Filters";
@@ -9,19 +9,20 @@ import Pagination from "components/ui/Pagination/Pagination";
 import { ScrollablePopover } from "components/ui/ScrollablePopover/ScrollablePopover";
 import { QuickFilter, Filter } from "components/ui/List/List.types";
 import { useListFilterHandlers } from "hooks/useListFilterHandlers";
-import { DEFAULT_STALE_TIME_MS } from "utils/queryConstants";
-import { getCustomersByAsc } from "api/services/customers/customers";
-import { Customer } from "api/services/customers/customers.types";
+import { useDebouncedValue } from "hooks/useDebouncedValue";
+import { useClientManagementCustomers } from "api/services/clientManagement/hooks";
+import { ClientManagementCustomer } from "api/services/clientManagement/clientManagement.types";
 import { HeaderUserData } from "api/services/header/action";
 import GenericForm from "components/generics/Form/GenericForm.types";
 import { getClientColumns } from "./ClientsListColumns.config";
-import { filterClients } from "./ClientsList.utils";
+import { resolveCustomerTypeFilter } from "./ClientsList.utils";
 import "./ClientsList.scss";
 
 const QUICK_FILTERS: QuickFilter[] = [
-  { key: "individual", label: "individual", selected: false },
-  { key: "company", label: "company", selected: false },
-  { key: "dealership", label: "dealership", selected: false },
+  { key: "INDIVIDUAL_PRIVATE", label: "individual", selected: false },
+  { key: "INDIVIDUAL_PRO", label: "individualPro", selected: false },
+  { key: "COMPANY", label: "company", selected: false },
+  { key: "DEALERSHIP", label: "dealership", selected: false },
 ];
 
 function ClientsList() {
@@ -47,6 +48,7 @@ function ClientsList() {
     quickFiltersFromStorage ?? QUICK_FILTERS,
   );
   const [searchValue, setSearchValue] = useState("");
+  const debouncedSearchValue = useDebouncedValue(searchValue, 500);
   const [advancedFilters, setAdvancedFilters] = useState<Filter[]>(advancedFiltersFromStorage);
   const [pagination, setPagination] = useState({
     page: Number(sessionStorage.getItem("clientList-currentPage")) || 1,
@@ -60,26 +62,20 @@ function ClientsList() {
     "client",
   );
 
-  const {
-    data: clients,
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["clients", user?.ascId],
-    queryFn: () => getCustomersByAsc(user?.ascId || ""),
-    enabled: !!user?.ascId,
-    refetchOnWindowFocus: false,
-    staleTime: DEFAULT_STALE_TIME_MS,
-    refetchOnMount: true,
-  });
+  const customerTypes = resolveCustomerTypeFilter(quickFilters, advancedFilters);
+
+  useEffect(() => {
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  }, [debouncedSearchValue, quickFilters, advancedFilters]);
+
+  const { data, isLoading, isError } = useClientManagementCustomers(
+    { ascId: user?.ascId || "", searchTerm: debouncedSearchValue || undefined, customerTypes },
+    pagination.page - 1,
+    pagination.pageSize,
+  );
 
   const CLIENT_COLUMNS = useMemo(() => getClientColumns(t), [t]);
   const visibleColumns = useMemo(() => CLIENT_COLUMNS.map((col) => col.key), [CLIENT_COLUMNS]);
-
-  const filteredClients = useMemo(
-    () => filterClients(clients || [], quickFilters, searchValue, advancedFilters),
-    [clients, quickFilters, searchValue, advancedFilters],
-  );
 
   const handlePageChange = (page: number) => {
     sessionStorage.setItem("clientList-currentPage", page.toString());
@@ -92,13 +88,7 @@ function ClientsList() {
     setPagination({ page: 1, pageSize: Number(option) });
   };
 
-  const isPaginationVisible = filteredClients.length > pagination.pageSize;
-
-  const paginatedClients = useMemo(() => {
-    const startIndex = (pagination.page - 1) * pagination.pageSize;
-    const endIndex = startIndex + pagination.pageSize;
-    return filteredClients.slice(startIndex, endIndex);
-  }, [filteredClients, pagination.page, pagination.pageSize]);
+  const isPaginationVisible = (data?.page?.totalElements || 0) > pagination.pageSize;
 
   if (isLoading) {
     return (
@@ -132,8 +122,8 @@ function ClientsList() {
         }}
         type="client"
       />
-      <Table<Customer>
-        data={paginatedClients}
+      <Table<ClientManagementCustomer>
+        data={data?.content || []}
         columns={CLIENT_COLUMNS}
         visibleColumns={visibleColumns}
         getRowKey={(row) => row.customerId}
@@ -175,7 +165,7 @@ function ClientsList() {
           pageSize={pagination.pageSize}
           onPageChange={handlePageChange}
           onDropdownOptionChange={handlePageSizeChange}
-          totalResults={filteredClients.length}
+          totalResults={data?.page?.totalElements || 0}
         />
       )}
     </div>

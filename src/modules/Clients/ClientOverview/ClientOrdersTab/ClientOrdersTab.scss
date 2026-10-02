@@ -1,0 +1,12 @@
+.client-orders-tab {
+  width: 100%;
+
+  .pagination .show__dropdown,
+  .pagination .show__dropdown select {
+    background: transparent;
+  }
+
+  .pagination .show__dropdown select:focus {
+    outline: none;
+  }
+}

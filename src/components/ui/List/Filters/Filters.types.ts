@@ -14,6 +14,17 @@ export type FiltersBarProps = {
     onClick: () => void;
     disabled?: boolean;
   };
+  splitActionButton?: {
+    primaryLabel: string;
+    primaryAction: () => void;
+    primaryDisabled?: boolean;
+    optionsDisabled?: boolean;
+    options: Array<{
+      label: string;
+      onClick: () => void;
+      disabled?: boolean;
+    }>;
+  };
   applyAdvancedFilters?: (filters: Filter[]) => void;
   resetAdvancedFilters?: () => void;
   optionsContent?: React.ReactNode;

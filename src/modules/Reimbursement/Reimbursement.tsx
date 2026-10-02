@@ -41,8 +41,8 @@ function Reimbursement() {
   ];
 
   const handleTabSelect = (_: unknown, data: { value: unknown }) => {
-    const tabValue = String(data.value);
-    navigate(`/reimbursement#${tabValue}`, { replace: true });
+    if (typeof data.value !== "string") return;
+    navigate(`/reimbursement#${data.value}`, { replace: true });
   };
 
   return (

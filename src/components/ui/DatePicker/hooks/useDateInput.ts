@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { useFormikContext } from "formik";
-import { parse, isValid } from "date-fns";
+import { parse, isValid, format } from "date-fns";
 import { formatDateForBackend } from "./DatePicker.utils";
 import { CalendarConfig } from "../DatePicker.types";
 
@@ -40,6 +40,8 @@ export function useDateInput({
   const normalizeParsedInputDate = (date: Date): Date =>
     new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0));
 
+  const getCalendarDayString = (date: Date): string => format(date, "yyyy-MM-dd");
+
   const tryParseSingleDate = (input: string, dateFormat: string) => {
     if (!isDateFormatComplete(input, dateFormat)) {
       return;
@@ -49,13 +51,14 @@ export function useDateInput({
 
     if (isValid(parsedDate) && isDateValid(parsedDate)) {
       const normalizedDate = normalizeParsedInputDate(parsedDate);
+      const calendarDay = getCalendarDayString(parsedDate);
 
       if (setTempDate) {
         setTempDate(normalizedDate.toISOString());
       }
 
       const formattedDate = formatDateForBackend(
-        normalizedDate,
+        calendarDay,
         calendar?.startOfTheDay,
         calendar?.endOfTheDay,
       );
@@ -73,6 +76,7 @@ export function useDateInput({
 
   const processValidStartDate = (startDate: Date, endStr: string, dateFormat: string) => {
     const normalizedStartDate = normalizeParsedInputDate(startDate);
+    const startCalendarDay = getCalendarDayString(startDate);
 
     setTempRangeStart?.(normalizedStartDate.toISOString());
     setCurrentMonth(startDate);
@@ -87,13 +91,10 @@ export function useDateInput({
 
     if (isEndDateValid) {
       const normalizedEndDate = normalizeParsedInputDate(endDate);
+      const endCalendarDay = getCalendarDayString(endDate);
       setTempRangeEnd?.(normalizedEndDate.toISOString());
-      const formattedStart = formatDateForBackend(
-        normalizedStartDate,
-        calendar?.startOfTheDay,
-        false,
-      );
-      const formattedEnd = formatDateForBackend(normalizedEndDate, false, calendar?.endOfTheDay);
+      const formattedStart = formatDateForBackend(startCalendarDay, calendar?.startOfTheDay, false);
+      const formattedEnd = formatDateForBackend(endCalendarDay, false, calendar?.endOfTheDay);
       flushSync(() => {
         void setFieldValue(name, `${formattedStart},${formattedEnd}`);
       });
@@ -179,11 +180,11 @@ export function useDateInput({
     const parsedDate = parse(input, dateFormat, new Date());
 
     if (isValid(parsedDate) && isDateValid(parsedDate)) {
-      const normalizedDate = normalizeParsedInputDate(parsedDate);
+      const calendarDay = getCalendarDayString(parsedDate);
 
       void setFieldValue(
         name,
-        formatDateForBackend(normalizedDate, calendar?.startOfTheDay, calendar?.endOfTheDay),
+        formatDateForBackend(calendarDay, calendar?.startOfTheDay, calendar?.endOfTheDay),
       );
       setCurrentMonth(parsedDate);
       setInputValue("");
@@ -221,14 +222,10 @@ export function useDateInput({
       isDateValid(endDate) &&
       startDate <= endDate
     ) {
-      const normalizedStartDate = normalizeParsedInputDate(startDate);
-      const normalizedEndDate = normalizeParsedInputDate(endDate);
-      const formattedStart = formatDateForBackend(
-        normalizedStartDate,
-        calendar?.startOfTheDay,
-        false,
-      );
-      const formattedEnd = formatDateForBackend(normalizedEndDate, false, calendar?.endOfTheDay);
+      const startCalendarDay = getCalendarDayString(startDate);
+      const endCalendarDay = getCalendarDayString(endDate);
+      const formattedStart = formatDateForBackend(startCalendarDay, calendar?.startOfTheDay, false);
+      const formattedEnd = formatDateForBackend(endCalendarDay, false, calendar?.endOfTheDay);
       void setFieldValue(name, `${formattedStart},${formattedEnd}`);
       setCurrentMonth(startDate);
       setInputValue("");

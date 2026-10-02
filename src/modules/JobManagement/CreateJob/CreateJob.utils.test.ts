@@ -4,6 +4,8 @@ import {
   getAssetCollapsedTitle,
   getMissingAddressFieldLabels,
   getDeliveryAddressConfirmationInfo,
+  getSelectedCustomerFormSnapshot,
+  getCustomerChangeComparisons,
 } from "./CreateJob.utils";
 
 describe("getCustomerCollapsedTitle", () => {
@@ -15,7 +17,6 @@ describe("getCustomerCollapsedTitle", () => {
     };
     expect(getCustomerCollapsedTitle(values)).toBe("John | 123456789 | john@example.com");
   });
-
   it("uses firstNameInPri over firstName", () => {
     const values: Record<string, unknown> = {
       firstNameInPri: "Alice",
@@ -342,6 +343,144 @@ describe("getMissingAddressFieldLabels - billing address edge cases", () => {
       "city",
       "state",
       "countryRegion",
+    ]);
+  });
+});
+
+describe("customer change detection", () => {
+  const selectedCustomer = {
+    firstName: "John",
+    lastName: "Doe",
+    primaryEmail: "john@example.com",
+    phoneNumber: "123456789",
+    mobileNumber: "987654321",
+    companyName: "Bosch GmbH",
+    dealershipName: "Dealer",
+    typeOfIndustry: "INDUSTRY",
+    boschCustomerNumber: "BCN-1",
+    vatNumber: "VAT-1",
+    communicationMedium: "EMAIL",
+    useBillingAddressForDelivery: false,
+    billingAddress: {
+      street: "Billing St",
+      houseNumber: "5",
+      additionalDetails: "",
+      neighborhood: "Center",
+      district: "District 1",
+      city: "Ankara",
+      stateProvinceRegion: "Ankara",
+      postalCode: "34000",
+      countryCode: "TR",
+    },
+    deliveryAddress: {
+      street: "Delivery St",
+      houseNumber: "7",
+      additionalDetails: "",
+      neighborhood: "North",
+      district: "District 2",
+      city: "Istanbul",
+      stateProvinceRegion: "Istanbul",
+      postalCode: "10000",
+      countryCode: "TR",
+    },
+  };
+
+  it("builds form snapshot from selected customer", () => {
+    const snapshot = getSelectedCustomerFormSnapshot(selectedCustomer as never);
+
+    expect(snapshot.firstName).toBe("John");
+    expect(snapshot.email).toBe("john@example.com");
+    expect(snapshot.streetName).toBe("Billing St");
+    expect(snapshot.deliveryStreetName).toBe("Delivery St");
+    expect(snapshot.addressLineTwo).toBe("");
+    expect(snapshot.addressLineTwoDelivery).toBe("");
+  });
+
+  it("detects address line 2 edits", () => {
+    const snapshot = getSelectedCustomerFormSnapshot(selectedCustomer as never);
+
+    expect(
+      getCustomerChangeComparisons(
+        {
+          addressLineTwo: snapshot.addressLineTwo,
+          addressLineTwoDelivery: snapshot.addressLineTwoDelivery,
+        },
+        selectedCustomer as never,
+        [
+          { fieldName: "addressLineTwo", fieldLabel: "addressLineTwo" },
+          { fieldName: "addressLineTwoDelivery", fieldLabel: "addressLineTwoDelivery" },
+        ],
+      ),
+    ).toHaveLength(0);
+
+    expect(
+      getCustomerChangeComparisons(
+        {
+          addressLineTwo: "Floor 2",
+          addressLineTwoDelivery: snapshot.addressLineTwoDelivery,
+        },
+        selectedCustomer as never,
+        [
+          { fieldName: "addressLineTwo", fieldLabel: "addressLineTwo" },
+          { fieldName: "addressLineTwoDelivery", fieldLabel: "addressLineTwoDelivery" },
+        ],
+      ),
+    ).not.toHaveLength(0);
+  });
+
+  it("detects customer edits only for rendered fields", () => {
+    const snapshot = getSelectedCustomerFormSnapshot(selectedCustomer as never);
+    const currentValues = {
+      firstName: snapshot.firstName,
+      email: snapshot.email,
+      streetName: snapshot.streetName,
+      deliveryStreetName: snapshot.deliveryStreetName,
+      useBillingAddressForDelivery: snapshot.useBillingAddressForDelivery,
+    };
+
+    expect(
+      getCustomerChangeComparisons(
+        currentValues,
+        selectedCustomer as never,
+        Object.keys(currentValues).map((fieldName) => ({ fieldName, fieldLabel: fieldName })),
+      ),
+    ).toHaveLength(0);
+
+    expect(
+      getCustomerChangeComparisons(
+        { ...currentValues, firstName: "Jane" },
+        selectedCustomer as never,
+        Object.keys(currentValues).map((fieldName) => ({ fieldName, fieldLabel: fieldName })),
+      ),
+    ).not.toHaveLength(0);
+  });
+
+  it("uses provided field labels for comparisons", () => {
+    const comparisons = getCustomerChangeComparisons(
+      {
+        firstName: "Jane",
+        email: "jane@example.com",
+      },
+      selectedCustomer as never,
+      [
+        { fieldName: "firstName", fieldLabel: "customerFirstName" },
+        { fieldName: "email", fieldLabel: "customerEmail" },
+      ],
+    );
+
+    expect(comparisons).toEqual([
+      {
+        fieldName: "firstName",
+        fieldLabel: "customerFirstName",
+        originalValue: "John",
+        currentValue: "Jane",
+      },
+      {
+        fieldName: "email",
+        fieldLabel: "customerEmail",
+        originalValue: "john@example.com",
+        currentValue: "jane@example.com",
+      },
     ]);
   });
 });

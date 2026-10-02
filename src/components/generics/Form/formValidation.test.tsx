@@ -4,6 +4,7 @@ import {
   getMandatoryFieldsForSection,
   getMandatoryFieldsForForm,
   getVisibleFieldsWithErrors,
+  getUploadFieldErrors,
   validateByAction,
   useValidator,
   getMandatoryFields,
@@ -32,6 +33,8 @@ vi.mock("react-i18next", () => ({
         incompatibleWarrantyType: "Incompatible part/material. Warranty not applicable",
         incompatibleServiceOfferingType:
           "Incompatible part/material. Service offering not applicable",
+        manufacturedDateMustBeBeforePurchaseDate:
+          "Manufacture date must be before or in same month as purchase date",
       };
       return translations[key] || key;
     },
@@ -228,6 +231,8 @@ describe("formValidation", () => {
         incompatibleWarrantyType: "Incompatible part/material. Warranty not applicable",
         incompatibleServiceOfferingType:
           "Incompatible part/material. Service offering not applicable",
+        manufacturedDateMustBeBeforePurchaseDate:
+          "Manufacture date must be before or in same month as purchase date",
       };
       return translations[key] || key;
     };
@@ -784,6 +789,83 @@ describe("formValidation", () => {
       expect(errors.email).toBeUndefined();
     });
 
+    it("adds error when manufactured month is after purchase month", () => {
+      const fields = [
+        createMockField({
+          name: "assetData#0_asset_purchaseDate",
+          label: "purchaseDate",
+          fieldMapping: { originalName: "purchaseDate" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      const values = {
+        "assetData#0_asset_purchaseDate": "2024-05-10",
+        "assetData#0_asset_manufacturedDate": "06/2024",
+      };
+
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values,
+        fields,
+        t: mockT,
+      });
+
+      expect(errors["assetData#0_asset_purchaseDate"]).toBe(
+        "Manufacture date must be before or in same month as purchase date",
+      );
+    });
+
+    it("allows same month for manufactured and purchase dates", () => {
+      const fields = [
+        createMockField({
+          name: "assetData#0_asset_purchaseDate",
+          label: "purchaseDate",
+          fieldMapping: { originalName: "purchaseDate" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      const values = {
+        "assetData#0_asset_purchaseDate": "2024-05-01",
+        "assetData#0_asset_manufacturedDate": "05/2024",
+      };
+
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values,
+        fields,
+        t: mockT,
+      });
+
+      expect(errors["assetData#0_asset_purchaseDate"]).toBeUndefined();
+    });
+
+    it("skips check when manufactured date format is unknown", () => {
+      const fields = [
+        createMockField({
+          name: "assetData#0_asset_purchaseDate",
+          label: "purchaseDate",
+          fieldMapping: { originalName: "purchaseDate" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      const values = {
+        "assetData#0_asset_purchaseDate": "2024-05-01",
+        "assetData#0_asset_manufacturedDate": "999",
+      };
+
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values,
+        fields,
+        t: mockT,
+      });
+
+      expect(errors["assetData#0_asset_purchaseDate"]).toBeUndefined();
+    });
+
     it("validates null values as empty", () => {
       const fields = [
         createMockField({
@@ -1296,6 +1378,1152 @@ describe("formValidation", () => {
       const result = getMandatoryFields(form);
 
       expect(result.submit.fieldList).toEqual(["field1"]);
+    });
+
+    it("skips section when user lacks required permission", () => {
+      const section = createMockSection({
+        permissions: ["ADMIN"],
+        actions: [{ name: "submit", mandatoryFields: ["field1"] }],
+      });
+      const form = createMockForm({ sections: [section], actions: null });
+
+      const result = getMandatoryFields(form, ["USER"]);
+
+      expect(result.submit).toBeUndefined();
+    });
+
+    it("includes section when user has required permission", () => {
+      const section = createMockSection({
+        permissions: ["ADMIN"],
+        actions: [{ name: "submit", mandatoryFields: ["field1"] }],
+      });
+      const form = createMockForm({ sections: [section], actions: null });
+
+      const result = getMandatoryFields(form, ["ADMIN"]);
+
+      expect(result.submit.fieldList).toEqual(["field1"]);
+    });
+
+    it("skips form actions when user lacks required permission", () => {
+      const form = createMockForm({
+        sections: [],
+        permissions: ["ADMIN"],
+        actions: [{ name: "submit", mandatoryFields: ["field1"] }],
+      });
+
+      const result = getMandatoryFields(form, ["USER"]);
+
+      expect(result.submit).toBeUndefined();
+    });
+
+    it("includes form actions when user has required permission", () => {
+      const form = createMockForm({
+        sections: [],
+        permissions: ["ADMIN"],
+        actions: [{ name: "submit", mandatoryFields: ["field1"] }],
+      });
+
+      const result = getMandatoryFields(form, ["ADMIN"]);
+
+      expect(result.submit.fieldList).toEqual(["field1"]);
+    });
+
+    it("skips action without a name", () => {
+      const section = createMockSection({
+        actions: [{ name: undefined, mandatoryFields: ["field1"] }],
+      });
+      const form = createMockForm({ sections: [section], actions: null });
+
+      const result = getMandatoryFields(form);
+
+      expect(Object.keys(result)).toHaveLength(0);
+    });
+
+    it("skips form-level action without a name", () => {
+      const form = createMockForm({
+        sections: [],
+        actions: [{ name: undefined, mandatoryFields: ["field1"] }],
+      });
+
+      const result = getMandatoryFields(form);
+
+      expect(Object.keys(result)).toHaveLength(0);
+    });
+  });
+
+  describe("getMandatoryFieldsForForm additional branches", () => {
+    it("returns empty array when form actions is undefined", () => {
+      const form = createMockForm({ actions: undefined });
+      expect(getMandatoryFieldsForForm(form, "submit")).toEqual([]);
+    });
+
+    it("returns empty array when action found but has no mandatoryFields", () => {
+      const form = createMockForm({
+        actions: [{ name: "submit" }],
+      });
+      expect(getMandatoryFieldsForForm(form, "submit")).toEqual([]);
+    });
+  });
+
+  describe("getMandatoryFieldsForSection additional branches", () => {
+    it("returns empty array when action found but has no mandatoryFields", () => {
+      const section = createMockSection({
+        actions: [{ name: "submit" }],
+      });
+      expect(getMandatoryFieldsForSection(section, "submit")).toEqual([]);
+    });
+  });
+
+  describe("getUploadFieldErrors", () => {
+    const mockT = (key: string) => key;
+
+    it("returns empty array for non-upload field", () => {
+      const field = createMockField({ type: "text", name: "doc" });
+      expect(getUploadFieldErrors(field, {})).toEqual([]);
+    });
+
+    it("returns empty array when requiredDocuments is absent", () => {
+      const field = createMockField({ type: "upload", name: "doc", requiredDocuments: [] });
+      expect(getUploadFieldErrors(field, {})).toEqual([]);
+    });
+
+    it("returns empty array when condition is not met", () => {
+      const field = createMockField({
+        type: "upload",
+        name: "doc",
+        requiredDocuments: [
+          {
+            requiredForFields: [{ fieldName: "status", fieldValue: "ACTIVE" }],
+            documentTypes: ["pdf"],
+            errorMessage: "pdfRequired",
+          },
+        ],
+      });
+      const values = { status: "INACTIVE", doc: [] };
+      expect(getUploadFieldErrors(field, values)).toEqual([]);
+    });
+
+    it("returns empty array when condition met and required file is present", () => {
+      const field = createMockField({
+        type: "upload",
+        name: "doc",
+        requiredDocuments: [
+          {
+            requiredForFields: [{ fieldName: "status", fieldValue: "ACTIVE" }],
+            documentTypes: ["pdf"],
+            errorMessage: "pdfRequired",
+          },
+        ],
+      });
+      const values = { status: "ACTIVE", doc: [{ type: "PDF" }] };
+      expect(getUploadFieldErrors(field, values)).toEqual([]);
+    });
+
+    it("returns error when condition met and required file is missing", () => {
+      const field = createMockField({
+        type: "upload",
+        name: "doc",
+        requiredDocuments: [
+          {
+            requiredForFields: [{ fieldName: "status", fieldValue: "ACTIVE" }],
+            documentTypes: ["pdf"],
+            errorMessage: "pdfRequired",
+          },
+        ],
+      });
+      const values = { status: "ACTIVE", doc: [] };
+      expect(getUploadFieldErrors(field, values)).toEqual(["pdfRequired"]);
+      expect(field.patternText).toBe("pdfRequired");
+    });
+
+    it("returns multiple errors and sets patternText to first", () => {
+      const field = createMockField({
+        type: "upload",
+        name: "doc",
+        requiredDocuments: [
+          {
+            requiredForFields: [{ fieldName: "status", fieldValue: "ACTIVE" }],
+            documentTypes: ["pdf"],
+            errorMessage: "pdfRequired",
+          },
+          {
+            requiredForFields: [{ fieldName: "status", fieldValue: "ACTIVE" }],
+            documentTypes: ["jpg"],
+            errorMessage: "imageRequired",
+          },
+        ],
+      });
+      const values = { status: "ACTIVE", doc: [] };
+      const result = getUploadFieldErrors(field, values);
+      expect(result).toEqual(["pdfRequired", "imageRequired"]);
+      expect(field.patternText).toBe("pdfRequired");
+    });
+
+    it("uses wildcard * condition — met when field is truthy", () => {
+      const field = createMockField({
+        type: "upload",
+        name: "doc",
+        requiredDocuments: [
+          {
+            requiredForFields: [{ fieldName: "anyField", fieldValue: "*" }],
+            documentTypes: ["pdf"],
+            errorMessage: "pdfRequired",
+          },
+        ],
+      });
+      const values = { anyField: "someValue", doc: [] };
+      expect(getUploadFieldErrors(field, values)).toEqual(["pdfRequired"]);
+    });
+
+    it("uses wildcard * condition — not met when field is falsy", () => {
+      const field = createMockField({
+        type: "upload",
+        name: "doc",
+        requiredDocuments: [
+          {
+            requiredForFields: [{ fieldName: "anyField", fieldValue: "*" }],
+            documentTypes: ["pdf"],
+            errorMessage: "pdfRequired",
+          },
+        ],
+      });
+      const values = { anyField: "", doc: [] };
+      expect(getUploadFieldErrors(field, values)).toEqual([]);
+    });
+
+    it("treats non-array upload value as empty", () => {
+      const field = createMockField({
+        type: "upload",
+        name: "doc",
+        requiredDocuments: [
+          {
+            requiredForFields: [{ fieldName: "status", fieldValue: "ACTIVE" }],
+            documentTypes: ["pdf"],
+            errorMessage: "pdfRequired",
+          },
+        ],
+      });
+      const values = { status: "ACTIVE", doc: "not-an-array" };
+      expect(getUploadFieldErrors(field, values)).toEqual(["pdfRequired"]);
+    });
+
+    void mockT;
+  });
+
+  describe("validateByAction — additional coverage", () => {
+    const mockT = (key: string) => {
+      const map: Record<string, string> = {
+        isRequired: "is required",
+        invalidFormat: "Invalid format",
+        invalidEmail: "Invalid email format",
+        manufacturedDateMustBeBeforePurchaseDate:
+          "Manufacture date must be before or in same month as purchase date",
+        serialNumberMustHave: "Serial number must have valid length",
+        dremelSerialNumberMustHave: "Dremel serial number must have valid length",
+        incompatibleWarrantyType: "Incompatible part/material. Warranty not applicable",
+        incompatibleServiceOfferingType:
+          "Incompatible part/material. Service offering not applicable",
+        bareToolNumberNotFound: "Bare tool number {{id}} not found.",
+        toolModelNameNotFound: "Tool model name {{name}} not found.",
+      };
+      return map[key] ?? key;
+    };
+
+    // ── areAllFieldsEmpty with null values ────────────────────────────────────
+
+    it("treats null group values as empty in allEmpty validation", () => {
+      const fields = [
+        createMockField({
+          name: "email",
+          label: "Email",
+          fieldMapping: { originalName: "email" },
+          requiredDependentFields: {
+            allEmpty: ["email", "phone"],
+            errorMessageAllEmpty: "atLeastOneRequired",
+          },
+        }),
+        createMockField({ name: "phone", label: "Phone", fieldMapping: { originalName: "phone" } }),
+      ];
+      const errors: ValidationErrors = {};
+      // phone is null — should count as empty
+      validateByAction({
+        errors,
+        mandatoryFields: ["email"],
+        values: { email: "", phone: null },
+        fields,
+        t: mockT,
+      });
+      expect(errors.email).toBe("atLeastOneRequired");
+      expect(errors.phone).toBe("atLeastOneRequired");
+    });
+
+    // ── clearMatchingGroupErrors — stale allEmpty errors cleared ─────────────
+
+    it("clears stale allEmpty errors once group is no longer all empty", () => {
+      const fields = [
+        createMockField({
+          name: "email",
+          label: "Email",
+          fieldMapping: { originalName: "email" },
+          requiredDependentFields: {
+            allEmpty: ["email", "phone"],
+            errorMessageAllEmpty: "atLeastOneRequired",
+          },
+        }),
+        createMockField({ name: "phone", label: "Phone", fieldMapping: { originalName: "phone" } }),
+      ];
+      // Pre-existing stale errors from previous validation run
+      const errors: ValidationErrors = {
+        email: "atLeastOneRequired",
+        phone: "atLeastOneRequired",
+      };
+      // Now phone has a value — group is no longer all empty
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { email: "", phone: "555-1234" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.email).toBeUndefined();
+      expect(errors.phone).toBeUndefined();
+    });
+
+    // ── applyGroupErrors with onlyTouched ────────────────────────────────────
+
+    it("applies allEmpty error only to touched fields when onlyTouched=true", () => {
+      const fields = [
+        createMockField({
+          name: "email",
+          label: "Email",
+          fieldMapping: { originalName: "email" },
+          requiredDependentFields: {
+            allEmpty: ["email", "phone"],
+            errorMessageAllEmpty: "atLeastOneRequired",
+          },
+        }),
+        createMockField({ name: "phone", label: "Phone", fieldMapping: { originalName: "phone" } }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: ["email"],
+        values: { email: "", phone: "" },
+        fields,
+        onlyTouched: true,
+        touchedFields: { email: true, phone: false },
+        t: mockT,
+      });
+      expect(errors.email).toBe("atLeastOneRequired");
+      expect(errors.phone).toBeUndefined();
+    });
+
+    // ── checkDependencyCondition with empty arrays ────────────────────────────
+
+    it("does not error when byValueAnd and byValueOr are empty arrays", () => {
+      const fields = [
+        createMockField({
+          name: "field1",
+          label: "Field 1",
+          fieldMapping: { originalName: "field1" },
+          requiredDependentFields: {
+            byValueAnd: [],
+            byValueOr: [],
+            errorMessageByValue: "conditionalError",
+          },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: ["field1"],
+        values: { field1: "" },
+        fields,
+        t: mockT,
+      });
+      // condition never met (empty arrays) → no byValue error, falls through to simple required check
+      // but hasByValueCondition=true & byValueConditionMet=false → handleRequiredFieldCheck deletes error
+      expect(errors.field1).toBeUndefined();
+    });
+
+    // ── handleRequiredFieldCheck — byValue condition not met, delete stale error ──
+
+    it("removes stale required error when byValue condition is no longer met", () => {
+      const fields = [
+        createMockField({
+          name: "companyName",
+          label: "Company Name",
+          fieldMapping: { originalName: "companyName" },
+          requiredDependentFields: {
+            byValueOr: [{ fieldName: "typeOfUser", fieldValue: "COMPANY" }],
+            errorMessageByValue: "companyNameRequired",
+          },
+        }),
+      ];
+      // Stale error from when typeOfUser was COMPANY
+      const errors: ValidationErrors = { companyName: "Company Name is required" };
+      validateByAction({
+        errors,
+        mandatoryFields: ["companyName"],
+        values: { companyName: "", typeOfUser: "INDIVIDUAL" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.companyName).toBeUndefined();
+    });
+
+    // ── validatePattern — pattern matches, clear stale patternText error ─────
+
+    it("clears stale pattern error when value now matches pattern", () => {
+      const emailPattern = btoa("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+      const fields = [
+        createMockField({
+          name: "email",
+          label: "Email",
+          pattern: emailPattern,
+          patternText: "invalidEmail",
+          fieldMapping: { originalName: "email" },
+        }),
+      ];
+      const errors: ValidationErrors = { email: "Invalid email format" };
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { email: "valid@example.com" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.email).toBeUndefined();
+    });
+
+    // ── validatePattern — pattern matches, clear stale sameDataFieldAs error ─
+
+    it("clears stale sameDataFieldAs error when value now matches pattern", () => {
+      const emailPattern = btoa("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+      const fields = [
+        createMockField({
+          name: "email",
+          label: "Email",
+          pattern: emailPattern,
+          patternText: "invalidEmail",
+          sameDataFieldAs: "emailCopy",
+          fieldMapping: { originalName: "email" },
+        }),
+      ];
+      const errors: ValidationErrors = {
+        email: "Invalid email format",
+        emailCopy: "Invalid email format",
+      };
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { email: "valid@example.com" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.email).toBeUndefined();
+      expect(errors.emailCopy).toBeUndefined();
+    });
+
+    // ── validatePattern — pattern fails, no patternText → "invalidFormat" ───
+
+    it("uses invalidFormat when pattern fails and patternText is absent", () => {
+      const numericPattern = btoa("^[0-9]+$");
+      const fields = [
+        createMockField({
+          name: "code",
+          label: "Code",
+          pattern: numericPattern,
+          patternText: undefined,
+          fieldMapping: { originalName: "code" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { code: "abc" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.code).toBe("Invalid format");
+    });
+
+    // ── validatePattern — pattern fails, propagate error to sameDataFieldAs ─
+
+    it("sets error on sameDataFieldAs field when pattern fails", () => {
+      const emailPattern = btoa("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+      const fields = [
+        createMockField({
+          name: "email",
+          label: "Email",
+          pattern: emailPattern,
+          patternText: "invalidEmail",
+          sameDataFieldAs: "emailCopy",
+          fieldMapping: { originalName: "email" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { email: "not-an-email" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.email).toBe("Invalid email format");
+      expect(errors.emailCopy).toBe("Invalid email format");
+    });
+
+    // ── validateSerialNumberField ─────────────────────────────────────────────
+
+    describe("serialNumber validation", () => {
+      const makeSerialField = (overrides: Partial<ReturnType<typeof createMockField>> = {}) =>
+        createMockField({
+          name: "asset_serialNumber",
+          label: "Serial Number",
+          fieldMapping: { originalName: "serialNumber" },
+          ...overrides,
+        });
+
+      it("DREMEL brand uses dremel-specific error message", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: "AB", asset_brand: "DREMEL" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBe("Dremel serial number must have valid length");
+      });
+
+      it("non-DREMEL brand uses generic error message for invalid length", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: "AB", asset_brand: "BOSCH" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBe("Serial number must have valid length");
+      });
+
+      it("length 9 is valid — no error", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = { asset_serialNumber: "old error" };
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: "123456789" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBeUndefined();
+      });
+
+      it("length 12 is valid — no error", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: "123456789012" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBeUndefined();
+      });
+
+      it("length 10 is invalid", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: "1234567890" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBeDefined();
+      });
+
+      it("length 11 is invalid", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: "12345678901" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBeDefined();
+      });
+
+      it("value '999' is valid — no error", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: "999" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBeUndefined();
+      });
+
+      it("length 3 non-999 is valid — no error", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: "ABC" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBeUndefined();
+      });
+
+      it("length 1 (not 3, not 999) is invalid", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: "A" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBeDefined();
+      });
+
+      it("non-string value clears existing serial error", () => {
+        const fields = [makeSerialField()];
+        const errors: ValidationErrors = { asset_serialNumber: "old error" };
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_serialNumber: 12345 as unknown as string },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_serialNumber).toBeUndefined();
+      });
+    });
+
+    // ── validateManufacturedBeforePurchaseDate ────────────────────────────────
+
+    describe("manufactured-before-purchase date validation", () => {
+      const makePurchaseField = (name = "asset_purchaseDate") =>
+        createMockField({
+          name,
+          label: "Purchase Date",
+          fieldMapping: { originalName: "purchaseDate" },
+        });
+
+      it("ignores fields that are not purchaseDate", () => {
+        const fields = [
+          createMockField({
+            name: "orderDate",
+            label: "Order Date",
+            fieldMapping: { originalName: "orderDate" },
+          }),
+        ];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { orderDate: "2024-01-15", asset_manufacturedDate: "06/2025" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.orderDate).toBeUndefined();
+      });
+
+      it("clears stale error when purchaseDate is empty", () => {
+        const fields = [makePurchaseField()];
+        const errors: ValidationErrors = {
+          asset_purchaseDate: "Manufacture date must be before or in same month as purchase date",
+        };
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_purchaseDate: "", asset_manufacturedDate: "06/2024" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_purchaseDate).toBeUndefined();
+      });
+
+      it("clears stale error when manufactured date is unparseable", () => {
+        const fields = [makePurchaseField()];
+        const errors: ValidationErrors = {
+          asset_purchaseDate: "Manufacture date must be before or in same month as purchase date",
+        };
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_purchaseDate: "2024-05-01", asset_manufacturedDate: "bad-value" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_purchaseDate).toBeUndefined();
+      });
+
+      it("clears stale error when manufactured date is before purchase date", () => {
+        const fields = [makePurchaseField()];
+        const errors: ValidationErrors = {
+          asset_purchaseDate: "Manufacture date must be before or in same month as purchase date",
+        };
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_purchaseDate: "2024-06-01", asset_manufacturedDate: "03/2024" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_purchaseDate).toBeUndefined();
+      });
+
+      it("accepts compact YYYYMM manufactured date format", () => {
+        const fields = [makePurchaseField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_purchaseDate: "2024-05-01", asset_manufacturedDate: "202407" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_purchaseDate).toBe(
+          "Manufacture date must be before or in same month as purchase date",
+        );
+      });
+
+      it("accepts ISO YYYY-MM-DD manufactured date format", () => {
+        const fields = [makePurchaseField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: {
+            asset_purchaseDate: "2024-05-01",
+            asset_manufacturedDate: "2024-07-15",
+          },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_purchaseDate).toBe(
+          "Manufacture date must be before or in same month as purchase date",
+        );
+      });
+
+      it("accepts non-ISO purchase date parsed via Date constructor", () => {
+        const fields = [makePurchaseField()];
+        const errors: ValidationErrors = {};
+        // "May 10, 2024" is a valid Date but not ISO format
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_purchaseDate: "May 10, 2024", asset_manufacturedDate: "06/2024" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_purchaseDate).toBe(
+          "Manufacture date must be before or in same month as purchase date",
+        );
+      });
+
+      it("ignores invalid purchase date string", () => {
+        const fields = [makePurchaseField()];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { asset_purchaseDate: "not-a-date", asset_manufacturedDate: "06/2024" },
+          fields,
+          t: mockT,
+        });
+        expect(errors.asset_purchaseDate).toBeUndefined();
+      });
+    });
+
+    // ── bareToolNumber autocomplete ───────────────────────────────────────────
+
+    describe("bareToolNumber autocomplete validation", () => {
+      it("blocks when bareToolNumber is not validated", () => {
+        const fields = [
+          createMockField({
+            name: "bareToolNumber",
+            type: "autocomplete",
+            fieldMapping: { originalName: "bareToolNumber" },
+          }),
+        ];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { bareToolNumber: "BT-123" },
+          fields,
+          t: mockT,
+          autocompleteValidationRef: { current: { bareToolNumber: false } },
+        });
+        expect(errors.bareToolNumber).toBe("Bare tool number BT-123 not found.");
+      });
+
+      it("allows when bareToolNumber is validated", () => {
+        const fields = [
+          createMockField({
+            name: "bareToolNumber",
+            type: "autocomplete",
+            fieldMapping: { originalName: "bareToolNumber" },
+          }),
+        ];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { bareToolNumber: "BT-123" },
+          fields,
+          t: mockT,
+          autocompleteValidationRef: { current: { bareToolNumber: true } },
+        });
+        expect(errors.bareToolNumber).toBeUndefined();
+      });
+
+      it("skips autocomplete check when value is empty", () => {
+        const fields = [
+          createMockField({
+            name: "bareToolNumber",
+            type: "autocomplete",
+            fieldMapping: { originalName: "bareToolNumber" },
+          }),
+        ];
+        const errors: ValidationErrors = {};
+        validateByAction({
+          errors,
+          mandatoryFields: [],
+          values: { bareToolNumber: "" },
+          fields,
+          t: mockT,
+          autocompleteValidationRef: { current: { bareToolNumber: false } },
+        });
+        expect(errors.bareToolNumber).toBeUndefined();
+      });
+    });
+
+    // ── upload field with multiple errors ─────────────────────────────────────
+
+    it("collects multiple upload errors and encodes them as JSON array", () => {
+      const fields = [
+        createMockField({
+          name: "doc",
+          type: "upload",
+          label: "Document",
+          fieldMapping: { originalName: "doc" },
+          requiredDocuments: [
+            {
+              requiredForFields: [{ fieldName: "status", fieldValue: "ACTIVE" }],
+              documentTypes: ["pdf"],
+              errorMessage: "pdfRequired",
+            },
+            {
+              requiredForFields: [{ fieldName: "status", fieldValue: "ACTIVE" }],
+              documentTypes: ["jpg"],
+              errorMessage: "imageRequired",
+            },
+          ],
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: ["doc"],
+        values: { status: "ACTIVE", doc: [] },
+        fields,
+        t: mockT,
+      });
+      const parsed: string[] = JSON.parse(errors.doc);
+      expect(parsed).toContain("pdfRequired");
+      expect(parsed).toContain("imageRequired");
+    });
+
+    it("upload field with required documents but no mandatory check is skipped", () => {
+      const fields = [
+        createMockField({
+          name: "doc",
+          type: "upload",
+          label: "Document",
+          fieldMapping: { originalName: "doc" },
+          requiredDocuments: [
+            {
+              requiredForFields: [{ fieldName: "status", fieldValue: "ACTIVE" }],
+              documentTypes: ["pdf"],
+              errorMessage: "pdfRequired",
+            },
+          ],
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      // not mandatory → upload field with requiredDocuments returns early (no error)
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { status: "ACTIVE", doc: [] },
+        fields,
+        t: mockT,
+      });
+      expect(errors.doc).toBeUndefined();
+    });
+
+    // ── checkDependencyCondition — dep exists but byValueAnd/byValueOr both undefined ──
+
+    it("treats dep with no byValueAnd/byValueOr as no condition", () => {
+      const fields = [
+        createMockField({
+          name: "field1",
+          label: "Field 1",
+          fieldMapping: { originalName: "field1" },
+          // requiredDependentFields exists but has only allEmpty (no byValueAnd/byValueOr)
+          requiredDependentFields: {
+            allEmpty: ["field1"],
+            errorMessageAllEmpty: "atLeastOneRequired",
+          },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: ["field1"],
+        values: { field1: "" },
+        fields,
+        t: mockT,
+      });
+      // hasRequiredDependency=false (no byValueAnd/byValueOr) → simple required check fires
+      expect(errors.field1).toBeDefined();
+    });
+
+    // ── validatePattern — non-string/number/boolean value → valueToTest="" ───
+
+    it("treats non-primitive pattern value as empty string (no match)", () => {
+      const alphaPattern = btoa("^[a-z]+$");
+      const fields = [
+        createMockField({
+          name: "code",
+          label: "Code",
+          pattern: alphaPattern,
+          patternText: "invalidFormat",
+          fieldMapping: { originalName: "code" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      // object value → valueToTest="" → regex fails → error set
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { code: {} as unknown as string },
+        fields,
+        t: mockT,
+      });
+      expect(errors.code).toBe("Invalid format");
+    });
+
+    // ── getYearMonthKey — month out of range ─────────────────────────────────
+
+    it("ignores manufactured date with invalid month 0 in compact format", () => {
+      const fields = [
+        createMockField({
+          name: "asset_purchaseDate",
+          label: "Purchase Date",
+          fieldMapping: { originalName: "purchaseDate" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      // "202400" → month=00, out-of-range → parseManufacturedYearMonth returns null → no error
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { asset_purchaseDate: "2024-05-01", asset_manufacturedDate: "202400" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.asset_purchaseDate).toBeUndefined();
+    });
+
+    it("ignores manufactured date with invalid month 13 in MM/YYYY format", () => {
+      const fields = [
+        createMockField({
+          name: "asset_purchaseDate",
+          label: "Purchase Date",
+          fieldMapping: { originalName: "purchaseDate" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { asset_purchaseDate: "2024-05-01", asset_manufacturedDate: "13/2024" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.asset_purchaseDate).toBeUndefined();
+    });
+
+    it("ignores purchase date with empty trimmed string", () => {
+      const fields = [
+        createMockField({
+          name: "asset_purchaseDate",
+          label: "Purchase Date",
+          fieldMapping: { originalName: "purchaseDate" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: { asset_purchaseDate: "   ", asset_manufacturedDate: "06/2024" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.asset_purchaseDate).toBeUndefined();
+    });
+
+    it("ignores manufactured date that is not a string (non-string type check branch)", () => {
+      const fields = [
+        createMockField({
+          name: "asset_purchaseDate",
+          label: "Purchase Date",
+          fieldMapping: { originalName: "purchaseDate" },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: [],
+        values: {
+          asset_purchaseDate: "2024-05-01",
+          asset_manufacturedDate: 202406 as unknown as string,
+        },
+        fields,
+        t: mockT,
+      });
+      expect(errors.asset_purchaseDate).toBeUndefined();
+    });
+
+    it("no error when byValue condition met but field has value", () => {
+      const fields = [
+        createMockField({
+          name: "companyName",
+          label: "Company Name",
+          fieldMapping: { originalName: "companyName" },
+          requiredDependentFields: {
+            byValueOr: [{ fieldName: "typeOfUser", fieldValue: "COMPANY" }],
+            errorMessageByValue: "companyNameRequired",
+          },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: ["companyName"],
+        values: { companyName: "Acme", typeOfUser: "COMPANY" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.companyName).toBeUndefined();
+    });
+
+    // ── byValue condition met + empty + no errorMessageByValue → fallback label ──
+
+    it("uses field label as fallback when byValue condition met and errorMessageByValue absent", () => {
+      const fields = [
+        createMockField({
+          name: "companyName",
+          label: "companyName",
+          fieldMapping: { originalName: "companyName" },
+          requiredDependentFields: {
+            byValueOr: [{ fieldName: "typeOfUser", fieldValue: "COMPANY" }],
+            // intentionally no errorMessageByValue
+          },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: ["companyName"],
+        values: { companyName: "", typeOfUser: "COMPANY" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.companyName).toBe("companyName is required");
+    });
+
+    it("uses field label fallback when errorMessageByValue is explicitly null", () => {
+      const fields = [
+        createMockField({
+          name: "companyName",
+          label: "companyName",
+          fieldMapping: { originalName: "companyName" },
+          requiredDependentFields: {
+            byValueOr: [{ fieldName: "typeOfUser", fieldValue: "COMPANY" }],
+            errorMessageByValue: null as unknown as string,
+          },
+        }),
+      ];
+      const errors: ValidationErrors = {};
+      validateByAction({
+        errors,
+        mandatoryFields: ["companyName"],
+        values: { companyName: "", typeOfUser: "COMPANY" },
+        fields,
+        t: mockT,
+      });
+      expect(errors.companyName).toBe("companyName is required");
+    });
+  });
+
+  describe("getMandatoryFields — action.mandatoryFields absent", () => {
+    it("treats absent mandatoryFields in section action as empty array", () => {
+      const section = createMockSection({
+        actions: [{ name: "submit" }],
+      });
+      const form = createMockForm({ sections: [section], actions: null });
+
+      const result = getMandatoryFields(form);
+
+      expect(result.submit.fieldList).toEqual([]);
+    });
+
+    it("treats absent mandatoryFields in form action as empty array", () => {
+      const form = createMockForm({
+        sections: [],
+        actions: [{ name: "submit" }],
+      });
+
+      const result = getMandatoryFields(form);
+
+      expect(result.submit.fieldList).toEqual([]);
+    });
+
+    it("merges into existing section entry that lacks fieldList via section then form action", () => {
+      // section action creates entry first, form action with same key appends
+      const section = createMockSection({
+        actions: [{ name: "submit", mandatoryFields: ["f1"] }],
+      });
+      const form = createMockForm({
+        sections: [section],
+        actions: [{ name: "submit", mandatoryFields: ["f2"] }],
+      });
+
+      const result = getMandatoryFields(form);
+
+      expect(result.submit.fieldList).toEqual(["f1", "f2"]);
     });
   });
 });

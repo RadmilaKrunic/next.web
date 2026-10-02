@@ -1,5 +1,11 @@
 import axiosClient from "../../axios-client/axiosClient";
-import { Customer, UpdateCustomerRequest } from "./customers.types";
+import {
+  Customer,
+  CustomerJobsQuery,
+  CustomerJobsResponse,
+  CustomerOrdersQuery,
+  CustomerOrdersResponse,
+} from "./customers.types";
 import axios, { AxiosResponse } from "axios";
 
 const customersAxiosClient = axios.create({
@@ -81,16 +87,30 @@ export const getCustomerById = async (customerId: string): Promise<Customer> => 
   }
 };
 
-export const createClient = async (payload: UpdateCustomerRequest): Promise<Customer> => {
-  try {
-    const response: AxiosResponse<Customer> = await customersAxiosClient.put<Customer>(
-      `/${payload.clientId}`,
-      payload,
-    );
-    return response.data;
-  } catch (error) {
-    throw new Error(
-      `Error updating client: ${(axios.isAxiosError(error) && error.message) || String(error)}`,
-    );
-  }
+export const getCustomerJobs = async (
+  customerId: string,
+  query: CustomerJobsQuery = {},
+): Promise<CustomerJobsResponse> => {
+  const response = await customersAxiosClient.get<CustomerJobsResponse>(`/${customerId}/jobs`, {
+    params: {
+      searchTerm: query.searchTerm?.trim() || undefined,
+      page: query.page ?? 0,
+      size: query.size ?? 10,
+    },
+  });
+  return response.data;
+};
+
+export const getCustomerOrders = async (
+  customerId: string,
+  query: CustomerOrdersQuery = {},
+): Promise<CustomerOrdersResponse> => {
+  const response = await customersAxiosClient.get<CustomerOrdersResponse>(`/${customerId}/orders`, {
+    params: {
+      searchTerm: query.searchTerm?.trim() || undefined,
+      page: query.page ?? 0,
+      size: query.size ?? 10,
+    },
+  });
+  return response.data;
 };

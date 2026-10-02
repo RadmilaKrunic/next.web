@@ -8,8 +8,6 @@ import {
 import type { FormikContextType } from "formik";
 import type { TFunction } from "i18next";
 import type Field from "./GenericField.types";
-
-// Mock API call used by updateDependentFields
 vi.mock("../../../api/services/orders/orders", () => ({
   getManufacturedDate: vi.fn(),
 }));

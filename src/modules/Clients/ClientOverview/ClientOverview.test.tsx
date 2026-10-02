@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { useContext } from "react";
 import ClientOverview from "./ClientOverview";
-import { getCustomerById, createClient } from "../../../api/services/customers/customers";
+import { getCustomerById } from "../../../api/services/customers/customers";
 import { GenericFormContext } from "../../../components/generics/Form/GenericForm.context";
 import { MessagesContext } from "../../../contexts/messagescontext";
 
@@ -82,6 +82,7 @@ vi.mock("../../../hooks/useFormInitialization", () => ({
     mandatoryFields: {},
     tabs: [
       { name: "clientInfo", label: "clientInfo", position: 0 },
+      { name: "Orders", label: "orders", position: 1 },
       { name: "otherTab", label: "otherTab", position: 1 },
     ],
     isInitialized: true,
@@ -170,7 +171,10 @@ vi.mock("../../../components/generics/utils", () => ({
 
 const mockAxiosPut = vi.fn();
 vi.mock("../../../api/axios-client/axiosClient", () => ({
-  default: { put: (...args: unknown[]) => mockAxiosPut(...args) },
+  default: {
+    defaults: { baseURL: "http://localhost", headers: {} },
+    put: (...args: unknown[]) => mockAxiosPut(...args),
+  },
 }));
 
 const mockSetMessages = vi.fn();
@@ -184,6 +188,13 @@ const clientOverviewForm = {
       position: 0,
       isDisabled: false,
       areas: [{ fields: baseFields }],
+    },
+    {
+      name: "Orders",
+      label: "orders",
+      position: 1,
+      isDisabled: true,
+      areas: [],
     },
     {
       name: "otherTab",
@@ -235,6 +246,7 @@ function renderWithProviders(queryClient: QueryClient) {
 describe("ClientOverview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   it("shows loading indicator while fetching the client", () => {
@@ -295,7 +307,6 @@ describe("ClientOverview", () => {
       fireEvent.click(screen.getByTestId("trigger-save"));
 
       expect(consoleLogSpy).toHaveBeenCalledWith("onSaveClient formValues:", saveFormValues);
-      expect(createClient).not.toHaveBeenCalled();
       expect(mockSetMessages).not.toHaveBeenCalled();
     });
   });

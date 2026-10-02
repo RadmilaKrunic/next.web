@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { RefObject, Dispatch, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type {
   AllowedPosition,
   discountBase,
@@ -67,8 +67,6 @@ export interface ClaimContextValue {
 const DEFAULT_SUMMARY_TYPE_OPTIONS = [{ value: "totalSummary", label: "totalSummary" }];
 
 const noop = () => {};
-
-const createDefaultRef = (): RefObject<boolean> => ({ current: false });
 
 const defaultClaimContextValue: ClaimContextValue = {
   materials: [],

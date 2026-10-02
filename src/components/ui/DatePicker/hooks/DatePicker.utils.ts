@@ -1,4 +1,4 @@
-import { type Locale, set, format } from "date-fns";
+import { type Locale, format } from "date-fns";
 import { enUS } from "date-fns/locale/en-US";
 import { de } from "date-fns/locale/de";
 import { fr } from "date-fns/locale/fr";
@@ -60,38 +60,26 @@ export function formatDateForBackend(
 ): string | null {
   if (!date) return null;
 
-  let dateObj = typeof date === "string" ? new Date(date) : date;
-  if (Number.isNaN(dateObj.getTime())) return null;
+  let year: string;
+  let month: string;
+  let day: string;
 
-  if (startOfTheDayFlag) {
-    // Set to start of day in UTC: 00:00:00.000
-    dateObj = new Date(
-      Date.UTC(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate(), 0, 0, 0, 0),
-    );
-  } else if (endOfTheDayFlag) {
-    // Set to end of day in UTC: 23:59:59.999
-    dateObj = new Date(
-      Date.UTC(
-        dateObj.getUTCFullYear(),
-        dateObj.getUTCMonth(),
-        dateObj.getUTCDate(),
-        23,
-        59,
-        59,
-        999,
-      ),
-    );
+  if (typeof date === "string") {
+    const datePartMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(date);
+    if (!datePartMatch) return null;
+
+    [, year, month, day] = datePartMatch;
   } else {
-    const now = new Date();
-    dateObj = set(dateObj, {
-      hours: now.getHours(),
-      minutes: now.getMinutes(),
-      seconds: now.getSeconds(),
-      milliseconds: now.getMilliseconds(),
-    });
+    if (Number.isNaN(date.getTime())) return null;
+
+    year = String(date.getFullYear());
+    month = String(date.getMonth() + 1).padStart(2, "0");
+    day = String(date.getDate()).padStart(2, "0");
   }
-  //2024-02-16T00:00:00Z
-  return dateObj.toISOString();
+
+  const time = endOfTheDayFlag ? "23:59:59.999" : "00:00:00.000";
+
+  return `${year}-${month}-${day}T${time}Z`;
 }
 
 export function formatFormikDateValue(

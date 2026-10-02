@@ -141,7 +141,7 @@ function SparePartsRow({
   } = useContext(GenericFormContext);
   const {
     arePricesValidated,
-    allowedPositions, 
+    allowedPositions,
     setRevisedRejectedRowPending,
     canArchiveOnDelete,
     jobStatus,

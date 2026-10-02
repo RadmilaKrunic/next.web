@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import ClientsList from "./ClientsList";
-import { getCustomersByAsc } from "api/services/customers/customers";
+import { useClientManagementCustomers } from "api/services/clientManagement/hooks";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -18,16 +18,12 @@ vi.mock("react-router", async () => {
   };
 });
 
-vi.mock("api/services/customers/customers", () => ({
-  getCustomersByAsc: vi.fn(),
+vi.mock("api/services/clientManagement/hooks", () => ({
+  useClientManagementCustomers: vi.fn(),
 }));
 
 vi.mock("./ClientsListColumns.config", () => ({
   getClientColumns: () => [{ key: "name", header: "Name" }],
-}));
-
-vi.mock("./ClientsList.utils", () => ({
-  filterClients: (clients: unknown[]) => clients,
 }));
 
 vi.mock("hooks/useListFilterHandlers", () => ({
@@ -83,7 +79,11 @@ describe("ClientsList", () => {
   });
 
   it("shows loading indicator while fetching", () => {
-    vi.mocked(getCustomersByAsc).mockReturnValue(new Promise(() => {}));
+    vi.mocked(useClientManagementCustomers).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    } as never);
     const queryClient = createQueryClient();
     queryClient.setQueryData(["user"], { ascId: "123", countryCode: "US" });
 
@@ -93,7 +93,11 @@ describe("ClientsList", () => {
   });
 
   it("shows error message when query fails", async () => {
-    vi.mocked(getCustomersByAsc).mockRejectedValue(new Error("fail"));
+    vi.mocked(useClientManagementCustomers).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    } as never);
     const queryClient = createQueryClient();
     queryClient.setQueryData(["user"], { ascId: "123", countryCode: "US" });
 
@@ -103,10 +107,17 @@ describe("ClientsList", () => {
   });
 
   it("renders table with fetched clients", async () => {
-    vi.mocked(getCustomersByAsc).mockResolvedValue([
-      { customerId: "1", firstName: "John", lastName: "Doe" },
-      { customerId: "2", firstName: "Jane", lastName: "Smith" },
-    ] as never);
+    vi.mocked(useClientManagementCustomers).mockReturnValue({
+      data: {
+        content: [
+          { customerId: "1", name: "John Doe" },
+          { customerId: "2", name: "Jane Smith" },
+        ],
+        page: { totalElements: 2, number: 0, size: 10, totalPages: 1 },
+      },
+      isLoading: false,
+      isError: false,
+    } as never);
     const queryClient = createQueryClient();
     queryClient.setQueryData(["user"], { ascId: "123", countryCode: "US" });
 
@@ -116,19 +127,15 @@ describe("ClientsList", () => {
     expect(screen.getByTestId("filters")).toBeInTheDocument();
   });
 
-  it("does not fetch clients when user has no ascId", () => {
-    const queryClient = createQueryClient();
-    queryClient.setQueryData(["user"], { ascId: "", countryCode: "US" });
-
-    renderWithProviders(queryClient);
-
-    expect(getCustomersByAsc).not.toHaveBeenCalled();
-  });
-
   it("does not show pagination when clients fit on one page", async () => {
-    vi.mocked(getCustomersByAsc).mockResolvedValue([
-      { customerId: "1", firstName: "John", lastName: "Doe" },
-    ] as never);
+    vi.mocked(useClientManagementCustomers).mockReturnValue({
+      data: {
+        content: [{ customerId: "1", name: "John Doe" }],
+        page: { totalElements: 1, number: 0, size: 10, totalPages: 1 },
+      },
+      isLoading: false,
+      isError: false,
+    } as never);
     const queryClient = createQueryClient();
     queryClient.setQueryData(["user"], { ascId: "123", countryCode: "US" });
 

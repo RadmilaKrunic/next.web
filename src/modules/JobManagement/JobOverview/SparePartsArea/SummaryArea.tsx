@@ -93,13 +93,12 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
   );
   const globalSummaryTypeField = useMemo(
     () => allFields?.find((f) => f.subtype === "diagnosticSummaryType"),
-  [allFields],
-);
+    [allFields],
+  );
   const activeSummaryTypeField = summaryTypeField ?? globalSummaryTypeField;
-  const currentSummaryType = activeSummaryTypeField ? (values[activeSummaryTypeField.name] as string) || "totalSummary"
-   : "totalSummary";
-
-
+  const currentSummaryType = activeSummaryTypeField
+    ? (values[activeSummaryTypeField.name] as string) || "totalSummary"
+    : "totalSummary";
 
   const isByJobTypeRow = area.name.includes("diagnosticsSummaryDetailed");
   const jobTypeField = useMemo(
@@ -127,44 +126,16 @@ function SummaryArea({ area }: Readonly<{ area: Area }>) {
     return [{ value: "totalSummary", label: "totalSummary" }, ...seen.values()];
   }, [scopedFields, values]);
 
-  // useEffect(() => {
-  //   if (!summaryTypeField) return;
-  //  const current = values[summaryTypeField.name] as string;
-  
-  //   if (currentSummaryRef.current) {
-  // console.log("effect ref1: ", currentSummaryRef.current)
-  //  //   console.log("effect1: ", current)
-  //     if (currentSummaryRef.current !== current) {
-  //       void setFieldValue(summaryTypeField.name, current);
-  //     }
-  //   //   if (currentSummaryRef.current !== current) {
-  //   //    currentSummaryRef.current = current
-  //   //  }
-  
-  //   }
-  // }, [setFieldValue, summaryTypeField, summaryTypeOptions, values]);
-
   useEffect(() => {
-    // Only the area that owns the summaryType radiogroup should publish the options -
-    // duplicated diagnosticsSummaryDetailed rows would otherwise push the same list N times.
     if (!summaryTypeField) return;
     setSummaryTypeOptions(summaryTypeOptions);
   }, [summaryTypeField, summaryTypeOptions, setSummaryTypeOptions]);
 
   if (hasPriceViewPermission && !hasPricesPopulated) return null;
-  // Each diagnosticsSummaryDetailed row represents one job type; only render the row
-  // matching the currently selected summary type, same as diagnosticsSummaryTotal only
-  // shows for "totalSummary".
   if (isByJobTypeRow && jobTypeField && rowJobType !== currentSummaryType) return null;
   const isMaterialField = (field: Field) => field.subtype?.endsWith("Material") ?? false;
-  // GenericField hides a non-matching field in place via its own dependentFields check while
-  // staying mounted, which resets its Formik value to "" (useFieldVisibilityReset). That's fine
-  // for a discountBase variant (never toggles mid-session) but would wipe diagnosticsSummaryTotal's
-  // values every time summaryType switches away from "totalSummary". Gate the whole value-fields
-  // block here instead, so the fields unmount rather than hide-in-place and their values survive
-  // in Formik regardless of which view is showing. Only diagnosticsSummaryTotal itself needs this -
-  // every other area (byJobType rows included) shows its value fields whenever it renders at all.
-  const isTotalArea = area.name.includes("diagnosticsSummaryTotal");
+  const isTotalArea =
+    area.name.includes("diagnosticsSummaryTotal") || area.name.includes("claimDiagnosticsSummary");
   const shouldShowValueFields = !isTotalArea || currentSummaryType === "totalSummary";
   const summaryRadioField = (field: Field): Field => ({
     ...field,

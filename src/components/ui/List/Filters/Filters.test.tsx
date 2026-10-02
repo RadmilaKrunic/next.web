@@ -25,8 +25,48 @@ vi.mock("@bosch/react-frok", () => ({
     placeholder?: string;
   }) =>
     React.createElement("input", { value, onChange, placeholder, "data-testid": "search-input" }),
-  Button: ({ label, onClick }: { label: string; onClick?: () => void }) =>
-    React.createElement("button", { onClick, "data-testid": "action-btn" }, label),
+  Button: ({
+    label,
+    onClick,
+    children,
+    ...props
+  }: React.PropsWithChildren<{ label?: string; onClick?: () => void }>) =>
+    React.createElement(
+      "button",
+      { onClick, ...props, "data-testid": "action-btn" },
+      children ?? label,
+    ),
+  Popover: ({
+    trigger,
+    children,
+    onTriggerClick,
+    open,
+  }: {
+    trigger: React.ReactElement<{ onClick?: React.MouseEventHandler<HTMLElement> }>;
+    children: React.ReactNode;
+    onTriggerClick?: () => void;
+    open?: boolean;
+  }) => {
+    const [isOpen, setIsOpen] = React.useState(Boolean(open));
+
+    const handleTriggerClick = () => {
+      setIsOpen((prev) => !prev);
+      onTriggerClick?.();
+    };
+
+    const renderedTrigger = React.isValidElement<{
+      onClick?: React.MouseEventHandler<HTMLElement>;
+    }>(trigger)
+      ? React.cloneElement(trigger, { onClick: handleTriggerClick })
+      : trigger;
+
+    return React.createElement(
+      "div",
+      null,
+      renderedTrigger,
+      isOpen ? React.createElement("div", { "data-testid": "popover-content" }, children) : null,
+    );
+  },
 }));
 vi.mock("./FiltersPopup/FiltersPopup", () => ({
   default: () => React.createElement("div", { "data-testid": "filters-popup" }),
@@ -80,6 +120,28 @@ describe("Filters", () => {
     const actionButton = { label: "Create Job", icon: "add", onClick: vi.fn() };
     render(React.createElement(Filters, { actionButton }));
     expect(screen.getByTestId("action-btn")).toBeInTheDocument();
+  });
+
+  it("renders split action trigger and opens dropdown", () => {
+    render(
+      React.createElement(Filters, {
+        splitActionButton: {
+          primaryLabel: "approve",
+          primaryAction: vi.fn(),
+          optionsDisabled: false,
+          options: [
+            { label: "reject", onClick: vi.fn(), disabled: false },
+            { label: "revise", onClick: vi.fn(), disabled: false },
+          ],
+        },
+      }),
+    );
+
+    expect(screen.getByText("approve")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("moreOptions"));
+    expect(screen.getByTestId("popover-content")).toBeInTheDocument();
+    expect(screen.getByText("reject")).toBeInTheDocument();
+    expect(screen.getByText("revise")).toBeInTheDocument();
   });
 
   it("shows options popup when optionsContent provided", () => {

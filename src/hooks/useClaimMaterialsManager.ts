@@ -157,7 +157,7 @@ export interface UseClaimMaterialsManagerProps {
   arePricesValidated: boolean;
   setArePricesValidated: Dispatch<SetStateAction<boolean>>;
   readOnly?: boolean;
- // isResyncingRef: RefObject<boolean>;
+  // isResyncingRef: RefObject<boolean>;
 }
 
 export interface UseClaimMaterialsManagerReturn {
@@ -173,10 +173,7 @@ export interface UseClaimMaterialsManagerReturn {
   onDeleteRow: (areaName: string) => void;
   onDeleteArchivedRow: (areaName: string) => void;
   onRestoreRow: (areaName: string) => void;
-  onAddMaterials: (
-    items: ImportedMaterial[],
-    setFieldValue?: (field: string, value: unknown) => void,
-  ) => void;
+  onAddMaterials: (items: ImportedMaterial[]) => void;
   getExistingPartNumbers: (formValues: Record<string, unknown>) => Set<string>;
   markAllValidated: () => void;
   markRowDirty: (areaIndex: number) => void;
@@ -205,7 +202,7 @@ export const useClaimMaterialsManager = ({
   formValuesRef,
   setArePricesValidated,
   readOnly = false,
- // isResyncingRef,
+  // isResyncingRef,
 }: UseClaimMaterialsManagerProps): UseClaimMaterialsManagerReturn => {
   const queryClient = useQueryClient();
 
@@ -415,7 +412,7 @@ export const useClaimMaterialsManager = ({
     // server-returned values into the form. Without this guard the hooks fire
     // immediately on the Formik reinitialize and overwrite the BE values with
     // locally-computed prices (visible as "prices show correctly only on 2nd validate").
-  //  isResyncingRef.current = true;
+    //  isResyncingRef.current = true;
     if (forceRebuildRef.current) {
       setInitialFormValues((prev) => ({ ...prev, ...rowValues }));
     } else {
@@ -441,7 +438,7 @@ export const useClaimMaterialsManager = ({
     setInitialFormValues,
     formValuesRef,
     skipFormResetRef,
-  //  isResyncingRef,
+    //  isResyncingRef,
   ]);
 
   const populateNeeded = (

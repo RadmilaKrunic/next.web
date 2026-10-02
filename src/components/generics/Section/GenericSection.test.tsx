@@ -693,4 +693,69 @@ describe("GenericSection", () => {
       consoleErrorSpy.mockRestore();
     });
   });
+
+  describe("Warranty Unavailable Banner", () => {
+    const diagnosticSection: Section = {
+      name: "diagnosticData",
+      isHidden: false,
+      label: "Diagnostic Data",
+      dependFieldCondition: "",
+      position: 1,
+      areas: [],
+      actions: null,
+      isSubSection: false,
+      isAccordion: false,
+      isTab: false,
+    };
+
+    const renderWithWarrantyContext = (warrantyPanelInfo: unknown) => {
+      const contextWithWarranty = { ...mockContextValue, warrantyPanelInfo };
+      return render(
+        <QueryClientProvider
+          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+        >
+          <GenericFormContext.Provider value={contextWithWarranty as typeof mockContextValue}>
+            <Formik initialValues={mockInitialValues} onSubmit={vi.fn()}>
+              <GenericSection section={diagnosticSection} />
+            </Formik>
+          </GenericFormContext.Provider>
+        </QueryClientProvider>,
+      );
+    };
+
+    it("shows warranty unavailable banner when ineligible", () => {
+      renderWithWarrantyContext({ isIneligible: true, unavailableMessage: "Not eligible" });
+      expect(screen.getByText("warrantyUnavailableForTool")).toBeInTheDocument();
+    });
+
+    it("shows warranty unavailable banner when purchase date missing", () => {
+      renderWithWarrantyContext({ hasPurchaseDate: false });
+      expect(screen.getByText("warrantyUnavailableForTool")).toBeInTheDocument();
+    });
+
+    it("hides warranty unavailable banner when eligible and purchase date present", () => {
+      renderWithWarrantyContext({ isIneligible: false, hasPurchaseDate: true });
+      expect(screen.queryByText("warrantyUnavailableForTool")).not.toBeInTheDocument();
+    });
+
+    it("hides warranty unavailable banner for non-diagnostic sections", () => {
+      const nonDiagnosticSection: Section = { ...diagnosticSection, name: "otherSection" };
+      const contextWithWarranty = {
+        ...mockContextValue,
+        warrantyPanelInfo: { isIneligible: true },
+      };
+      render(
+        <QueryClientProvider
+          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+        >
+          <GenericFormContext.Provider value={contextWithWarranty as typeof mockContextValue}>
+            <Formik initialValues={mockInitialValues} onSubmit={vi.fn()}>
+              <GenericSection section={nonDiagnosticSection} />
+            </Formik>
+          </GenericFormContext.Provider>
+        </QueryClientProvider>,
+      );
+      expect(screen.queryByText("warrantyUnavailableForTool")).not.toBeInTheDocument();
+    });
+  });
 });

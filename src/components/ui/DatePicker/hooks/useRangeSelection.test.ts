@@ -10,11 +10,12 @@ vi.mock("react-dom", () => ({
 }));
 
 vi.mock("./DatePicker.utils", () => ({
-  formatDateForBackend: vi.fn((d: Date) => d.toISOString()),
+  formatDateForBackend: vi.fn((d: string) => d),
 }));
 
 import { useFormikContext } from "formik";
 import { useRangeSelection } from "./useRangeSelection";
+import { formatDateForBackend } from "./DatePicker.utils";
 
 describe("useRangeSelection", () => {
   const setFieldValue = vi.fn();
@@ -38,6 +39,7 @@ describe("useRangeSelection", () => {
 
     expect(result.current.tempRangeStart).toBe("2024-01-10");
     expect(setFieldValue).toHaveBeenCalled();
+    expect(vi.mocked(formatDateForBackend)).toHaveBeenCalledWith("2024-01-10", true, false);
   });
 
   it("completes range on second click", () => {
@@ -54,6 +56,8 @@ describe("useRangeSelection", () => {
     });
 
     expect(setFieldValue).toHaveBeenCalled();
+    expect(vi.mocked(formatDateForBackend)).toHaveBeenNthCalledWith(2, "2024-01-10", true, false);
+    expect(vi.mocked(formatDateForBackend)).toHaveBeenNthCalledWith(3, "2024-01-12", false, true);
   });
 
   it("ignores invalid date click", () => {

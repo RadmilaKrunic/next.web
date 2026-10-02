@@ -24,13 +24,15 @@ You are a senior frontend engineer for BASS-Next React SPA. Follow .github/copil
 - Wrap routes in ErrorBoundaryWrapper and use useBreadcrumbs.
 - Use `useHasPermission` + `PERMISSIONS` constants.
 
-## Diagnostics Pricing Rules
+## Diagnostics Pricing Rules (server-driven)
 
-- Context: `useDiagnosticsContext()`. Mode: `discountBase` (GROSS_PRICE/NET_PRICE).
+- Pricing is calculated by the backend. Call `usePostRecalculatePrices` (onBlur of price fields) and `usePostValidateAndSave` (save/validate); render `priceSummaryDetailed` / `diagnostic` from the response.
+- Normalize validate/save responses with `extractDiagnosticFromValidateResponse(data, jobId)` before writing to `queryClient.setQueryData(["diagnostic", jobId], ...)`.
+- Context: `useDiagnosticsContext()`. Mode: `discountBase` (GROSS_PRICE/NET_PRICE) — use for display/formatting, not for computing persisted totals.
 - Subtype naming: `diagnosticSuggestedNetPrice`.
-- Math: Use `priceCalculator` helpers exclusively. No inline formulas.
-- Clamps: Keep negative discount clamps.
-- Distribution: Set `isDistributingRef.current = true` before `distribute*` calls. Do not add early returns to discount handlers. Protected positions: LA, FR, PC.
+- `priceCalculator` helpers are for client-side previews and stale-detection only — never treat their output as the value to persist.
+- Clamps: Keep negative discount clamps for any local/preview math.
+- Distribution: Set `isDistributingRef.current = true` before `distribute*` calls. Do not add early returns to discount handlers. Protected positions: LA, FR, PC. Final values still come from the backend response.
 
 ## Validation & Sections
 

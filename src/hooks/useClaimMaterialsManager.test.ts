@@ -125,7 +125,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: false,
-      //    isResyncingRef: { current: false },
+          //    isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -174,7 +174,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-       //   isResyncingRef: { current: false },
+          //   isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -208,7 +208,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: true,
-      //    isResyncingRef: { current: false },
+          //    isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -247,7 +247,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-        //  isResyncingRef: { current: false },
+          //  isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -284,7 +284,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-       //   isResyncingRef: { current: false },
+          //   isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -320,7 +320,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: false,
-    //      isResyncingRef: { current: false },
+          //      isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -376,7 +376,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated,
           readOnly: false,
-       //   isResyncingRef: { current: false },
+          //   isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -418,7 +418,7 @@ describe("useClaimMaterialsManager", () => {
           arePricesValidated: false,
           setArePricesValidated: vi.fn(),
           readOnly: false,
-    //      isResyncingRef: { current: false },
+          //      isResyncingRef: { current: false },
         }),
       { wrapper: makeWrapper(queryClient) },
     );
@@ -430,5 +430,55 @@ describe("useClaimMaterialsManager", () => {
     });
 
     expect(result.current.archivedMaterials[0].reimbursementPaymentMethod).toBe("BANK_TRANSFER");
+  });
+
+  it("applies default values when claim material price fields are missing", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(["user"], { countryCode: "ZA", permissions: [] });
+
+    const materialWithoutPrice = [
+      {
+        partNumber: "P-2",
+        jobType: "CHARGEABLE",
+        status: "PENDING",
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useClaimMaterialsManager({
+          claimId: "C1",
+          claimMaterials: materialWithoutPrice as never,
+          currentActionType: "REPAIR",
+          currentJobType: "WARRANTY",
+          tabs: [claimsTab],
+          setTabs: vi.fn(),
+          allFields,
+          setAllFields: vi.fn(),
+          setInitialFormValues: vi.fn(),
+          skipFormResetRef: { current: false },
+          formValuesRef: { current: {} },
+          arePricesValidated: false,
+          setArePricesValidated: vi.fn(),
+          readOnly: false,
+        }),
+      { wrapper: makeWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.materials).toHaveLength(1));
+
+    const item = result.current.materials[0];
+    expect(item.position).toBe("");
+    expect(item.description).toBe("");
+    expect(item.quantity).toBe(1);
+    expect(item.unitPrice).toBe(0);
+    expect(item.suggestedNetPrice).toBe(0);
+    expect(item.netAmount).toBe(0);
+    expect(item.tax).toBe(0);
+    expect(item.grossAmount).toBe(0);
+    expect(item.discount).toBe(0);
+    expect(item.discountAmount).toBe(0);
+    expect(item.totalAmount).toBe(0);
+    expect(item.taxAmount).toBe(0);
   });
 });
